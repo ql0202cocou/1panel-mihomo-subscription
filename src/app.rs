@@ -1,13 +1,13 @@
 //! Application state and HTTP router assembly, shared by the binary and the
 //! integration tests.
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use axum::{
     extract::DefaultBodyLimit,
     middleware,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, post, put},
     Json, Router,
 };
 use sqlx::SqlitePool;
@@ -15,6 +15,7 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
 use crate::auth::{self, AdminAuth, SessionStore};
+use crate::{profiles, settings};
 
 /// Maximum management request body size (see `docs/api-design.md`).
 const MAX_BODY_BYTES: usize = 1024 * 1024;
@@ -22,13 +23,37 @@ const MAX_BODY_BYTES: usize = 1024 * 1024;
 #[derive(Clone)]
 pub struct AppState {
     pub db: SqlitePool,
-    pub public_path_prefix: String,
+    /// Externally reachable origin used to assemble hosted links.
+    pub public_base_url: String,
+    /// The global public path prefix. Held behind a lock because
+    /// reset-public-path updates it at runtime (see `docs/security-design.md`).
+    pub public_path_prefix: Arc<RwLock<String>>,
     pub admin: AdminAuth,
     pub sessions: SessionStore,
     /// Set the `Secure` cookie attribute (true when served behind HTTPS).
     pub secure_cookies: bool,
     /// Directory of the built SPA assets to serve.
     pub web_dir: String,
+}
+
+impl AppState {
+    pub fn current_prefix(&self) -> String {
+        self.public_path_prefix.read().unwrap().clone()
+    }
+
+    pub fn set_prefix(&self, prefix: String) {
+        *self.public_path_prefix.write().unwrap() = prefix;
+    }
+
+    /// Assemble a profile's permanent subscription URL.
+    pub fn subscription_url(&self, token: &str) -> String {
+        format!(
+            "{}/{}/api/sub/{}",
+            self.public_base_url.trim_end_matches('/'),
+            self.current_prefix(),
+            token
+        )
+    }
 }
 
 async fn health() -> impl IntoResponse {
@@ -46,6 +71,36 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     let protected = Router::new()
         .route("/auth/logout", post(auth::logout))
         .route("/auth/session", get(auth::session))
+        .route("/profiles", get(profiles::list).post(profiles::create))
+        .route(
+            "/profiles/:id",
+            get(profiles::get)
+                .put(profiles::update)
+                .delete(profiles::delete),
+        )
+        .route("/profiles/:id/reset-token", post(profiles::reset_token))
+        .route("/profiles/:id/rules", put(profiles::put_rules))
+        .route(
+            "/profiles/:id/nodes",
+            get(profiles::list_nodes).post(profiles::create_node),
+        )
+        .route(
+            "/profiles/:id/nodes/:node_id",
+            put(profiles::update_node).delete(profiles::delete_node),
+        )
+        .route(
+            "/profiles/:id/groups",
+            get(profiles::list_groups).post(profiles::create_group),
+        )
+        .route(
+            "/profiles/:id/groups/:group_id",
+            put(profiles::update_group).delete(profiles::delete_group),
+        )
+        .route("/settings", get(settings::get))
+        .route(
+            "/settings/reset-public-path",
+            post(settings::reset_public_path),
+        )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth::require_session,

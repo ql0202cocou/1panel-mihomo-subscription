@@ -1,0 +1,97 @@
+//! API error type mapping to the documented error envelope and status codes
+//! (see `docs/api-design.md`).
+
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
+use serde::Serialize;
+
+#[derive(Debug)]
+pub enum ApiError {
+    BadRequest(String),
+    /// Itemized validation failure (e.g. generate-time rule checks).
+    Validation(Vec<String>),
+    NotFound,
+    Conflict(String),
+    Internal,
+}
+
+impl ApiError {
+    fn parts(&self) -> (StatusCode, &'static str, String, Option<Vec<String>>) {
+        match self {
+            ApiError::BadRequest(msg) => {
+                (StatusCode::BAD_REQUEST, "bad_request", msg.clone(), None)
+            }
+            ApiError::Validation(details) => (
+                StatusCode::BAD_REQUEST,
+                "validation_failed",
+                "Validation failed".to_string(),
+                Some(details.clone()),
+            ),
+            ApiError::NotFound => (
+                StatusCode::NOT_FOUND,
+                "not_found",
+                "Not found".to_string(),
+                None,
+            ),
+            ApiError::Conflict(msg) => (StatusCode::CONFLICT, "conflict", msg.clone(), None),
+            ApiError::Internal => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Internal server error".to_string(),
+                None,
+            ),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct ErrorBody {
+    error: ErrorDetail,
+}
+
+#[derive(Serialize)]
+struct ErrorDetail {
+    code: &'static str,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    details: Option<Vec<String>>,
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        let (status, code, message, details) = self.parts();
+        let body = ErrorBody {
+            error: ErrorDetail {
+                code,
+                message,
+                details,
+            },
+        };
+        (status, Json(body)).into_response()
+    }
+}
+
+/// Map a SQLx error to an `ApiError`, surfacing UNIQUE violations as `409` and
+/// everything else as a masked `500` (the raw error is logged, not returned).
+impl From<sqlx::Error> for ApiError {
+    fn from(err: sqlx::Error) -> Self {
+        if is_unique_violation(&err) {
+            return ApiError::Conflict("A resource with the same name already exists".to_string());
+        }
+        tracing::error!("database error: {err}");
+        ApiError::Internal
+    }
+}
+
+fn is_unique_violation(err: &sqlx::Error) -> bool {
+    if let sqlx::Error::Database(db) = err {
+        // SQLite: 2067 = SQLITE_CONSTRAINT_UNIQUE, 1555 = PRIMARY KEY.
+        return matches!(db.code().as_deref(), Some("2067") | Some("1555"));
+    }
+    false
+}
+
+pub type ApiResult<T> = Result<T, ApiError>;

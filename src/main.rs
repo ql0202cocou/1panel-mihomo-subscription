@@ -1,4 +1,7 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    net::SocketAddr,
+    sync::{Arc, RwLock},
+};
 
 use anyhow::Context;
 use mihomo_subscription::{
@@ -29,15 +32,15 @@ async fn main() -> anyhow::Result<()> {
         db::seed_public_path_prefix(&pool, std::env::var("PUBLIC_PATH_PREFIX").ok()).await?;
     tracing::info!("Database ready at {db_path}");
 
+    let public_base_url = std::env::var("PUBLIC_BASE_URL").unwrap_or_default();
     // Use Secure cookies when the public origin is HTTPS.
-    let secure_cookies = std::env::var("PUBLIC_BASE_URL")
-        .map(|u| u.starts_with("https://"))
-        .unwrap_or(false);
+    let secure_cookies = public_base_url.starts_with("https://");
     let web_dir = std::env::var("WEB_DIR").unwrap_or_else(|_| "web/dist".to_string());
 
     let state = Arc::new(AppState {
         db: pool,
-        public_path_prefix,
+        public_base_url,
+        public_path_prefix: Arc::new(RwLock::new(public_path_prefix)),
         admin: AdminAuth::new(&admin_username, &admin_password),
         sessions: SessionStore::new(SESSION_IDLE),
         secure_cookies,

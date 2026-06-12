@@ -52,6 +52,17 @@ possible, and grouped by change type.
 
 ### Added
 
+- Implemented profile CRUD and sub-resources (Skeleton step 3): profiles
+  (create/list/detail/update/delete) plus rules (replace), custom nodes and
+  groups (CRUD), reset-token, settings read, and reset-public-path, all under
+  session auth. Provider URLs are write-only and masked deterministically
+  (`src/mask.rs`); the hosted link is assembled from the live public path
+  prefix (now an `RwLock` in `AppState`, updated by reset-public-path) plus the
+  per-profile token. Added `src/error.rs` (error envelope, UNIQUE→409 mapping),
+  `src/yaml.rs` (depth/node-count-bounded parsing for admin node content),
+  `src/util.rs` (timestamps, random token/prefix), `src/profiles.rs`,
+  `src/settings.rs`, and `tests/profiles.rs`. Conversion endpoints
+  (generate/preview/public) remain for a later step.
 - Implemented session authentication and same-origin static serving
   (Skeleton step 2): `src/auth.rs` with constant-time credential verification
   (digest-based, no length leak), an in-memory session store (256-bit IDs,
