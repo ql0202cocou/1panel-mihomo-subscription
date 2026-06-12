@@ -133,3 +133,8 @@ possible, and grouped by change type.
   passthrough (stored with the generated cache; new column in
   `docs/data-model.md`), `profile-update-interval`, and `content-disposition`
   headers in `docs/api-design.md` and `docs/plan.md`.
+- Reconciled stale sections of `docs/technical-roadmap.md` with the
+  authoritative docs: the data model sketch (per-profile `public_path` and an
+  outdated link format) now defers to `docs/data-model.md`, the endpoint
+  sketch defers to `docs/api-design.md`, and the architecture diagram shows
+  the public path prefix.
