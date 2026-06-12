@@ -81,7 +81,11 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
   `404 Not Found`.
 - Do not log full provider subscription URLs.
 - Apply SSRF protection, timeout, redirect, and response-size limits before
-  fetching user-provided URLs.
+  fetching user-provided URLs; pin validated IPs (DNS-rebinding safe) and
+  unwrap IPv4-embedded IPv6 addresses per `docs/security-design.md`.
+- Never enable permissive CORS on the management API; the SPA is served
+  same-origin. Remove the prototype's `CorsLayer::permissive()` when session
+  auth lands.
 
 ## 1Panel Notes
 
