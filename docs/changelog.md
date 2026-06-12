@@ -87,6 +87,12 @@ possible, and grouped by change type.
   an after-connect hook so `ON DELETE CASCADE` is not silently disabled.
 - Extended the testing strategy with cascade-delete, `503`, `413`, and
   single-flight concurrency cases.
+
+### Documentation
+
+- Added a "Non-obvious implementation rules" section to `CLAUDE.md`
+  summarizing the cross-cutting SSRF, single-flight, SQLite pool, client-IP,
+  timing, and CORS requirements for future implementing instances.
 - Hardened the SSRF design after a security review: blocked IPv4-embedding
   IPv6 ranges (IPv4-mapped, NAT64, 6to4) with embedded-address re-checking,
   required pinning of validated IPs against DNS rebinding, required the
