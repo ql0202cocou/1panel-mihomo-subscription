@@ -114,3 +114,22 @@ possible, and grouped by change type.
   to be replaced with a real design before public distribution.
 - Updated `docs/1panel-app.md`, `AGENTS.md`, and `CLAUDE.md` for the local
   image name and logo status.
+- Added a planning-status banner to `docs/1panel-app.md` and marked
+  not-yet-satisfied validation checklist items as pending, fixing the mismatch
+  with the actual app package contents.
+- Added an authoritative environment variable table to
+  `docs/technical-roadmap.md`, including the previously undefined
+  `CACHE_TTL_MINUTES`, and aligned the cache TTL wording in
+  `docs/security-design.md` and `docs/data-model.md` with it.
+- Documented the frontend build pipeline in `docs/technical-roadmap.md`:
+  `web/` directory layout, Vite dev proxy, Axum static serving with SPA
+  fallback, and a Node Docker build stage.
+- Documented converter top-level key handling in `docs/technical-roadmap.md`:
+  passthrough by default, `proxy-providers` stripped in the MVP for SSRF and
+  URL-exposure reasons.
+- Added a testing strategy to `docs/technical-roadmap.md` with converter and
+  SSRF validator suites as hard gates for the MVP release.
+- Documented client compatibility behavior: `subscription-userinfo`
+  passthrough (stored with the generated cache; new column in
+  `docs/data-model.md`), `profile-update-interval`, and `content-disposition`
+  headers in `docs/api-design.md` and `docs/plan.md`.

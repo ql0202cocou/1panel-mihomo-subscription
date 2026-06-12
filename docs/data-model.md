@@ -168,18 +168,25 @@ CREATE INDEX idx_custom_groups_profile ON custom_groups (profile_id);
 
 ```sql
 CREATE TABLE generated_cache (
-    profile_id   TEXT PRIMARY KEY REFERENCES profiles (id) ON DELETE CASCADE,
-    content_hash TEXT NOT NULL,
-    output_yaml  TEXT NOT NULL,
-    generated_at TEXT NOT NULL
+    profile_id            TEXT PRIMARY KEY REFERENCES profiles (id) ON DELETE CASCADE,
+    content_hash          TEXT NOT NULL,
+    output_yaml           TEXT NOT NULL,
+    subscription_userinfo TEXT,
+    generated_at          TEXT NOT NULL
 );
 ```
 
-- 每个 profile 仅保留最新一份生成结果;TTL(默认 5–30 分钟,可配置)在应用层
-  根据 `generated_at` 判断,过期即重新拉取生成。
-- Only the latest generated output is kept per profile; TTL (configurable,
-  default 5–30 minutes) is enforced in the application layer from
-  `generated_at` — stale entries trigger a refresh.
+- `subscription_userinfo`:原始订阅响应的 `subscription-userinfo` 头原文,
+  随缓存保存并在公开端点透传(见 `api-design.md`);上游未提供时为 NULL。
+- `subscription_userinfo`: the raw `subscription-userinfo` header from the
+  provider response, stored with the cache and passed through on the public
+  endpoint (see `api-design.md`); NULL when the provider does not send it.
+
+- 每个 profile 仅保留最新一份生成结果;TTL 由 `CACHE_TTL_MINUTES` 配置
+  (默认 15 分钟),在应用层根据 `generated_at` 判断,过期即重新拉取生成。
+- Only the latest generated output is kept per profile; the TTL is configured
+  by `CACHE_TTL_MINUTES` (default 15 minutes) and enforced in the application
+  layer from `generated_at` — stale entries trigger a refresh.
 - `content_hash`:对“配置输入 + 原始订阅内容”的哈希,用于跳过无变化的重复生成。
 - `content_hash`: hash of "profile inputs + provider subscription content",
   used to skip regeneration when nothing changed.

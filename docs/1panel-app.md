@@ -1,5 +1,12 @@
 # 1Panel App Packaging
 
+> **Status: planning.** The current package only exposes `PANEL_APP_PORT_HTTP`
+> and `RUST_LOG` install fields, matching the prototype service. The
+> authentication and conversion related parameters described below are target
+> requirements; the authoritative environment variable table lives in
+> `technical-roadmap.md` and must be reflected in the package before the MVP
+> release.
+
 The 1Panel app package lives at:
 
 ```text
@@ -35,13 +42,20 @@ Then open the 1Panel App Store and refresh the app list.
 
 ## Validation Checklist
 
+This checklist describes the package state required before the MVP release.
+Items marked **(pending)** are not yet satisfied by the current package.
+
 - Root `data.yml` contains app metadata.
 - Version `data.yml` contains `additionalProperties.formFields`.
-- Version `data.yml` exposes `ADMIN_USERNAME` and `ADMIN_PASSWORD` install
-  fields for the management login.
+- **(pending)** Version `data.yml` exposes `ADMIN_USERNAME` and
+  `ADMIN_PASSWORD` install fields for the management login.
+- **(pending)** Version `data.yml` exposes the remaining install parameters
+  from the environment variable table in `technical-roadmap.md`
+  (`PUBLIC_BASE_URL`, `PUBLIC_PATH_PREFIX`, `FETCH_TIMEOUT_SECONDS`,
+  `MAX_SUBSCRIPTION_SIZE_MB`, `CACHE_TTL_MINUTES`).
 - `docker-compose.yml` uses `${CONTAINER_NAME}`.
-- `docker-compose.yml` passes `ADMIN_USERNAME` and `ADMIN_PASSWORD` as
-  environment variables.
+- **(pending)** `docker-compose.yml` passes `ADMIN_USERNAME` and
+  `ADMIN_PASSWORD` as environment variables.
 - Web port form field uses `PANEL_APP_PORT_HTTP`.
 - The service is attached to the external `1panel-network`.
 - Persistent data is mounted from `./data`.

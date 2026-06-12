@@ -206,6 +206,24 @@ GET /:public_path_prefix/api/sub/:token
   -> 404 Not Found         其余一切情况(统一响应)
 ```
 
+成功响应头 / Success response headers:
+
+```text
+content-type: text/yaml; charset=utf-8
+content-disposition: attachment; filename="<profile-name>.yaml"
+subscription-userinfo: upload=...; download=...; total=...; expire=...
+profile-update-interval: 24
+```
+
+- `subscription-userinfo` 从原始订阅响应透传,随生成缓存一起保存,使客户端能
+  显示流量和到期信息;上游未提供时省略该头。
+- `subscription-userinfo` is passed through from the provider response and
+  stored with the generated cache so clients can display traffic and expiry
+  info; omitted when the provider does not send it.
+- `profile-update-interval`(小时)提示客户端自动更新周期,MVP 固定为 `24`。
+- `profile-update-interval` (hours) hints the client auto-update period;
+  fixed at `24` in the MVP.
+
 行为 / Behavior:
 
 - 命中新鲜缓存直接返回;缓存缺失或过期时重新拉取并生成(见

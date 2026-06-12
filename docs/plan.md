@@ -214,6 +214,12 @@ https://sub.example.com/<public-path-prefix>/api/sub/<profile-token>
 - 重置全局随机路径前缀。
 - 禁用订阅配置后链接立即失效。
 
+客户端兼容要求：
+
+- 公开链接响应透传上游 `subscription-userinfo` 头，客户端可显示流量和到期信息。
+- 返回 `profile-update-interval` 头，提示客户端自动更新周期（MVP 固定 24 小时）。
+- 返回 `content-disposition` 文件名，便于客户端展示配置名称。
+
 ## 安全需求
 
 本项目会保存和请求机场订阅 URL，因此安全是核心需求之一。

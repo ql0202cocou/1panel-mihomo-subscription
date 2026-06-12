@@ -231,7 +231,8 @@ GET /<public-path>/api/sub/<token>
 Cache recommendations:
 
 - Cache generated Mihomo YAML, not excessive intermediate data.
-- Use a configurable TTL, such as 5-30 minutes.
+- Use a configurable TTL via `CACHE_TTL_MINUTES` (default 15; see the
+  environment variable table in `technical-roadmap.md`).
 - Store cache by profile and content hash.
 - Allow authenticated manual refresh.
 - If refresh fails and stale cache exists, optionally return stale cache with a
