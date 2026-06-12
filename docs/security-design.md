@@ -109,6 +109,9 @@ Recommended initial approach:
   channels.
 - Use session cookies for Web UI login, with at least 128 bits of CSPRNG
   session-ID entropy.
+- Store sessions in memory: they are invalidated on service restart, which is
+  acceptable for a single-instance self-hosted app.
+- Expire sessions after a bounded idle time (default: 7 days).
 - Set cookies with `HttpOnly` and `SameSite=Lax`.
 - Set `Secure` when the deployment uses HTTPS.
 - Add basic login failure rate limiting.
@@ -252,6 +255,10 @@ https://example.com/api/sub?token=abcdef
 https://example.com/api/sub?token=***
 ```
 
+Masking rule (deterministic, applied everywhere): keep the scheme, host, and
+path; replace every query parameter value with `***`. The same rule applies
+to logs, API responses, and error messages.
+
 ## Rate Limiting and Abuse Control
 
 Recommended limits:
@@ -291,6 +298,8 @@ Cache recommendations:
 Public subscription endpoint:
 
 - Return `404 Not Found` for invalid path, invalid token, or disabled profile.
+- Return a generic `503` when the request is valid but no cache exists and
+  the provider fetch failed; the body must contain no upstream details.
 - Return generic errors without provider URLs.
 - Do not reveal whether a token exists.
 
