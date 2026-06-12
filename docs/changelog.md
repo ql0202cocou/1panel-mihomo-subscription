@@ -52,6 +52,12 @@ possible, and grouped by change type.
 
 ### Added
 
+- Finalized the integration-test baseline and CI (Skeleton step 4): added
+  `.github/workflows/ci.yml` running `cargo fmt --check`, `cargo clippy
+  --all-targets -D warnings`, `cargo test`, and the 1Panel app-package YAML
+  validation; deduplicated `tests/db_cascade.rs` onto the shared
+  `tests/common` helpers. The `ServiceExt`-based auth and profile suites
+  (21 tests) stand as the regression baseline.
 - Implemented profile CRUD and sub-resources (Skeleton step 3): profiles
   (create/list/detail/update/delete) plus rules (replace), custom nodes and
   groups (CRUD), reset-token, settings read, and reset-public-path, all under
