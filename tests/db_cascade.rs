@@ -3,31 +3,11 @@
 //! the pragma were set only once (not per connection), this would fail
 //! intermittently or leave orphan rows.
 
+mod common;
+
+use common::TempDb;
 use mihomo_subscription::db;
 use sqlx::SqlitePool;
-
-/// A unique temp database path per test run; removed on drop.
-struct TempDb {
-    path: String,
-}
-
-impl TempDb {
-    fn new() -> Self {
-        let path = std::env::temp_dir()
-            .join(format!("mihomo-test-{}.db", uuid::Uuid::new_v4()))
-            .to_string_lossy()
-            .into_owned();
-        Self { path }
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        for suffix in ["", "-wal", "-shm"] {
-            let _ = std::fs::remove_file(format!("{}{suffix}", self.path));
-        }
-    }
-}
 
 async fn seed_profile_with_children(pool: &SqlitePool, profile_id: &str) {
     let now = "2026-06-12T00:00:00Z";
