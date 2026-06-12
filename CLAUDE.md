@@ -4,13 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status — Read This First
 
-This project is in the **planning stage**. The design documents under `docs/`
-are the source of truth; `src/main.rs` is an early prototype scaffold that does
-NOT implement the documented design (no auth, no SSRF protection, a
-`subscriptions` CRUD instead of the documented `profiles` model). Doc/code
-mismatches are expected — the code will be rewritten to match the docs, not the
-other way around. Mark design docs with a "状态:规划阶段 / Status: planning"
-banner until implemented.
+The project is **actively implementing the documented design** under `docs/`,
+which remain the source of truth. Implemented so far: the SQLite migration and
+pool (`src/db.rs`), session auth and same-origin static serving (`src/auth.rs`,
+`src/app.rs`), profile + sub-resource CRUD and settings (`src/profiles.rs`,
+`src/settings.rs`), and the SSRF-protected provider fetch (`src/ssrf.rs`,
+`src/fetch.rs`). Still pending: the converter (`mihomo/clash -> mihomo`), the
+generate/preview/public subscription endpoint with caching, rate limiting and
+client-IP derivation, and the `web/` SPA frontend. The design docs still carry
+"状态:规划阶段 / Status: planning" banners; drop each banner (and the
+1panel-app.md pending markers) as the corresponding feature lands, and flip
+this status section when the MVP is complete.
 
 `AGENTS.md` is the authoritative guide for change rules, security defaults, and
 1Panel packaging notes. Its most important rule: **every notable change must
@@ -18,17 +22,24 @@ update `docs/changelog.md` under `[Unreleased]`**, and affected docs must stay
 aligned with the change. Never delete old changelog entries.
 
 **After every change, review and update both `CLAUDE.md` and `AGENTS.md`** so
-agent guidance stays aligned with the actual project state (e.g. when the
-prototype starts implementing the documented design, rewrite the status
-section above).
+agent guidance stays aligned with the actual project state.
 
 ## Commands
 
+The three gates CI enforces (`.github/workflows/ci.yml`), runnable locally:
+
 ```bash
-cargo check
-cargo fmt
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
 cargo test
 docker build -t mihomo-subscription:0.1.0 .
+```
+
+Run one test or one file's tests:
+
+```bash
+cargo test --lib ssrf::tests::url_validation_rules   # a single unit test
+cargo test --test profiles                           # one integration test file
 ```
 
 Validate 1Panel YAML after editing anything under `apps/`:
@@ -39,8 +50,6 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
   apps/mihomo-subscription/0.1.0/data.yml \
   apps/mihomo-subscription/0.1.0/docker-compose.yml
 ```
-
-There are no tests yet.
 
 ## Architecture
 
@@ -88,13 +97,24 @@ costly to retrofit; full rationale in `docs/security-design.md` and
   never a client-spoofable header.
 - Public token lookup runs unconditionally and compares in constant time
   (no timing disclosure of the path prefix).
-- The management API is same-origin with no CORS layer; remove the prototype's
-  `CorsLayer::permissive()` when session auth lands.
+- The management API is same-origin with no CORS layer (enforced in
+  `build_router`); keep it that way and verify `Origin` on state-changing
+  requests.
 
-**Current prototype:** everything lives in `src/main.rs` — Axum routes
-(`/api/v1/subscriptions*`, `/api/v1/merged`, `/health`) over a single SQLite
-table, DB created at `${DATA_DIR:-/data}/mihomo-subscription.db`. These routes
-will be replaced with no compatibility shim.
+**Code layout:** the crate is split into a library (`src/lib.rs`) plus a thin
+binary (`src/main.rs`) so integration tests can drive the app directly.
+`src/app.rs` holds `AppState` and `build_router` (the single source of route
+wiring); `src/main.rs` only loads env config, builds state, and serves.
+Per-feature modules: `db`, `auth`, `profiles`, `settings`, `ssrf`, `fetch`,
+plus helpers `error` (the API error envelope + `sqlx` UNIQUE→409 mapping),
+`mask` (provider-URL masking), `yaml` (bounded parsing), `util`. The DB lives
+at `${DATA_DIR:-/data}/mihomo-subscription.db`; migrations are in `migrations/`.
+
+**Test pattern:** integration tests in `tests/` build the router with
+`build_router` and drive it via `tower::util::ServiceExt::oneshot` against a
+throwaway SQLite file from `tests/common::TempDb` / `test_state`. Pure logic
+(SSRF ranges, URL masking, bounded YAML) is unit-tested inline. The converter
+and SSRF suites are MVP release gates.
 
 ## Conventions
 
