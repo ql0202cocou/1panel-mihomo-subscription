@@ -74,6 +74,23 @@ public link: `https://<host>/<public-path-prefix>/api/sub/<profile-token>`.
 generic 404s), backend → provider URLs (SSRF-protected fetch with timeout,
 redirect, and size limits).
 
+**Non-obvious implementation rules** (scattered across docs — easy to miss,
+costly to retrofit; full rationale in `docs/security-design.md` and
+`docs/data-model.md`):
+
+- SSRF check must pin the validated IP at connect time (DNS-rebinding safe)
+  and unwrap IPv4-embedded IPv6 (IPv4-mapped, NAT64, 6to4).
+- Refresh provider subscriptions behind a per-profile single-flight lock to
+  prevent stale-cache stampedes.
+- Apply `foreign_keys`, `busy_timeout`, and `journal_mode` to every pooled
+  SQLite connection via an after-connect hook, not once.
+- Derive the client IP from a trusted reverse-proxy hop (`TRUSTED_PROXY_HOPS`),
+  never a client-spoofable header.
+- Public token lookup runs unconditionally and compares in constant time
+  (no timing disclosure of the path prefix).
+- The management API is same-origin with no CORS layer; remove the prototype's
+  `CorsLayer::permissive()` when session auth lands.
+
 **Current prototype:** everything lives in `src/main.rs` — Axum routes
 (`/api/v1/subscriptions*`, `/api/v1/merged`, `/health`) over a single SQLite
 table, DB created at `${DATA_DIR:-/data}/mihomo-subscription.db`. These routes
