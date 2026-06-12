@@ -52,6 +52,17 @@ possible, and grouped by change type.
 
 ### Added
 
+- Implemented session authentication and same-origin static serving
+  (Skeleton step 2): `src/auth.rs` with constant-time credential verification
+  (digest-based, no length leak), an in-memory session store (256-bit IDs,
+  7-day idle expiry), login/logout/session handlers, a `require_session`
+  middleware (`401` otherwise), and an `Origin` check on state-changing
+  requests; `src/app.rs` assembling the router with no CORS layer, a 1 MB
+  body limit, and an SPA `ServeDir` fallback; `main.rs` now refuses to start
+  without `ADMIN_USERNAME`/`ADMIN_PASSWORD` and enables `Secure` cookies under
+  an HTTPS `PUBLIC_BASE_URL`. Added `tests/auth.rs` and a shared
+  `tests/common` helper. Login-failure rate limiting is deferred to the
+  rate-limit task.
 - Began implementing the documented design (Skeleton step 1): added
   `migrations/0001_init.sql` creating the target schema and dropping the
   prototype `subscriptions` table; added a `src/db.rs` module that opens the

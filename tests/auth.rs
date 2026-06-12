@@ -1,0 +1,172 @@
+//! Auth and routing acceptance tests: unauthenticated management access is
+//! rejected, login issues a usable session, logout invalidates it, the public
+//! `/health` needs no auth, and the Origin check blocks cross-site posts.
+
+mod common;
+
+use std::sync::Arc;
+
+use axum::body::Body;
+use axum::http::{header, Request, StatusCode};
+use mihomo_subscription::app::{build_router, AppState};
+use mihomo_subscription::auth::{AdminAuth, SessionStore, SESSION_IDLE};
+use tower::util::ServiceExt;
+
+use common::TempDb;
+
+async fn test_state(temp: &TempDb) -> Arc<AppState> {
+    let pool = temp.pool().await;
+    Arc::new(AppState {
+        db: pool,
+        public_path_prefix: "testprefix".into(),
+        admin: AdminAuth::new("admin", "s3cret"),
+        sessions: SessionStore::new(SESSION_IDLE),
+        secure_cookies: false,
+        web_dir: "web/dist".into(),
+    })
+}
+
+fn login_body(username: &str, password: &str) -> Body {
+    Body::from(format!(
+        r#"{{"username":"{username}","password":"{password}"}}"#
+    ))
+}
+
+fn set_cookie_value(resp_headers: &header::HeaderMap) -> String {
+    let raw = resp_headers
+        .get(header::SET_COOKIE)
+        .expect("Set-Cookie present")
+        .to_str()
+        .unwrap();
+    // "session=<id>; HttpOnly; ..." -> "session=<id>"
+    raw.split(';').next().unwrap().to_string()
+}
+
+#[tokio::test]
+async fn health_requires_no_auth() {
+    let temp = TempDb::new();
+    let app = build_router(test_state(&temp).await);
+
+    let resp = app
+        .oneshot(Request::get("/health").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn management_api_without_session_is_401() {
+    let temp = TempDb::new();
+    let app = build_router(test_state(&temp).await);
+
+    let resp = app
+        .oneshot(
+            Request::get("/api/auth/session")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn login_with_wrong_credentials_is_401() {
+    let temp = TempDb::new();
+    let app = build_router(test_state(&temp).await);
+
+    let resp = app
+        .oneshot(
+            Request::post("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(login_body("admin", "wrong"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn login_then_access_session_then_logout() {
+    let temp = TempDb::new();
+    let app = build_router(test_state(&temp).await);
+
+    // Log in.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::post("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(login_body("admin", "s3cret"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    let cookie = set_cookie_value(resp.headers());
+
+    // Authenticated session call returns the username.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::get("/api/auth/session")
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+        .await
+        .unwrap();
+    assert!(String::from_utf8_lossy(&body).contains("\"admin\""));
+
+    // Log out, then the same cookie is rejected.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::post("/api/auth/logout")
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let resp = app
+        .oneshot(
+            Request::get("/api/auth/session")
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn cross_site_origin_on_login_is_forbidden() {
+    let temp = TempDb::new();
+    let app = build_router(test_state(&temp).await);
+
+    let resp = app
+        .oneshot(
+            Request::post("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::HOST, "sub.example.com")
+                .header(header::ORIGIN, "https://evil.example.org")
+                .body(login_body("admin", "s3cret"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+}
