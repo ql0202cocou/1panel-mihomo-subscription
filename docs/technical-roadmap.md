@@ -28,7 +28,7 @@ Rust/Axum Service
   |
   v
 Permanent Subscription Link
-/api/sub/:token
+/<public-path-prefix>/api/sub/:token
 ```
 
 ## Recommended Stack
@@ -87,62 +87,24 @@ parsing will reduce conversion bugs.
 
 ## Core Data Model
 
-Initial tables:
+The authoritative schema (DDL, indexes, and migration strategy) lives in
+`data-model.md`. Summary:
 
 ```text
-profiles
-- id
-- name
-- source_type        # mihomo / loon / surge / clash
-- source_url
-- output_type        # initially fixed to mihomo
-- public_path        # random public path prefix
-- token              # permanent subscription token
-- enabled
-- created_at
-- updated_at
-
-rulesets
-- id
-- profile_id
-- name
-- content            # custom rule text
-- priority
-- enabled
-
-custom_nodes
-- id
-- profile_id
-- name
-- node_type          # ss / vmess / vless / trojan / hysteria2 / etc.
-- content            # structured node config or raw Mihomo YAML fragment
-- enabled
-- created_at
-- updated_at
-
-custom_groups
-- id
-- profile_id
-- name
-- group_type         # select / url-test / fallback / load-balance / relay
-- members            # ordered node/group names, stored as JSON or normalized rows
-- options            # group-specific options, stored as JSON
-- enabled
-- created_at
-- updated_at
-
-generated_cache
-- profile_id
-- content_hash
-- output_yaml
-- generated_at
+app_settings     # single row; holds the resettable global public_path_prefix
+profiles         # name, source_type/url, output_type, per-profile token, enabled
+rulesets         # one rule text per profile in the MVP
+custom_nodes     # per-profile custom Mihomo proxies
+custom_groups    # per-profile custom proxy groups (typed, ordered members)
+generated_cache  # latest generated YAML + subscription-userinfo per profile
 ```
 
-Permanent download links should not expose database IDs. Use a random public path
-prefix plus a long random token:
+Note: the public path prefix is global (`app_settings`), not per-profile.
+Permanent download links must not expose database IDs — they combine the
+global random path prefix with a long random per-profile token:
 
 ```text
-/s/7fKp9mQx/api/sub/3w7s9xQm.../mihomo.yaml
+https://sub.example.com/<public-path-prefix>/api/sub/<profile-token>
 ```
 
 ## Phase 1: MVP
@@ -162,17 +124,11 @@ Goal: deliver a usable 1Panel-hosted subscription converter.
 
 ### Backend API
 
-Suggested endpoints:
-
-```text
-POST   /api/profiles
-GET    /api/profiles
-GET    /api/profiles/:id
-PUT    /api/profiles/:id
-DELETE /api/profiles/:id
-POST   /api/profiles/:id/generate
-GET    /api/sub/:token
-```
+The authoritative API contract (endpoints, auth flow, error format, and
+validation rules) lives in `api-design.md`. In short: profile CRUD and
+sub-resource endpoints under `/api` behind session auth, a `generate` action
+returning the hosted link, token/path reset actions, and the public
+subscription endpoint at `/:public_path_prefix/api/sub/:token`.
 
 ### Conversion Logic
 
