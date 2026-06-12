@@ -54,7 +54,12 @@ public link: `https://<host>/<public-path-prefix>/api/sub/<profile-token>`.
 
 - `docs/plan.md` — product scope, MVP boundaries, Web UI structure (Chinese).
 - `docs/technical-roadmap.md` — stack (Rust/Axum/SQLx/SQLite + Vite/React),
-  phased plan, conversion pipeline.
+  phased plan, conversion pipeline (including top-level key
+  passthrough/stripping rules), frontend build pipeline (`web/` SPA served by
+  Axum with fallback, Node Docker stage), testing strategy (converter and
+  SSRF suites are MVP release gates), and the **authoritative environment
+  variable table** (install form, compose, and code must stay consistent
+  with it).
 - `docs/api-design.md` — management API under `/api` (session-cookie auth),
   public subscription endpoint (no auth, uniform `404` on any failure).
 - `docs/data-model.md` — SQLite schema: `profiles` 1—1 `rulesets`,
