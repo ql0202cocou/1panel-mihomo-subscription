@@ -2,7 +2,7 @@ version: "3"
 
 services:
   mihomo-subscription:
-    image: your-registry/mihomo-subscription:0.1.0
+    image: mihomo-subscription:0.1.0
     container_name: ${CONTAINER_NAME}
     restart: always
     networks:

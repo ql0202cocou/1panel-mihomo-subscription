@@ -60,6 +60,8 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
   must update `docs/changelog.md` under `[Unreleased]`.
 - Every change must also update any affected technical/product docs so the
   documentation stays aligned with the actual project state.
+- After every change, review `CLAUDE.md` and this `AGENTS.md` and update both
+  so agent guidance stays aligned with the actual project state.
 - Never delete old changelog versions. On release, move `[Unreleased]` items into
   a dated version section and create a new empty `[Unreleased]` above it.
 - If product scope changes, update `docs/plan.md`.
@@ -90,5 +92,8 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
   them into the service environment.
 - Join the external `1panel-network`.
 - Persist app data through `./data`.
-- Before distribution, replace placeholder image names and add
-  `apps/mihomo-subscription/logo.png`.
+- Images are built locally on the 1Panel host as
+  `mihomo-subscription:<version>`; keep the compose image tag in sync with the
+  release version (see `docs/release.md`).
+- `apps/mihomo-subscription/logo.png` is a generated placeholder; replace it
+  with a real design before public distribution.

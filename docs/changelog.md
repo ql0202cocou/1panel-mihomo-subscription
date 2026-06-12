@@ -101,3 +101,16 @@ possible, and grouped by change type.
   architecture overview, and documentation index (bilingual).
 - Updated `docs/README.md` to move the planned documents into the published
   document list.
+- Added `CLAUDE.md` with Claude Code guidance: planning-stage status, commands,
+  target architecture summary, and documentation conventions.
+- Added a change rule requiring `CLAUDE.md` and `AGENTS.md` to be reviewed and
+  updated after every change so agent guidance stays aligned.
+- Added the MIT `LICENSE`, declared `license = "MIT"` in `Cargo.toml`, and
+  added a License section to the root `README.md`.
+- Decided on a local-image strategy: the compose image is now
+  `mihomo-subscription:0.1.0` (built on the 1Panel host, no remote registry);
+  reworked `docs/release.md` accordingly with an optional push appendix.
+- Added a generated placeholder `apps/mihomo-subscription/logo.png` (180x180);
+  to be replaced with a real design before public distribution.
+- Updated `docs/1panel-app.md`, `AGENTS.md`, and `CLAUDE.md` for the local
+  image name and logo status.

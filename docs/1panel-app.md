@@ -45,8 +45,10 @@ Then open the 1Panel App Store and refresh the app list.
 - Web port form field uses `PANEL_APP_PORT_HTTP`.
 - The service is attached to the external `1panel-network`.
 - Persistent data is mounted from `./data`.
-- The image reference points to a published image tag.
-- `logo.png` exists before distributing the app package.
+- The image reference matches a locally built image tag
+  (`mihomo-subscription:<version>`, built on the 1Panel host before install).
+- `logo.png` exists (currently a generated placeholder; replace with a real
+  design before public distribution).
 
 ## Login Configuration
 
