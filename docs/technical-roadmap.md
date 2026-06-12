@@ -247,8 +247,14 @@ Tests are written alongside each implementation phase, not deferred.
   bypass cases (IPv4-mapped, NAT64, 6to4), and redirect re-checks.
 - **API**: integration tests using `sqlite::memory:` and `tower::ServiceExt`
   request injection. Cover auth (`401` without session), profile CRUD,
-  generate-time validation errors, and the public endpoint's uniform `404`
-  behavior for invalid path/token/disabled profiles.
+  generate-time validation errors, the public endpoint's uniform `404`
+  behavior for invalid path/token/disabled profiles, the `503` path when no
+  cache exists and the fetch fails, oversized-body `413`, and that deleting a
+  profile cascades to its child rows (verifies the per-connection
+  `foreign_keys` pragma is actually applied across the pool).
+- **Concurrency**: a test that fires many simultaneous public requests for a
+  profile with a stale cache and asserts only one provider fetch runs
+  (single-flight).
 - **Frontend**: `tsc --noEmit` and a production `npm run build` are the
   minimum gates; component tests are optional in the MVP.
 
@@ -295,6 +301,7 @@ prototype package already exposes.
 | `FETCH_TIMEOUT_SECONDS` | Install form | `15` | No | Provider fetch total timeout |
 | `MAX_SUBSCRIPTION_SIZE_MB` | Install form | `8` | No | Provider response size limit |
 | `CACHE_TTL_MINUTES` | Install form | `15` | No | Generated YAML cache TTL (see `security-design.md`) |
+| `TRUSTED_PROXY_HOPS` | Install form | `1` | No | Reverse proxy hops to trust when deriving the client IP (see `security-design.md`) |
 | `PORT` | Compose (fixed) | `8080` | Yes | Container listen port |
 | `DATA_DIR` | Compose (fixed) | `/data` | Yes | SQLite data directory |
 
