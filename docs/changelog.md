@@ -52,6 +52,11 @@ possible, and grouped by change type.
 
 ### Added
 
+- Refreshed `CLAUDE.md` to match the active implementation: status now lists
+  what is built vs pending (no longer "planning stage"), commands cover the CI
+  gates and single-test invocation, and architecture describes the lib/bin
+  split, the per-feature module layout, and the `ServiceExt`/`TempDb` test
+  pattern (replacing the obsolete `src/main.rs` prototype description).
 - Implemented the SSRF-protected provider fetch (MVP release gate): `src/ssrf.rs`
   with network-free, table-tested URL/IP validation covering every blocked
   IPv4/IPv6 range plus the IPv4-mapped/NAT64/6to4 unwrap bypasses; `src/fetch.rs`
