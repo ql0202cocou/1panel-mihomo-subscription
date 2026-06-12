@@ -242,6 +242,8 @@ Rules:
 - Management APIs should hide or mask provider URLs by default.
 - Exported configuration should not include provider URLs unless explicitly
   requested by an authenticated administrator.
+- The Web UI never persists provider URLs in browser storage
+  (localStorage/sessionStorage); only masked values are ever held client-side.
 
 Example masking:
 

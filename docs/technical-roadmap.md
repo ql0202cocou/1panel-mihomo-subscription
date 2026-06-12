@@ -68,6 +68,26 @@ web/
 - The login page is an SPA route. Management API calls without a valid session
   return `401` and the SPA redirects to login.
 
+#### UI Implementation Choices
+
+- Component library: Ant Design — forms, cards, drawers, and confirm modals
+  out of the box; well suited to the card/drawer layout in `plan.md`.
+- Editors: CodeMirror 6 with YAML highlighting for rules/nodes/groups.
+  Generate-time validation errors carry line numbers (see `api-design.md`);
+  map them to editor line highlights with click-to-jump.
+- QR codes: `qrcode.react` for hosted subscription links; Mihomo-family
+  clients commonly import subscriptions by scanning.
+- i18n: all UI copy goes through `react-i18next` keys from day one. Chinese
+  is the only MVP locale; English can be added later without refactoring.
+- Session expiry: a `401` from any management API redirects to `/login` and
+  preserves the return path.
+- Draft persistence: rule/node/group editor drafts may be kept in
+  `localStorage`; provider subscription URLs must never be written to browser
+  storage (see `security-design.md`).
+- State model: the UI derives "modified but not generated" from
+  `updated_at > last_generated_at` and shows a banner on the profile detail
+  page (see `plan.md`).
+
 ### Backend
 
 Continue with the current backend stack:

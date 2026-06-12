@@ -141,6 +141,8 @@ and only accepted in full in create/update requests.
   "enabled": true,
   "subscription_url": "https://sub.example.com/7fKp9mQx/api/sub/3w7s9xQm...",
   "last_generated_at": "2026-06-12T08:00:00Z",
+  "last_fetch_at": "2026-06-12T08:00:00Z",
+  "last_fetch_status": "success",
   "rules": { "content": "RULE-SET,...\nMATCH,Proxy", "updated_at": "..." },
   "nodes": [ { "id": "...", "name": "my-ss", "node_type": "ss", "enabled": true } ],
   "groups": [ { "id": "...", "name": "MyGroup", "group_type": "select",
@@ -167,6 +169,12 @@ and only accepted in full in create/update requests.
   `PUBLIC_BASE_URL + public_path_prefix + token` 拼装,见 `security-design.md`。
 - A `token` is generated at creation time; `subscription_url` is assembled from
   `PUBLIC_BASE_URL + public_path_prefix + token` (see `security-design.md`).
+- `last_fetch_status`:最近一次机场拉取的结果分类,取值
+  `success` / `http_error:<code>` / `ssrf_rejected` / `timeout` / `too_large`,
+  供"原始订阅源"卡片展示;从未拉取时为 `null`。
+- `last_fetch_status`: classification of the latest provider fetch —
+  `success` / `http_error:<code>` / `ssrf_rejected` / `timeout` /
+  `too_large`; `null` when never fetched. Displayed on the source card.
 
 ## 生成与校验 / Generate and Validation
 

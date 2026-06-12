@@ -145,6 +145,19 @@ possible, and grouped by change type.
   passthrough (stored with the generated cache; new column in
   `docs/data-model.md`), `profile-update-interval`, and `content-disposition`
   headers in `docs/api-design.md` and `docs/plan.md`.
+- Documented the Web UI interaction design in `docs/plan.md`: page routes and
+  two-level information architecture (list / detail / settings), a profile
+  state model with a "modified but not generated" banner, danger-level
+  separation of token vs public path resets, write-only provider URL editing,
+  subscription link QR codes, provider fetch status observability with manual
+  refresh, and session-expiry redirect behavior.
+- Added UI implementation choices to `docs/technical-roadmap.md`: Ant Design,
+  CodeMirror 6 with validation-error line mapping, `qrcode.react`,
+  `react-i18next` from day one, and editor draft persistence rules.
+- Added provider fetch observability fields (`last_fetch_at`,
+  `last_fetch_status`) to `docs/data-model.md` and `docs/api-design.md`.
+- Forbade persisting provider subscription URLs in browser storage in
+  `docs/security-design.md`.
 - Reconciled stale sections of `docs/technical-roadmap.md` with the
   authoritative docs: the data model sketch (per-profile `public_path` and an
   outdated link format) now defers to `docs/data-model.md`, the endpoint
