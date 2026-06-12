@@ -72,3 +72,7 @@ docker build -t mihomo-subscription:0.1.0 .
 
 1Panel 应用包位于 / The 1Panel app package lives at
 [apps/mihomo-subscription](apps/mihomo-subscription)。
+
+## 许可证 / License
+
+[MIT](LICENSE)

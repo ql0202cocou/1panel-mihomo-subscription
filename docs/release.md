@@ -1,11 +1,13 @@
 # 发布流程 / Release Process
 
-> **状态:规划阶段。** 本文档定义目标发布流程。镜像仓库地址尚未确定,以下命令
-> 中的 `REGISTRY` 为占位符,确定后需同步更新本文档和应用包 compose 文件。
+> **状态:规划阶段。** 本文档定义目标发布流程。镜像策略已定:**本地镜像**,
+> 即直接在 1Panel 主机上构建,不推送远程仓库;如后续需要分发,再启用文末的
+> 可选推送流程并同步更新 compose 镜像名。
 >
 > **Status: planning.** This document defines the target release process. The
-> image registry is not decided yet; `REGISTRY` below is a placeholder — update
-> this document and the app package compose file once chosen.
+> image strategy is decided: **local images** — built directly on the 1Panel
+> host, no remote registry. If distribution is needed later, enable the
+> optional push flow at the end and update the compose image name accordingly.
 
 相关文档 / Related documents: `changelog.md`(发布时滚动 / rolled at release)、
 `1panel-app.md`(应用包结构 / app package layout)。
@@ -41,16 +43,17 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
 
 - `docs/changelog.md` 的 `[Unreleased]` 包含本次发布的全部变更。
 - 受影响的产品/技术/安全文档已与实现对齐(见 `AGENTS.md` Change Rules)。
-- `apps/mihomo-subscription/logo.png` 已存在(分发前必需)。
-- compose 中镜像名不再是占位符 `your-registry/...`。
+- compose 中镜像名与本次版本一致(`mihomo-subscription:X.Y.Z`)。
+- 如计划公开分发:将占位 `logo.png` 替换为正式设计。
 
 &nbsp;
 
 - `[Unreleased]` in `docs/changelog.md` covers everything in this release.
 - All affected product/technical/security docs match the implementation (see
   Change Rules in `AGENTS.md`).
-- `apps/mihomo-subscription/logo.png` exists (required before distribution).
-- The compose image name is no longer the `your-registry/...` placeholder.
+- The compose image name matches this release (`mihomo-subscription:X.Y.Z`).
+- If distributing publicly: replace the placeholder `logo.png` with a real
+  design.
 
 ## 滚动 Changelog / Roll the Changelog
 
@@ -63,25 +66,22 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
 3. 不删除任何历史版本条目。
    Never delete historical entries.
 
-## 构建与推送镜像 / Build and Push the Image
+## 构建镜像 / Build the Image
+
+采用本地镜像策略:把仓库同步到 1Panel 主机,在主机上直接构建,镜像名与
+compose 中的 `image` 字段一致,无需推送。
+
+Local-image strategy: sync the repository to the 1Panel host and build there
+directly. The image name matches the `image` field in compose; no push needed.
 
 ```bash
 VERSION=0.1.0
-REGISTRY=your-registry            # TODO: 确定后替换 / replace once decided
 
-# 本机构建 / local build
+# 在 1Panel 主机上构建 / build on the 1Panel host
 docker build -t mihomo-subscription:${VERSION} .
-
-# 多架构构建并推送(1Panel 主机常见 amd64/arm64)
-# multi-arch build and push (1Panel hosts are commonly amd64/arm64)
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  -t ${REGISTRY}/mihomo-subscription:${VERSION} \
-  -t ${REGISTRY}/mihomo-subscription:latest \
-  --push .
 ```
 
-发布镜像前的冒烟验证 / Smoke test before pushing:
+安装前的冒烟验证 / Smoke test before installing:
 
 ```bash
 docker run --rm -p 8080:8080 -v "$(pwd)/tmp-data:/data" \
@@ -145,3 +145,26 @@ git push origin v${VERSION}
 - Install the new version in a real 1Panel environment for final validation.
 - Fix release defects in a new PATCH version; never overwrite a published
   image tag.
+
+## 可选:推送远程仓库 / Optional: Push to a Remote Registry
+
+仅当需要分发到其他主机或第三方应用商店时启用。启用时需同步更新 compose 的
+`image` 字段和本文档的构建章节。
+
+Only needed when distributing to other hosts or a third-party app store. When
+enabled, update the compose `image` field and the build section of this
+document accordingly.
+
+```bash
+VERSION=0.1.0
+REGISTRY=ghcr.io/<owner>          # 或 docker.io/<user>、自建仓库
+                                  # or docker.io/<user>, or a private registry
+
+# 多架构构建并推送(1Panel 主机常见 amd64/arm64)
+# multi-arch build and push (1Panel hosts are commonly amd64/arm64)
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t ${REGISTRY}/mihomo-subscription:${VERSION} \
+  -t ${REGISTRY}/mihomo-subscription:latest \
+  --push .
+```
