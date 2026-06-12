@@ -4,27 +4,12 @@
 
 mod common;
 
-use std::sync::Arc;
-
 use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
-use mihomo_subscription::app::{build_router, AppState};
-use mihomo_subscription::auth::{AdminAuth, SessionStore, SESSION_IDLE};
+use mihomo_subscription::app::build_router;
 use tower::util::ServiceExt;
 
-use common::TempDb;
-
-async fn test_state(temp: &TempDb) -> Arc<AppState> {
-    let pool = temp.pool().await;
-    Arc::new(AppState {
-        db: pool,
-        public_path_prefix: "testprefix".into(),
-        admin: AdminAuth::new("admin", "s3cret"),
-        sessions: SessionStore::new(SESSION_IDLE),
-        secure_cookies: false,
-        web_dir: "web/dist".into(),
-    })
-}
+use common::{test_state, TempDb};
 
 fn login_body(username: &str, password: &str) -> Body {
     Body::from(format!(
