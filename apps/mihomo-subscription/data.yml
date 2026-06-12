@@ -1,0 +1,20 @@
+additionalProperties:
+  key: mihomo-subscription
+  name: Mihomo 订阅管理
+  tags:
+    - Tool
+  description:
+    en: A lightweight Mihomo (Clash Meta) proxy subscription manager. Manage, enable/disable, and merge multiple proxy subscription URLs via a REST API.
+    zh: 轻量级的 Mihomo (Clash Meta) 代理订阅管理工具，通过 REST API 管理、启用/禁用和合并多个代理订阅链接。
+    zh-Hant: 輕量級 Mihomo (Clash Meta) 代理訂閱管理工具，透過 REST API 管理、啟用/停用並合併多個代理訂閱連結。
+    ja: 軽量な Mihomo (Clash Meta) プロキシサブスクリプションマネージャー。REST API を通じて複数のプロキシサブスクリプション URL を管理・有効化/無効化・結合できます。
+    ms: Pengurus langganan proksi Mihomo (Clash Meta) yang ringan. Urus, dayakan/nyahdayakan, dan gabungkan pelbagai URL langganan proksi melalui REST API.
+    pt-br: Gerenciador leve de assinaturas de proxy Mihomo (Clash Meta). Gerencie, ative/desative e mescle múltiplos URLs de assinatura de proxy via API REST.
+    ru: Лёгкий менеджер подписок прокси Mihomo (Clash Meta). Управление, включение/отключение и объединение нескольких URL подписок прокси через REST API.
+    ko: 경량 Mihomo (Clash Meta) 프록시 구독 관리자. REST API를 통해 여러 프록시 구독 URL을 관리, 활성화/비활성화, 병합합니다.
+  type: tool
+  crossVersionUpdate: true
+  limit: 0
+  website: https://github.com/MetaCubeX/mihomo
+  github: https://github.com/MetaCubeX/mihomo
+  document: https://wiki.metacubex.one/

@@ -1,0 +1,94 @@
+# AGENTS.md
+
+Concise guidance for coding agents working on this repository.
+
+## Project
+
+`mihomo-subscription` is a Rust/Axum service for self-hosted Mihomo subscription
+conversion and distribution on 1Panel.
+
+Key paths:
+
+- `src/main.rs`: current Rust API service.
+- `Dockerfile`: container build.
+- `apps/mihomo-subscription`: 1Panel app package.
+- `docs`: product, technical, security, and changelog documents.
+
+## Read First
+
+- `docs/plan.md`: product scope and MVP requirements.
+- `docs/technical-roadmap.md`: architecture and implementation direction.
+- `docs/api-design.md`: target API contracts and authentication behavior.
+- `docs/data-model.md`: target SQLite schema and migration strategy.
+- `docs/security-design.md`: required security behavior.
+- `docs/changelog.md`: change history and changelog rules.
+
+The project is in the planning stage: `api-design.md` and `data-model.md`
+describe target designs that the current prototype code does not implement yet.
+
+## Commands
+
+Run from the repository root:
+
+```bash
+cargo check
+cargo fmt
+cargo test
+```
+
+Build image:
+
+```bash
+docker build -t mihomo-subscription:0.1.0 .
+```
+
+Validate 1Panel YAML:
+
+```bash
+ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
+  apps/mihomo-subscription/data.yml \
+  apps/mihomo-subscription/0.1.0/data.yml \
+  apps/mihomo-subscription/0.1.0/docker-compose.yml
+```
+
+## Change Rules
+
+- Keep changes small and focused.
+- Do not delete user data, generated app package files, or changelog history
+  unless explicitly requested.
+- Every notable code, behavior, packaging, security, or documentation change
+  must update `docs/changelog.md` under `[Unreleased]`.
+- Every change must also update any affected technical/product docs so the
+  documentation stays aligned with the actual project state.
+- Never delete old changelog versions. On release, move `[Unreleased]` items into
+  a dated version section and create a new empty `[Unreleased]` above it.
+- If product scope changes, update `docs/plan.md`.
+- If architecture or data model direction changes, update
+  `docs/technical-roadmap.md`.
+- If auth, public links, SSRF, logging, or sensitive-data handling changes,
+  update `docs/security-design.md`.
+
+## Security Defaults
+
+- The management UI and management APIs require login.
+- Admin credentials come from 1Panel compose environment variables:
+  `ADMIN_USERNAME` and `ADMIN_PASSWORD`.
+- Public subscription links use both `PUBLIC_PATH_PREFIX` and a per-profile
+  token.
+- Invalid public path, invalid token, and disabled profile should all return
+  `404 Not Found`.
+- Do not log full provider subscription URLs.
+- Apply SSRF protection, timeout, redirect, and response-size limits before
+  fetching user-provided URLs.
+
+## 1Panel Notes
+
+- Keep the app package at `apps/mihomo-subscription`.
+- Use `${CONTAINER_NAME}` in `docker-compose.yml`.
+- Use `PANEL_APP_PORT_HTTP` for the web port.
+- Expose `ADMIN_USERNAME` and `ADMIN_PASSWORD` as install form fields and pass
+  them into the service environment.
+- Join the external `1panel-network`.
+- Persist app data through `./data`.
+- Before distribution, replace placeholder image names and add
+  `apps/mihomo-subscription/logo.png`.
