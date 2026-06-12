@@ -17,6 +17,8 @@
 - 管理 API 使用 JSON;公开订阅端点输出 Mihomo YAML。
 - 公开端点的任何校验失败统一返回 `404`,不泄露失败原因。
 - 管理 API 响应默认对原始机场订阅 URL 脱敏。
+- 管理 API 仅限同源访问:SPA 由 Axum 同源提供,不启用 CORS 层
+  (见 `security-design.md` 的 CORS and CSRF)。
 
 &nbsp;
 
@@ -27,6 +29,9 @@
 - Any public-endpoint validation failure returns a uniform `404` without
   revealing which check failed.
 - Management responses mask original provider subscription URLs by default.
+- The management API is same-origin only: the SPA is served by Axum from the
+  same origin and no CORS layer is enabled (see CORS and CSRF in
+  `security-design.md`).
 
 ## 通用约定 / Conventions
 

@@ -223,7 +223,8 @@ Tests are written alongside each implementation phase, not deferred.
   errors.
 - **SSRF validator** (required before MVP release): table-driven tests over
   every blocked range listed in `security-design.md`, plus scheme rejection,
-  credential-in-URL rejection, DNS resolution checks, and redirect re-checks.
+  credential-in-URL rejection, DNS resolution checks, IPv4-embedded IPv6
+  bypass cases (IPv4-mapped, NAT64, 6to4), and redirect re-checks.
 - **API**: integration tests using `sqlite::memory:` and `tower::ServiceExt`
   request injection. Cover auth (`401` without session), profile CRUD,
   generate-time validation errors, and the public endpoint's uniform `404`

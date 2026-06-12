@@ -76,6 +76,18 @@ possible, and grouped by change type.
 ### Security
 
 - Documented SSRF protection requirements for provider subscription fetching.
+- Hardened the SSRF design after a security review: blocked IPv4-embedding
+  IPv6 ranges (IPv4-mapped, NAT64, 6to4) with embedded-address re-checking,
+  required pinning of validated IPs against DNS rebinding, required the
+  response size limit to count streamed bytes instead of `Content-Length`,
+  and added TEST-NET/6to4-relay IPv4 ranges.
+- Added an untrusted content handling section: YAML alias/nesting parse
+  limits, `subscription-userinfo` format validation before storage or echo,
+  and escaping of provider-supplied names in the Web UI.
+- Strengthened the auth design: constant-time credential comparison, minimum
+  session-ID entropy, a same-origin/no-CORS policy for the management API
+  (the prototype's permissive CORS layer must be removed when auth lands),
+  and `Origin` verification as CSRF defense in depth.
 - Documented masking requirements for original provider subscription URLs.
 - Documented administrator login requirements and 1Panel compose-based
   credential configuration.

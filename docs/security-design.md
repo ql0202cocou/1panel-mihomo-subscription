@@ -105,10 +105,23 @@ Recommended initial approach:
   `docker-compose.yml` environment variables.
 - Refuse to start, or restrict to localhost, if either value is not set.
 - Store only a password hash if persistence is needed.
-- Use session cookies for Web UI login.
+- Compare submitted credentials in constant time to avoid timing side
+  channels.
+- Use session cookies for Web UI login, with at least 128 bits of CSPRNG
+  session-ID entropy.
 - Set cookies with `HttpOnly` and `SameSite=Lax`.
 - Set `Secure` when the deployment uses HTTPS.
 - Add basic login failure rate limiting.
+
+CORS and CSRF:
+
+- The SPA is served same-origin by the Axum service, so the management API
+  needs no CORS at all. Do not enable a permissive CORS layer — the
+  prototype's `CorsLayer::permissive()` must be removed when session auth
+  lands, otherwise cookie-based auth loses its same-origin protection.
+- `SameSite=Lax` blocks cross-site cookie sending on non-GET requests. As
+  defense in depth, also verify the `Origin` header on state-changing
+  management requests when it is present.
 
 Bearer token authentication can be used for early development, but session
 cookies are better for the Web UI experience.
@@ -144,7 +157,12 @@ Required URL rules:
 - Reject localhost names such as `localhost`.
 - Reject bare IPs in blocked ranges.
 - Resolve domains and check the resolved IPs.
-- Re-check every redirect target.
+- Connect to the validated IP itself (pin it in the HTTP client resolver)
+  instead of re-resolving at request time. Validating first and letting the
+  client resolve again is vulnerable to DNS rebinding (TOCTOU).
+- For IPv6 addresses that embed an IPv4 address (IPv4-mapped, NAT64, 6to4),
+  extract the embedded IPv4 address and check it against the IPv4 blocklist.
+- Re-check every redirect target with the same rules, including IP pinning.
 - Limit redirects to a small number, such as 3.
 
 Blocked IPv4 ranges:
@@ -157,8 +175,12 @@ Blocked IPv4 ranges:
 169.254.0.0/16
 172.16.0.0/12
 192.0.0.0/24
+192.0.2.0/24
+192.88.99.0/24
 192.168.0.0/16
 198.18.0.0/15
+198.51.100.0/24
+203.0.113.0/24
 224.0.0.0/4
 240.0.0.0/4
 ```
@@ -168,10 +190,18 @@ Blocked IPv6 ranges:
 ```text
 ::/128
 ::1/128
+::ffff:0:0/96    # IPv4-mapped: extract embedded IPv4 and re-check
+64:ff9b::/96     # NAT64: extract embedded IPv4 and re-check
+2002::/16        # 6to4: extract embedded IPv4 and re-check
 fc00::/7
 fe80::/10
 ff00::/8
 ```
+
+The three IPv4-embedding ranges are classic SSRF bypasses: a URL such as
+`http://[::ffff:127.0.0.1]/` is not in any blocked IPv6 range by itself, so
+the embedded IPv4 address must be extracted and checked against the IPv4
+blocklist.
 
 Docker/internal network ranges may also be blocked through configuration.
 
@@ -179,9 +209,25 @@ Outbound request limits:
 
 - Connect timeout: 5-10 seconds.
 - Total request timeout: 10-20 seconds.
-- Maximum response size: 5-10 MB.
+- Maximum response size: 5-10 MB, enforced on the streamed byte count while
+  reading the body. Do not rely on the `Content-Length` header — it is
+  attacker-controlled and can lie.
 - Maximum redirects: 3.
 - Only fetch text/YAML-like content for subscription processing.
+
+## Untrusted Content Handling
+
+Provider responses are untrusted input even after the URL passes SSRF checks.
+
+- Parse fetched YAML with resource limits. YAML anchors/aliases can amplify a
+  size-limited input into unbounded memory ("billion laughs"); cap alias
+  expansion and nesting depth, or reject documents that exceed them.
+- Sanitize the provider `subscription-userinfo` header before storing or
+  echoing it on the public endpoint: accept only a single header value
+  matching the expected `key=value; ...` shape, and reject values containing
+  control characters (CR/LF) to prevent response header injection.
+- Treat provider node names and group names as plain data. The Web UI must
+  escape them on render; never interpolate them into HTML or shell commands.
 
 ## Sensitive Data Handling
 
@@ -262,9 +308,18 @@ Management API:
 - Token reset is supported per profile.
 - Public path prefix reset is supported globally.
 - URL scheme is limited to `http` and `https`.
-- DNS resolution results are checked against blocked IP ranges.
+- DNS resolution results are checked against blocked IP ranges, and the
+  validated IP is pinned for the actual connection (DNS-rebinding safe).
+- IPv4-embedding IPv6 addresses (IPv4-mapped, NAT64, 6to4) are unwrapped and
+  re-checked against the IPv4 blocklist.
 - Redirect targets are checked before following.
-- Request timeout, redirect limit, and response size limit are enforced.
+- Request timeout, redirect limit, and response size limit are enforced; the
+  size limit counts streamed bytes, not `Content-Length`.
+- Fetched YAML is parsed with alias-expansion and nesting-depth limits.
+- `subscription-userinfo` is format-validated before being stored or echoed.
+- Credentials are compared in constant time.
+- No permissive CORS layer; the management API is same-origin only, with
+  `Origin` verification on state-changing requests as defense in depth.
 - Provider URLs are masked in logs and responses.
 - Public endpoint returns generic `404` for invalid access.
 - Cache prevents public requests from repeatedly fetching provider URLs.
