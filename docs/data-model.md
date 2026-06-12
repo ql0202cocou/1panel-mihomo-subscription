@@ -64,6 +64,8 @@ CREATE TABLE profiles (
     output_type TEXT    NOT NULL DEFAULT 'mihomo',
     token       TEXT    NOT NULL,
     enabled     INTEGER NOT NULL DEFAULT 1,
+    last_fetch_at     TEXT,
+    last_fetch_status TEXT,
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
 );
@@ -82,6 +84,13 @@ CREATE INDEX idx_profiles_enabled      ON profiles (enabled);
   (见 `security-design.md`)。
 - `source_url` contains provider secrets and is sensitive: never fully logged,
   masked by default in API responses (see `security-design.md`).
+- `last_fetch_at` / `last_fetch_status`:最近一次机场拉取的观测字段,
+  状态分类如 `success`、`http_error:502`、`ssrf_rejected`、`timeout`、
+  `too_large`,供"原始订阅源"卡片展示(见 `plan.md`)。
+- `last_fetch_at` / `last_fetch_status`: observability fields for the latest
+  provider fetch; status values such as `success`, `http_error:502`,
+  `ssrf_rejected`, `timeout`, `too_large`, displayed on the source card (see
+  `plan.md`).
 
 ### rulesets
 
