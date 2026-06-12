@@ -145,6 +145,16 @@ possible, and grouped by change type.
   passthrough (stored with the generated cache; new column in
   `docs/data-model.md`), `profile-update-interval`, and `content-disposition`
   headers in `docs/api-design.md` and `docs/plan.md`.
+- Defined the remaining API edge semantics in `docs/api-design.md` ahead of
+  implementation: the source card's manual refresh reuses the generate
+  endpoint, preview is read-only (fresh cache or live fetch, never persisted),
+  the public endpoint returns stale cache on refresh failure or a generic
+  `503` when no cache exists, and request body shapes for custom nodes and
+  groups.
+- Specified session storage (in-memory, 7-day idle expiry) and a
+  deterministic URL masking rule (mask every query parameter value) in
+  `docs/security-design.md`, and aligned its error handling section with the
+  public endpoint `503` behavior.
 - Documented the Web UI interaction design in `docs/plan.md`: page routes and
   two-level information architecture (list / detail / settings), a profile
   state model with a "modified but not generated" banner, danger-level

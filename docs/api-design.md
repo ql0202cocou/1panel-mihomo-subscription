@@ -176,6 +176,36 @@ and only accepted in full in create/update requests.
   `success` / `http_error:<code>` / `ssrf_rejected` / `timeout` /
   `too_large`; `null` when never fetched. Displayed on the source card.
 
+自定义节点/分组请求体 / Custom node and group request bodies:
+
+```text
+POST /api/profiles/:id/nodes
+{
+  "name": "my-ss",
+  "node_type": "ss",
+  "content": "<该节点完整 Mihomo proxy 映射的 YAML 文本>",
+  "enabled": true
+}
+
+POST /api/profiles/:id/groups
+{
+  "name": "MyGroup",
+  "group_type": "select",
+  "members": ["my-ss", "DIRECT"],
+  "options": { "url": "https://www.gstatic.com/generate_204", "interval": 300 },
+  "enabled": true
+}
+```
+
+- 节点 `content` 为完整的 Mihomo proxy 映射(YAML 文本),保存时做结构校验,
+  生成时原样并入输出 `proxies`(对应 `data-model.md` 的 `custom_nodes.content`)。
+- Node `content` is the complete Mihomo proxy mapping as YAML text,
+  structurally validated on save and merged verbatim into the output
+  `proxies` at generation time (matches `custom_nodes.content` in
+  `data-model.md`).
+- `PUT` 使用与 `POST` 相同的请求体,整体替换。
+- `PUT` takes the same body as `POST` and replaces the resource wholesale.
+
 ## 生成与校验 / Generate and Validation
 
 `POST /api/profiles/:id/generate` 执行完整校验,成功后刷新缓存并返回托管链接;
@@ -184,6 +214,18 @@ and only accepted in full in create/update requests.
 `POST /api/profiles/:id/generate` runs full validation, refreshes the cache on
 success, and returns the hosted link; on failure it returns `400` with
 itemized errors matching the Web UI modal copy (see `plan.md`).
+
+详情页"原始订阅源"卡片的手动刷新按钮**复用本端点**,不另设 refresh 端点。
+
+The source card's manual refresh button **reuses this endpoint**; there is no
+separate refresh endpoint.
+
+`GET /api/profiles/:id/preview` 是 generate 的只读版本:有新鲜缓存时返回缓存,
+否则实时拉取生成;**不**写入缓存,不影响托管链接和 `last_*` 字段。
+
+`GET /api/profiles/:id/preview` is the read-only counterpart of generate: it
+returns fresh cache when available, otherwise fetches and generates live; it
+**never** persists the cache or touches the hosted link or `last_*` fields.
 
 校验规则 / Validation rules:
 
@@ -216,8 +258,16 @@ itemized errors matching the Web UI modal copy (see `plan.md`).
 ```text
 GET /:public_path_prefix/api/sub/:token
   -> 200 text/yaml         有效路径 + 有效 token + 配置启用
+  -> 503                   请求有效,但无任何缓存且上游拉取失败(通用响应)
   -> 404 Not Found         其余一切情况(统一响应)
 ```
+
+- 缓存过期且重新拉取失败时:返回过期缓存并记录告警(见 `security-design.md`)。
+- 完全无缓存且拉取失败时:返回通用 `503`,响应体不含任何上游信息。
+- When the cache is stale and refresh fails: return the stale cache with a
+  logged warning (see `security-design.md`).
+- When no cache exists at all and the fetch fails: return a generic `503`
+  whose body contains no upstream details.
 
 成功响应头 / Success response headers:
 
