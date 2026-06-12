@@ -52,6 +52,14 @@ possible, and grouped by change type.
 
 ### Added
 
+- Implemented the SSRF-protected provider fetch (MVP release gate): `src/ssrf.rs`
+  with network-free, table-tested URL/IP validation covering every blocked
+  IPv4/IPv6 range plus the IPv4-mapped/NAT64/6to4 unwrap bypasses; `src/fetch.rs`
+  performing per-hop validation, host resolution with validated-IP pinning
+  (DNS-rebinding safe), manual redirect re-validation (max 3), connect/total
+  timeouts, a streamed response-size cap (not `Content-Length`), binary
+  content-type rejection, and `subscription-userinfo` sanitization. `FetchError`
+  maps to `last_fetch_status` labels for reuse by the generate step.
 - Finalized the integration-test baseline and CI (Skeleton step 4): added
   `.github/workflows/ci.yml` running `cargo fmt --check`, `cargo clippy
   --all-targets -D warnings`, `cargo test`, and the 1Panel app-package YAML
