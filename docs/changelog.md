@@ -52,6 +52,14 @@ possible, and grouped by change type.
 
 ### Added
 
+- Began implementing the documented design (Skeleton step 1): added
+  `migrations/0001_init.sql` creating the target schema and dropping the
+  prototype `subscriptions` table; added a `src/db.rs` module that opens the
+  SQLite pool with per-connection `foreign_keys`/`busy_timeout`/WAL pragmas,
+  runs migrations, and seeds the `app_settings` public path prefix; added a
+  `src/lib.rs` so integration tests can use the crate; added
+  `tests/db_cascade.rs` proving profile deletion cascades to all child tables
+  (and the foreign-keys pragma holds across pooled connections).
 - Initialized project documentation under `docs`.
 - Added 1Panel app packaging notes.
 - Added technical roadmap for the Mihomo subscription conversion service.
