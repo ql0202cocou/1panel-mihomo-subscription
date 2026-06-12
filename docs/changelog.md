@@ -76,6 +76,17 @@ possible, and grouped by change type.
 ### Security
 
 - Documented SSRF protection requirements for provider subscription fetching.
+- Closed a second round of design-review gaps in concurrency, deployment
+  topology, and storage correctness: a per-profile single-flight lock to
+  prevent stale-cache refresh stampedes; correct client-IP derivation behind
+  the 1Panel reverse proxy via `TRUSTED_PROXY_HOPS` (added to the environment
+  variable table); always-perform, constant-time public token lookup to avoid
+  timing disclosure of the path prefix; management request body size limits
+  (`413`) with the same YAML parse limits for admin-submitted content; and
+  per-connection SQLite pragmas (`foreign_keys`, `busy_timeout`) applied via
+  an after-connect hook so `ON DELETE CASCADE` is not silently disabled.
+- Extended the testing strategy with cascade-delete, `503`, `413`, and
+  single-flight concurrency cases.
 - Hardened the SSRF design after a security review: blocked IPv4-embedding
   IPv6 ranges (IPv4-mapped, NAT64, 6to4) with embedded-address re-checking,
   required pinning of validated IPs against DNS rebinding, required the

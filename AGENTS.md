@@ -86,6 +86,11 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
 - Never enable permissive CORS on the management API; the SPA is served
   same-origin. Remove the prototype's `CorsLayer::permissive()` when session
   auth lands.
+- Refresh provider subscriptions behind a per-profile single-flight lock to
+  avoid stale-cache stampedes; derive the client IP from a trusted reverse
+  proxy hop, not a client-spoofable header (see `docs/security-design.md`).
+- Set `foreign_keys`, `busy_timeout`, and `journal_mode` on every pooled
+  SQLite connection via an after-connect hook (see `docs/data-model.md`).
 
 ## 1Panel Notes
 

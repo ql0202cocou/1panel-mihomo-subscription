@@ -15,7 +15,19 @@
 - 数据库文件 / Database file: `${DATA_DIR}/mihomo-subscription.db`
   (`DATA_DIR` 默认 / defaults to `/data`)。
 - 连接设置 / Connection settings: `PRAGMA journal_mode = WAL;`
-  `PRAGMA foreign_keys = ON;`
+  `PRAGMA foreign_keys = ON;` `PRAGMA busy_timeout = 5000;`
+  - `foreign_keys` 和 `busy_timeout` 是**每连接**生效的 pragma,必须在连接池
+    的 after-connect 钩子里对**每个**连接设置,只设一次会让池中其余连接的外键
+    约束静默失效(`ON DELETE CASCADE` 不触发,留下孤儿行)。
+  - `foreign_keys` and `busy_timeout` are **per-connection** pragmas and must
+    be applied to **every** pooled connection via an after-connect hook.
+    Setting them once leaves other pool connections with foreign keys silently
+    off (`ON DELETE CASCADE` won't fire, orphaning rows).
+  - `busy_timeout` 让并发写在 SQLite 单写者锁上等待而非立即抛 `SQLITE_BUSY`;
+    `journal_mode = WAL` 只需设一次,随数据库文件持久化。
+  - `busy_timeout` makes concurrent writers wait on SQLite's single-writer
+    lock instead of failing fast with `SQLITE_BUSY`; `journal_mode = WAL` is
+    set once and persists with the database file.
 - 主键 / Primary keys: UUID v4,`TEXT` 类型 / stored as `TEXT`.
 - 时间戳 / Timestamps: RFC 3339 UTC 字符串,`TEXT` 类型 / strings in `TEXT`.
 - 布尔值 / Booleans: `INTEGER`,`0`/`1`。

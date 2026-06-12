@@ -32,6 +32,10 @@
 - The management API is same-origin only: the SPA is served by Axum from the
   same origin and no CORS layer is enabled (see CORS and CSRF in
   `security-design.md`).
+- All management request bodies are bounded by a maximum size (default 1 MB);
+  oversized bodies are rejected with `413`. Admin-submitted node/group YAML is
+  parsed with the same alias/nesting limits as provider content (see
+  `security-design.md`).
 
 ## 通用约定 / Conventions
 
@@ -64,6 +68,7 @@
 | 401 | 未登录或会话过期 / Not authenticated or session expired |
 | 404 | 资源不存在;公开端点的统一失败响应 / Not found; uniform public-endpoint failure |
 | 409 | 名称冲突(如分组重名)/ Name conflict (e.g. duplicate group name) |
+| 413 | 请求体超过大小上限 / Request body exceeds the size limit |
 | 429 | 触发限流 / Rate limited |
 | 500 | 服务内部错误,不含敏感信息 / Internal error, no sensitive data |
 

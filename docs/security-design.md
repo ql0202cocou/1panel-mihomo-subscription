@@ -72,6 +72,13 @@ profile enabled = true
 Return `404 Not Found` for invalid path, invalid token, or disabled profile. Do
 not reveal which part failed.
 
+Avoid a timing side channel that distinguishes "wrong path prefix" (no database
+lookup) from "right prefix, wrong token" (a lookup runs): always perform the
+token lookup regardless of whether the path prefix matched, and compare both
+the path prefix and the token in constant time. Otherwise response timing lets
+an attacker confirm the path prefix independently, defeating the two-factor
+(prefix + token) design.
+
 ## Token Rotation
 
 Support these reset operations:
@@ -224,7 +231,10 @@ Provider responses are untrusted input even after the URL passes SSRF checks.
 
 - Parse fetched YAML with resource limits. YAML anchors/aliases can amplify a
   size-limited input into unbounded memory ("billion laughs"); cap alias
-  expansion and nesting depth, or reject documents that exceed them.
+  expansion and nesting depth, or reject documents that exceed them. Apply the
+  same parse limits to admin-submitted node/group YAML, and bound every
+  management request body (default 1 MB, reject with `413`) — an authenticated
+  admin is not a reason to allow unbounded memory or database growth.
 - Sanitize the provider `subscription-userinfo` header before storing or
   echoing it on the public endpoint: accept only a single header value
   matching the expected `key=value; ...` shape, and reject values containing
@@ -271,6 +281,22 @@ Recommended limits:
 For the first self-hosted version, in-memory rate limits are acceptable. If the
 app later becomes multi-instance, move limits to a shared store.
 
+### Deriving the Client IP
+
+The service runs behind the 1Panel reverse proxy, so the TCP peer address is
+always the proxy, not the client. Rate limits and access logs that key on
+"source IP" must therefore derive the client IP correctly:
+
+- Trust `X-Forwarded-For` only from the known reverse proxy, and take the
+  rightmost untrusted hop — not the leftmost, which is client-controlled and
+  spoofable.
+- Make the number of trusted proxy hops configurable
+  (`TRUSTED_PROXY_HOPS`, default `1` for the standard 1Panel deployment).
+- If the header is absent or malformed, fall back to the TCP peer address.
+
+Getting this wrong collapses all clients into the proxy IP (rate limits become
+global) or lets a client forge the header to evade per-IP limits.
+
 ## Cache and Refresh Strategy
 
 Avoid fetching provider subscriptions on every public download request.
@@ -282,6 +308,14 @@ GET /<public-path>/api/sub/<token>
   -> if fresh generated cache exists, return it
   -> if cache is missing or stale, refresh and return generated YAML
 ```
+
+Single-flight refresh (required): coalesce concurrent refreshes of the same
+profile behind a per-profile lock so a stale-cache stampede cannot fan out
+into many simultaneous provider fetches. Concurrent requests for that profile
+either await the in-flight refresh or serve the existing stale cache; only one
+upstream fetch runs at a time per profile. Without this, one popular expiring
+link multiplies into N provider fetches, hammering the provider and amplifying
+outbound load.
 
 Cache recommendations:
 
@@ -331,6 +365,13 @@ Management API:
 - Credentials are compared in constant time.
 - No permissive CORS layer; the management API is same-origin only, with
   `Origin` verification on state-changing requests as defense in depth.
+- Management request bodies are size-bounded (`413` on overflow) and
+  admin-submitted YAML uses the same parse limits as provider content.
 - Provider URLs are masked in logs and responses.
-- Public endpoint returns generic `404` for invalid access.
-- Cache prevents public requests from repeatedly fetching provider URLs.
+- Public endpoint returns generic `404` for invalid access, with the token
+  lookup always performed and constant-time comparison to avoid timing
+  disclosure of the path prefix.
+- Cache prevents public requests from repeatedly fetching provider URLs, and a
+  per-profile single-flight lock prevents stale-cache refresh stampedes.
+- Client IP for rate limiting is derived from a trusted reverse proxy hop, not
+  a client-spoofable header.
