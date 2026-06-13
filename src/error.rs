@@ -89,6 +89,11 @@ impl From<sqlx::Error> for ApiError {
         if is_unique_violation(&err) {
             return ApiError::Conflict("A resource with the same name already exists".to_string());
         }
+        // Safe to log: `sqlx::Error`'s Display carries the driver message
+        // (e.g. constraint/column names), never the bound parameter values, so a
+        // provider URL or token cannot leak here. The masked `500` is returned to
+        // the client; the detail stays server-side. Do not switch this to logging
+        // the query + parameters.
         tracing::error!("database error: {err}");
         ApiError::Internal
     }

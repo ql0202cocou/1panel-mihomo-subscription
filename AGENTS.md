@@ -39,6 +39,7 @@ Backend, from the repository root — these are the CI gates:
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
+cargo audit   # needs `cargo install cargo-audit`; per-advisory ignores in .cargo/audit.toml
 ```
 
 Frontend, from `web/`:

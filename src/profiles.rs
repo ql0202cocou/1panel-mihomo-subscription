@@ -17,6 +17,7 @@ use sqlx::FromRow;
 use crate::app::AppState;
 use crate::error::{ApiError, ApiResult};
 use crate::mask::mask_url;
+use crate::ssrf::{self, SsrfError};
 use crate::util::{now, random_token};
 use crate::yaml;
 
@@ -187,6 +188,28 @@ pub struct UpdateProfile {
     enabled: Option<bool>,
 }
 
+/// Validate a provider URL at write time. This is defense in depth and a better
+/// error experience — the authoritative SSRF check still runs at fetch time with
+/// DNS resolution and IP pinning (`src/fetch.rs`). Static parts are checked here:
+/// scheme, embedded credentials, loopback names, and blocked literal IPs.
+/// Hostname-only URLs pass (no DNS lookup happens at write time). Messages are
+/// generic per error kind so the raw URL is never echoed.
+fn validate_source_url(raw: &str) -> ApiResult<()> {
+    let url = url::Url::parse(raw)
+        .map_err(|_| ApiError::BadRequest("source_url is not a valid URL".into()))?;
+    ssrf::validate_url(&url).map_err(|e| {
+        let msg = match e {
+            SsrfError::Scheme => "source_url must use http or https",
+            SsrfError::Host => "source_url is missing a host",
+            SsrfError::Credentials => "source_url must not embed credentials",
+            SsrfError::BlockedHost | SsrfError::BlockedIp => {
+                "source_url points to a disallowed (local/private) address"
+            }
+        };
+        ApiError::BadRequest(msg.into())
+    })
+}
+
 async fn load_profile_row(state: &AppState, id: &str) -> ApiResult<ProfileRow> {
     sqlx::query_as::<_, ProfileRow>(
         "SELECT p.*, (SELECT generated_at FROM generated_cache WHERE profile_id = p.id) \
@@ -224,6 +247,7 @@ pub async fn create(
     if body.source_url.trim().is_empty() {
         return Err(ApiError::BadRequest("source_url is required".into()));
     }
+    validate_source_url(body.source_url.trim())?;
 
     let id = uuid::Uuid::new_v4().to_string();
     let token = random_token();
@@ -327,7 +351,11 @@ pub async fn update(
     }
     // Write-only URL: keep the stored value unless a non-empty one is provided.
     let source_url = match body.source_url {
-        Some(u) if !u.trim().is_empty() => u.trim().to_string(),
+        Some(u) if !u.trim().is_empty() => {
+            let trimmed = u.trim();
+            validate_source_url(trimmed)?;
+            trimmed.to_string()
+        }
         _ => existing.source_url,
     };
     let enabled = body.enabled.unwrap_or(existing.enabled);
