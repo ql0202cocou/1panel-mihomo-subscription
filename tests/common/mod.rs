@@ -9,6 +9,7 @@ use mihomo_subscription::app::AppState;
 use mihomo_subscription::auth::{AdminAuth, SessionStore, SESSION_IDLE};
 use mihomo_subscription::db;
 use mihomo_subscription::fetch::{HttpFetcher, SubscriptionFetcher};
+use mihomo_subscription::rate_limit::RateLimiter;
 use mihomo_subscription::single_flight::SingleFlight;
 use sqlx::SqlitePool;
 
@@ -74,5 +75,9 @@ pub async fn test_state_with_fetcher(
         fetcher,
         cache_ttl: Duration::from_secs(15 * 60),
         single_flight: SingleFlight::new(),
+        trusted_proxy_hops: 1,
+        // Generous limits so unrelated CRUD/login calls in tests aren't gated.
+        login_limiter: Arc::new(RateLimiter::new(100, Duration::from_secs(60))),
+        download_limiter: Arc::new(RateLimiter::new(1000, Duration::from_secs(60))),
     })
 }

@@ -10,6 +10,7 @@ use mihomo_subscription::{
     auth::{AdminAuth, SessionStore, SESSION_IDLE},
     db,
     fetch::HttpFetcher,
+    rate_limit::RateLimiter,
     single_flight::SingleFlight,
 };
 
@@ -58,6 +59,9 @@ async fn main() -> anyhow::Result<()> {
         }),
         cache_ttl,
         single_flight: SingleFlight::new(),
+        trusted_proxy_hops: env_u64("TRUSTED_PROXY_HOPS", 1) as usize,
+        login_limiter: Arc::new(RateLimiter::new(10, Duration::from_secs(60))),
+        download_limiter: Arc::new(RateLimiter::new(120, Duration::from_secs(60))),
     });
 
     let app = build_router(state);
@@ -70,7 +74,12 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("Listening on http://{}", listener.local_addr()?);
-    axum::serve(listener, app).await?;
+    // Connect info exposes the TCP peer address for client-IP derivation.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }
