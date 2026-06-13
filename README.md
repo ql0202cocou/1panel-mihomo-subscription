@@ -9,60 +9,76 @@ A lightweight self-hosted Mihomo subscription converter/distributor for 1Panel
 nodes, and proxy groups, and generate long-lived Mihomo links. Ships a web admin
 UI with login, SSRF protection, and provider-URL masking.
 
-> 状态:已实现并经安全审计加固,尚未正式发布(1Panel 应用包安装表单待补齐)。
-> Status: implemented and security-hardened; not yet formally released (the
-> 1Panel app package install form is still pending).
+> 状态:已实现并经安全审计加固。当前版本 `0.1.2`,镜像已发布到 Docker Hub
+> (`quinlanhoo/mihomo-subscription`,多架构 amd64+arm64),1Panel 应用包安装表单完整。
+> Status: implemented and security-hardened. Current version `0.1.2`; the image is
+> published on Docker Hub (`quinlanhoo/mihomo-subscription`, multi-arch
+> amd64+arm64) and the 1Panel app package ships a complete install form.
 
 ## 在 1Panel 中部署 / Deploy in 1Panel
 
-镜像采用**本地构建**(不使用远程仓库):先在 1Panel 主机构建镜像,再用 1Panel 部署。
-The image is **built locally** (no remote registry): build it on the 1Panel host,
-then deploy through 1Panel.
+镜像发布在 **Docker Hub**(`quinlanhoo/mihomo-subscription`,多架构 amd64+arm64),
+1Panel 主机直接拉取,无需本地构建。离线/内网请参见 `docs/release.md` 的本地构建备选。
+The image is published on **Docker Hub** (`quinlanhoo/mihomo-subscription`,
+multi-arch amd64+arm64); the 1Panel host pulls it directly, no local build
+needed. For offline/intranet, see the local-build fallback in `docs/release.md`.
 
-**1. 构建镜像 / Build the image** — 在 1Panel 主机上 / on the 1Panel host:
+最简单的方式是手写 Compose:在 1Panel「容器 → 编排」新建,把下面整段粘贴进去,
+**只改 4 个标注 `← 修改` 的值**,创建即部署。
+The simplest path is a hand-written Compose: in 1Panel **Containers → Compose**,
+paste the whole block below, change only the four values marked `← edit`, and
+create:
 
-```bash
-git clone https://github.com/ql0202cocou/1panel-mihomo-subscription.git
-cd 1panel-mihomo-subscription
-docker build -t mihomo-subscription:0.1.2 .
-```
-
-**2. 部署容器 / Deploy the container** — 用 1Panel「容器 → 编排」部署下面的 compose
-(以注入必需的环境变量)。 Use 1Panel **Containers → Compose** with the compose
-below so the required environment variables are injected:
+**1. 部署容器 / Deploy the container**
 
 ```yaml
 services:
   mihomo-subscription:
-    image: mihomo-subscription:0.1.2
+    image: quinlanhoo/mihomo-subscription:0.1.2
     container_name: mihomo-subscription
     restart: always
     networks: [1panel-network]
     ports:
-      - "8080:8080"                              # 宿主:容器 / host:container
+      - "8080:8080"                                  # 宿主:容器 / host:container
     volumes:
-      - ./data:/data                             # 持久化 SQLite / persistent SQLite
+      - ./data:/data                                 # 持久化 SQLite / persistent SQLite
     environment:
+      # ── 必填 / required ───────────────────────────────────────────────
+      - ADMIN_USERNAME=admin                         # ← 修改 / edit: 管理员账号
+      - ADMIN_PASSWORD=change-me-to-a-strong-secret  # ← 修改 / edit: 用强密码
+      - PUBLIC_BASE_URL=https://sub.example.com      # ← 修改 / edit: 对外访问地址(含 https)
+      - SECURE_COOKIES=true                          # ← 修改 / edit: HTTPS 反代填 true,纯 HTTP 填 false
+      # ── 固定,勿改 / fixed, do not change ────────────────────────────
       - PORT=8080
       - DATA_DIR=/data
-      - RUST_LOG=info
-      - ADMIN_USERNAME=admin                     # 必填 / required
-      - ADMIN_PASSWORD=change-me                 # 必填,用强密码 / required, use a strong value
-      - PUBLIC_BASE_URL=https://sub.example.com  # 对外访问地址 / externally reachable origin
-      - SECURE_COOKIES=true                      # HTTPS 反代时置 true / true behind HTTPS proxy
-      # 可选 / optional: PUBLIC_PATH_PREFIX, FETCH_TIMEOUT_SECONDS,
-      # MAX_SUBSCRIPTION_SIZE_MB, CACHE_TTL_MINUTES, TRUSTED_PROXY_HOPS
+      # ── 可选,留默认即可 / optional, defaults are fine ───────────────
+      - RUST_LOG=info                                # 日志级别 / log level
+      - PUBLIC_PATH_PREFIX=                          # 留空自动生成随机前缀 / blank = random
+      - FETCH_TIMEOUT_SECONDS=15                     # 机场拉取超时 / provider fetch timeout
+      - MAX_SUBSCRIPTION_SIZE_MB=8                   # 机场响应大小上限 / provider size cap
+      - CACHE_TTL_MINUTES=15                         # 生成结果缓存 / generated cache TTL
+      - TRUSTED_PROXY_HOPS=1                          # 信任的反代跳数 / trusted reverse-proxy hops
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 networks:
   1panel-network:
     external: true
 ```
 
-缺少 `ADMIN_USERNAME`/`ADMIN_PASSWORD` 时服务会拒绝启动;完整环境变量表见
-[docs/1panel-app.md](docs/1panel-app.md)。 The service refuses to start without
-`ADMIN_USERNAME`/`ADMIN_PASSWORD`; the full env-var table is in
-[docs/1panel-app.md](docs/1panel-app.md).
+缺少 `ADMIN_USERNAME`/`ADMIN_PASSWORD` 时服务会拒绝启动;每个变量的含义见
+[docs/1panel-app.md](docs/1panel-app.md) 的环境变量表。 The service refuses to
+start without `ADMIN_USERNAME`/`ADMIN_PASSWORD`; see the env-var table in
+[docs/1panel-app.md](docs/1panel-app.md) for every variable.
 
-**3. 反向代理 / Reverse proxy** — 在 1Panel「网站 → 反向代理」指向该容器,并**保留
+> 也可改用 1Panel 应用包安装(带图形化安装表单),见 [docs/1panel-app.md](docs/1panel-app.md)。
+> Prefer a GUI install form? Use the 1Panel app package instead — see
+> [docs/1panel-app.md](docs/1panel-app.md).
+
+**2. 反向代理 / Reverse proxy** — 在 1Panel「网站 → 反向代理」指向该容器,并**保留
 原始 Host 头**,否则管理 API 的 `Origin`/`Host` 同源校验会让登录/写操作返回 `403`。
 In 1Panel **Websites → Reverse Proxy**, point a site at the container and
 **preserve the original Host header**, or the management API's `Origin`/`Host`

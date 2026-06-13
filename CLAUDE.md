@@ -7,8 +7,9 @@ Guidance for Claude Code (claude.ai/code) working in this repository.
 The documented design under `docs/` is **implemented** (Rust/Axum backend +
 `web/` SPA); the docs remain the source of truth. The `0.1.2` 1Panel app
 package is complete (`apps/mihomo-subscription/0.1.2/`, full install form). To
-ship a new version, follow the release process in `docs/release.md` (build the
-local image on the 1Panel host and tag `vX.Y.Z`).
+ship a new version, follow the release process in `docs/release.md` (multi-arch
+`docker buildx ... --push` to Docker Hub `quinlanhoo/mihomo-subscription` and tag
+`vX.Y.Z`; on-host local build is the offline/intranet fallback).
 
 **Most important rule:** every notable change updates `docs/changelog.md` under
 `[Unreleased]` (never delete old entries), keeps affected docs aligned, and
@@ -23,6 +24,8 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
 cargo audit                          # needs `cargo install cargo-audit`; ignores in .cargo/audit.toml
+
+# Local Dockerfile sanity check (not a CI gate):
 docker build -t mihomo-subscription:0.1.2 .
 
 # One test / one file:
@@ -107,6 +110,7 @@ suites are release gates.
 - New technical docs are bilingual: Chinese first, English following, in the
   same file with shared code blocks.
 - The 1Panel app package mirrors the official layout; each release adds a new
-  version directory and keeps old ones. Images are local-only, built on the
-  1Panel host as `mihomo-subscription:<version>`, no remote registry (see
+  version directory and keeps old ones. Images are published to Docker Hub as
+  `quinlanhoo/mihomo-subscription:<version>` (multi-arch amd64+arm64) and pulled
+  by the 1Panel host; on-host local build is the offline/intranet fallback (see
   `docs/release.md`). `logo.png` is a placeholder — replace before distribution.

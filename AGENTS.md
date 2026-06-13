@@ -70,8 +70,10 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f) }' \
   `${CONTAINER_NAME}`, `PANEL_APP_PORT_HTTP` for the web port, join the external
   `1panel-network`, persist data via `./data`, and expose `ADMIN_USERNAME` /
   `ADMIN_PASSWORD` as install fields passed into the service environment.
-- Images are built locally on the 1Panel host as `mihomo-subscription:<version>`
-  (no registry); keep the compose image tag in sync with the release (see
-  `docs/release.md`). The reverse proxy must preserve `Host` (else CSRF `403`).
+- Images are published to Docker Hub as `quinlanhoo/mihomo-subscription:<version>`
+  (multi-arch amd64+arm64) and pulled by the 1Panel host; on-host local build is
+  the offline/intranet fallback. Keep the compose image tag in sync with the
+  release (see `docs/release.md`). The reverse proxy must preserve `Host` (else
+  CSRF `403`).
 - `apps/mihomo-subscription/logo.png` is a placeholder; replace before public
   distribution.

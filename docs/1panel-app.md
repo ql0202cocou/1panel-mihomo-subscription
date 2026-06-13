@@ -94,8 +94,10 @@ package satisfies every item below.
 - Web port form field uses `PANEL_APP_PORT_HTTP`.
 - The service is attached to the external `1panel-network`.
 - Persistent data is mounted from `./data`.
-- The image reference matches a locally built image tag
-  (`mihomo-subscription:<version>`, built on the 1Panel host before install).
+- The image reference matches the published Docker Hub image
+  (`quinlanhoo/mihomo-subscription:<version>`, multi-arch amd64+arm64, pulled by
+  the 1Panel host at install; see `docs/release.md` for the offline local-build
+  fallback).
 - `logo.png` exists (currently a generated placeholder; replace with a real
   design before public distribution).
 
