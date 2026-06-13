@@ -7,8 +7,8 @@
 > public subscription endpoint described here are implemented; minor
 > implementation trade-offs are tracked in `docs/changelog.md`.
 
-相关文档 / Related documents: `plan.md`、`technical-roadmap.md`、
-`security-design.md`、`data-model.md`。
+相关文档 / Related documents: `security-design.md`、`data-model.md`、
+`1panel-app.md`。
 
 ## 设计原则 / Principles
 
@@ -222,11 +222,11 @@ POST /api/profiles/:id/groups
 ## 生成与校验 / Generate and Validation
 
 `POST /api/profiles/:id/generate` 执行完整校验,成功后刷新缓存并返回托管链接;
-失败返回 `400` 和逐条错误,与 Web 弹窗文案一一对应(见 `plan.md`)。
+失败返回 `400` 和逐条错误,与 Web 弹窗文案一一对应。
 
 `POST /api/profiles/:id/generate` runs full validation, refreshes the cache on
 success, and returns the hosted link; on failure it returns `400` with
-itemized errors matching the Web UI modal copy (see `plan.md`).
+itemized errors matching the Web UI modal copy.
 
 详情页"原始订阅源"卡片的手动刷新按钮**复用本端点**,不另设 refresh 端点。
 
@@ -256,6 +256,27 @@ returns fresh cache when available, otherwise fetches and generates live; it
 - Custom group members must reference existing provider nodes/groups or
   enabled custom nodes/groups.
 - The output must be valid Mihomo YAML.
+
+顶层键处理 / Top-Level Key Handling:
+
+转换器对拉取到的机场配置的每个顶层键都显式处理(实现见 `src/converter.rs`):
+
+The converter treats every top-level key of the fetched provider config
+explicitly (implemented in `src/converter.rs`):
+
+| 键 / Key | 处理 / Handling |
+|-----|----------|
+| `proxies` | 保留机场条目,追加启用的自定义节点 / Provider entries preserved; enabled custom nodes appended |
+| `proxy-groups` | 保留机场条目,追加启用的自定义分组 / Provider entries preserved; enabled custom groups appended |
+| `rules` | 整体替换为用户规则 / Replaced entirely with the user-defined rules |
+| `rule-providers` | 原样透传(用户规则可引用机场的 `RULE-SET`)/ Passed through unchanged (user rules may reference provider `RULE-SET`s) |
+| `proxy-providers` | **MVP 阶段剥离**:远程节点提供者会让客户端拉取绕过本服务 SSRF 防护与缓存的 URL,并可能暴露机场 URL / **Stripped in the MVP**: remote node providers would make the client fetch URLs that bypass this service's SSRF protection and caching, and may expose provider URLs |
+| 其余 (`port`、`dns`、`tun`、`sniffer`…) / All others | 原样透传 / Passed through unchanged |
+
+未知键透传而非丢弃,使新的 Mihomo 选项无需改转换器即可继续工作。
+
+Unknown keys are passed through rather than dropped, so newer Mihomo options
+keep working without converter updates.
 
 成功响应 / Success response:
 

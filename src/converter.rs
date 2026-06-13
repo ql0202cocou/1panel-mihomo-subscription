@@ -1,7 +1,7 @@
 //! `mihomo`/`clash` -> `mihomo` conversion.
 //!
 //! Parses provider YAML, appends enabled custom nodes/groups, replaces `rules`
-//! with the user's, and handles top-level keys per `docs/technical-roadmap.md`
+//! with the user's, and handles top-level keys per `docs/api-design.md`
 //! (rule-providers passthrough, proxy-providers stripped, unknown keys
 //! preserved). Validation follows `docs/api-design.md` and returns an itemized
 //! error list for the generate modal.
