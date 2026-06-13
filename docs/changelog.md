@@ -201,6 +201,15 @@ possible, and grouped by change type.
 
 ### Documentation
 
+- Flipped the project status from planning to implemented: removed the
+  "状态:规划阶段 / Status: planning" banners from `api-design.md` and
+  `data-model.md` (now implemented), reworded the `release.md` and
+  `1panel-app.md` banners to "not yet released / package update pending",
+  refreshed the status sections in `CLAUDE.md`, `AGENTS.md`, the root
+  `README.md`, and `docs/README.md`, and removed the obsolete prototype-route
+  compatibility note. The changelog version roll to a dated `0.1.0` is
+  intentionally deferred until the 1Panel app package is updated and a release
+  is actually cut.
 - Added a "Non-obvious implementation rules" section to `CLAUDE.md`
   summarizing the cross-cutting SSRF, single-flight, SQLite pool, client-IP,
   timing, and CORS requirements for future implementing instances.

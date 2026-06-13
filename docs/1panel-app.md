@@ -1,11 +1,10 @@
 # 1Panel App Packaging
 
-> **Status: planning.** The current package only exposes `PANEL_APP_PORT_HTTP`
-> and `RUST_LOG` install fields, matching the prototype service. The
-> authentication and conversion related parameters described below are target
-> requirements; the authoritative environment variable table lives in
-> `technical-roadmap.md` and must be reflected in the package before the MVP
-> release.
+> **Status: package update pending.** The service is implemented, but the app
+> package still only exposes the `PANEL_APP_PORT_HTTP` and `RUST_LOG` install
+> fields. The authentication and conversion parameters below (authoritative
+> table in `technical-roadmap.md`) must be added to the package before the MVP
+> release; the checklist items marked **(pending)** track this.
 
 The 1Panel app package lives at:
 

@@ -126,9 +126,8 @@ Recommended initial approach:
 CORS and CSRF:
 
 - The SPA is served same-origin by the Axum service, so the management API
-  needs no CORS at all. Do not enable a permissive CORS layer — the
-  prototype's `CorsLayer::permissive()` must be removed when session auth
-  lands, otherwise cookie-based auth loses its same-origin protection.
+  needs no CORS at all. No CORS layer is enabled; never reintroduce a
+  permissive one, otherwise cookie-based auth loses its same-origin protection.
 - `SameSite=Lax` blocks cross-site cookie sending on non-GET requests. As
   defense in depth, also verify the `Origin` header on state-changing
   management requests when it is present.

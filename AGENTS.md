@@ -23,8 +23,9 @@ Key paths:
 - `docs/security-design.md`: required security behavior.
 - `docs/changelog.md`: change history and changelog rules.
 
-The project is in the planning stage: `api-design.md` and `data-model.md`
-describe target designs that the current prototype code does not implement yet.
+The documented design is implemented (backend + SPA). Keep code and docs
+aligned; track implementation trade-offs in `docs/changelog.md`. The 1Panel app
+package install form is not yet updated to match (see `docs/1panel-app.md`).
 
 ## Commands
 
@@ -84,8 +85,7 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
   fetching user-provided URLs; pin validated IPs (DNS-rebinding safe) and
   unwrap IPv4-embedded IPv6 addresses per `docs/security-design.md`.
 - Never enable permissive CORS on the management API; the SPA is served
-  same-origin. Remove the prototype's `CorsLayer::permissive()` when session
-  auth lands.
+  same-origin (no CORS layer). Verify `Origin` on state-changing requests.
 - Refresh provider subscriptions behind a per-profile single-flight lock to
   avoid stale-cache stampedes; derive the client IP from a trusted reverse
   proxy hop, not a client-spoofable header (see `docs/security-design.md`).

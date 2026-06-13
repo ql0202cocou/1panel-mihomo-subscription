@@ -1,11 +1,11 @@
 # API 设计 / API Design
 
-> **状态:规划阶段。** 本文档描述目标 API 契约,尚未实现。当前 `src/main.rs`
-> 中的 `subscriptions` CRUD 是早期原型,将按本文档重构为 profile 管理。
+> **状态:已实现。** 本文档描述的管理 API、认证流程、生成/预览与公开订阅端点
+> 均已实现;实现中的细微取舍记录在 `docs/changelog.md`。
 >
-> **Status: planning.** This document defines the target API contract; it is
-> not implemented yet. The current `subscriptions` CRUD in `src/main.rs` is an
-> early prototype and will be reworked into profile management per this design.
+> **Status: implemented.** The management API, auth flow, generate/preview, and
+> public subscription endpoint described here are implemented; minor
+> implementation trade-offs are tracked in `docs/changelog.md`.
 
 相关文档 / Related documents: `plan.md`、`technical-roadmap.md`、
 `security-design.md`、`data-model.md`。
@@ -308,7 +308,7 @@ profile-update-interval: 24
 
 ## 兼容性说明 / Compatibility Notes
 
-- 现原型路由 `/api/v1/subscriptions*` 与 `/api/v1/merged` 将被本设计取代,
-  不保留兼容层(项目尚未发布)。
-- The prototype routes `/api/v1/subscriptions*` and `/api/v1/merged` will be
-  replaced by this design with no compatibility shim (nothing is released yet).
+- 早期原型的 `/api/v1/subscriptions*` 与 `/api/v1/merged` 路由已移除,
+  无兼容层。
+- The prototype's `/api/v1/subscriptions*` and `/api/v1/merged` routes have
+  been removed with no compatibility shim.
