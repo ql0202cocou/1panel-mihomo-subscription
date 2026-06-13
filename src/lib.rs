@@ -5,6 +5,7 @@
 
 pub mod app;
 pub mod auth;
+pub mod converter;
 pub mod db;
 pub mod error;
 pub mod fetch;

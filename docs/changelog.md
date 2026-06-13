@@ -52,6 +52,15 @@ possible, and grouped by change type.
 
 ### Added
 
+- Implemented the `mihomo`/`clash` -> `mihomo` converter (MVP release gate):
+  `src/converter.rs` parses provider YAML (bounded), appends enabled custom
+  nodes/groups, replaces `rules`, strips `proxy-providers`, and passes through
+  `rule-providers` and all other top-level keys. Generate-time validation
+  returns an itemized error list: custom-group/provider-group name collisions,
+  custom-node/provider-proxy collisions, rule policy targets and group members
+  that don't resolve to a known proxy/group/built-in. Logical/nested rules
+  (with parentheses) pass through without target validation. Nine fixture
+  unit tests cover append/replace/passthrough/strip/collision/dangling-ref.
 - Refreshed `CLAUDE.md` to match the active implementation: status now lists
   what is built vs pending (no longer "planning stage"), commands cover the CI
   gates and single-test invocation, and architecture describes the lib/bin
