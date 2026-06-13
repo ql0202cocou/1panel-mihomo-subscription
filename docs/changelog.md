@@ -103,6 +103,10 @@ possible, and grouped by change type.
 
 ### Documentation
 
+- Refreshed `README.md`: the development section now lists the actual CI gates
+  (`fmt`/`clippy`/`test`/`cargo audit`) and the frontend build, and the
+  capabilities list reflects the current security controls.
+
 ## [0.1.1] - 2026-06-13
 
 ### Security
