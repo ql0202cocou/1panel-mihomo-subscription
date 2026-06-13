@@ -9,17 +9,21 @@ conversion and distribution on 1Panel.
 
 Key paths:
 
-- `src/main.rs`: current Rust API service.
-- `Dockerfile`: container build.
+- `src/`: Rust service — a library crate (`lib.rs` + per-feature modules) plus a
+  thin `main.rs`; `app.rs` wires all routes via `build_router`.
+- `migrations/`: SQLx SQLite migrations (embedded into the binary at compile time).
+- `web/`: Vite + React + TypeScript SPA, built into `web/dist` and served by Axum.
+- `Dockerfile`: multi-stage container build (Node SPA stage + Rust stage).
 - `apps/mihomo-subscription`: 1Panel app package.
-- `docs`: product, technical, security, and changelog documents.
+- `docs`: product, technical, security, release, and changelog documents.
+- `.github/workflows/ci.yml`: CI gates.
 
 ## Read First
 
 - `docs/plan.md`: product scope and MVP requirements.
 - `docs/technical-roadmap.md`: architecture and implementation direction.
-- `docs/api-design.md`: target API contracts and authentication behavior.
-- `docs/data-model.md`: target SQLite schema and migration strategy.
+- `docs/api-design.md`: API contracts and authentication behavior.
+- `docs/data-model.md`: SQLite schema and migration strategy.
 - `docs/security-design.md`: required security behavior.
 - `docs/changelog.md`: change history and changelog rules.
 
@@ -29,12 +33,19 @@ package install form is not yet updated to match (see `docs/1panel-app.md`).
 
 ## Commands
 
-Run from the repository root:
+Backend, from the repository root — these are the CI gates:
 
 ```bash
-cargo check
-cargo fmt
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
 cargo test
+```
+
+Frontend, from `web/`:
+
+```bash
+npm ci          # or npm install
+npm run build   # tsc --noEmit + vite build -> web/dist
 ```
 
 Build image:
@@ -51,6 +62,17 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
   apps/mihomo-subscription/0.1.0/data.yml \
   apps/mihomo-subscription/0.1.0/docker-compose.yml
 ```
+
+## Repository & CI
+
+- Hosted on GitHub (`origin`), default branch `main`. Branch off `main` and
+  open a PR; avoid pushing directly to `main`.
+- GitHub Actions (`.github/workflows/ci.yml`) runs the backend gates
+  (fmt/clippy/test), the frontend build, and 1Panel YAML validation. Changes
+  must pass CI.
+- Releases: roll the changelog `[Unreleased]` into a dated version and tag
+  `vX.Y.Z` (current release: `v0.1.0`); keep `Cargo.toml`, `web/package.json`,
+  and the app package version directory/image tag in sync.
 
 ## Change Rules
 

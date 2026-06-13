@@ -60,6 +60,13 @@ possible, and grouped by change type.
 
 ### Documentation
 
+- Synced `AGENTS.md` with the current repo state and GitHub hosting: corrected
+  the key-paths list (library/bin split, `web/`, `migrations/`, CI workflow),
+  dropped the "target" wording now that the design is implemented, aligned the
+  commands with the CI gates (`fmt --check`, `clippy -D warnings`, `test`) plus
+  the frontend build, and added a "Repository & CI" section (GitHub `main`/PR
+  flow, CI gates, release/tag steps).
+
 ## [0.1.0] - 2026-06-13
 
 ### Added
