@@ -50,6 +50,13 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+### Documentation
+
+- Added a "Create the GitHub Release" step to `docs/release.md` (`gh release
+  create vX.Y.Z --verify-tag`, notes drawn from the changelog version section)
+  and a post-release checklist item confirming the Release is published — the
+  release flow previously stopped at the git tag.
+
 ## [0.1.2] - 2026-06-14
 
 ### Added
