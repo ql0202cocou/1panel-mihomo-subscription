@@ -52,6 +52,18 @@ possible, and grouped by change type.
 
 ### Added
 
+- Built the profile detail page and editors (frontend step 2): hosted-link
+  header (copy, QR, reset-token with confirm, and a "modified but not
+  generated" banner derived client-side from the latest sub-resource
+  modification vs `last_generated_at`); six configuration cards (basic info,
+  source with masked URL / last-fetch status / write-only URL replacement /
+  manual refresh, custom nodes and groups CRUD, a CodeMirror rules editor, and
+  output preview); and a generate footer that maps itemized `400` validation
+  errors back to the editor — rule-line errors get a click-to-jump into the
+  CodeMirror editor. Added `last_generated_at` to the profile API response
+  (correlated subquery in `src/profiles.rs`) to drive the banner, aligning with
+  `docs/api-design.md`. New web deps: `@uiw/react-codemirror`,
+  `@codemirror/lang-yaml`, `@codemirror/state`.
 - Scaffolded the `web/` SPA (Vite + React + TypeScript + Ant Design +
   react-i18next): routes for `/login`, `/` (profile list), `/profiles/:id`
   (skeleton detail with hosted-link copy + QR), and `/settings` (public-path

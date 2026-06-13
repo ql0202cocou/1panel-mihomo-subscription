@@ -10,8 +10,48 @@ export interface ProfileSummary {
   subscription_url: string;
   last_fetch_at: string | null;
   last_fetch_status: string | null;
+  last_generated_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type GroupType =
+  | "select"
+  | "url-test"
+  | "fallback"
+  | "load-balance"
+  | "relay";
+
+export interface RuleSet {
+  content: string;
+  updated_at: string;
+}
+
+export interface CustomNode {
+  id: string;
+  name: string;
+  node_type: string;
+  content: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomGroup {
+  id: string;
+  name: string;
+  group_type: GroupType;
+  members: string[];
+  options: Record<string, unknown> | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProfileDetail extends ProfileSummary {
+  rules: RuleSet | null;
+  nodes: CustomNode[];
+  groups: CustomGroup[];
 }
 
 export interface Settings {
