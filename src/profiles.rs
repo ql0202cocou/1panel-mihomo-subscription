@@ -36,6 +36,7 @@ struct ProfileRow {
     enabled: bool,
     last_fetch_at: Option<String>,
     last_fetch_status: Option<String>,
+    last_generated_at: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -82,6 +83,7 @@ pub struct ProfileSummary {
     subscription_url: String,
     last_fetch_at: Option<String>,
     last_fetch_status: Option<String>,
+    last_generated_at: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -135,6 +137,7 @@ fn summary(state: &AppState, row: ProfileRow) -> ProfileSummary {
         enabled: row.enabled,
         last_fetch_at: row.last_fetch_at,
         last_fetch_status: row.last_fetch_status,
+        last_generated_at: row.last_generated_at,
         created_at: row.created_at,
         updated_at: row.updated_at,
     }
@@ -185,17 +188,23 @@ pub struct UpdateProfile {
 }
 
 async fn load_profile_row(state: &AppState, id: &str) -> ApiResult<ProfileRow> {
-    sqlx::query_as::<_, ProfileRow>("SELECT * FROM profiles WHERE id = ?")
-        .bind(id)
-        .fetch_optional(&state.db)
-        .await?
-        .ok_or(ApiError::NotFound)
+    sqlx::query_as::<_, ProfileRow>(
+        "SELECT p.*, (SELECT generated_at FROM generated_cache WHERE profile_id = p.id) \
+         AS last_generated_at FROM profiles p WHERE p.id = ?",
+    )
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(ApiError::NotFound)
 }
 
 pub async fn list(State(state): State<Arc<AppState>>) -> ApiResult<impl IntoResponse> {
-    let rows = sqlx::query_as::<_, ProfileRow>("SELECT * FROM profiles ORDER BY created_at DESC")
-        .fetch_all(&state.db)
-        .await?;
+    let rows = sqlx::query_as::<_, ProfileRow>(
+        "SELECT p.*, (SELECT generated_at FROM generated_cache WHERE profile_id = p.id) \
+         AS last_generated_at FROM profiles p ORDER BY p.created_at DESC",
+    )
+    .fetch_all(&state.db)
+    .await?;
     let out: Vec<ProfileSummary> = rows.into_iter().map(|r| summary(&state, r)).collect();
     Ok(Json(out))
 }
