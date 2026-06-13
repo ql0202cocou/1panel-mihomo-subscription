@@ -5,9 +5,10 @@ Guidance for Claude Code (claude.ai/code) working in this repository.
 ## Project Status — Read This First
 
 The documented design under `docs/` is **implemented** (Rust/Axum backend +
-`web/` SPA); the docs remain the source of truth. Remaining before a formal
-release: updating the 1Panel app package install form (`docs/1panel-app.md`
-pending markers) and cutting the release (`docs/release.md`).
+`web/` SPA); the docs remain the source of truth. The `0.1.2` 1Panel app
+package is complete (`apps/mihomo-subscription/0.1.2/`, full install form). To
+ship a new version, follow the release process in `docs/release.md` (build the
+local image on the 1Panel host and tag `vX.Y.Z`).
 
 **Most important rule:** every notable change updates `docs/changelog.md` under
 `[Unreleased]` (never delete old entries), keeps affected docs aligned, and
@@ -22,7 +23,7 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
 cargo audit                          # needs `cargo install cargo-audit`; ignores in .cargo/audit.toml
-docker build -t mihomo-subscription:0.1.0 .
+docker build -t mihomo-subscription:0.1.2 .
 
 # One test / one file:
 cargo test --lib ssrf::tests::url_validation_rules
@@ -35,7 +36,7 @@ npm run build      # tsc --noEmit + vite build -> web/dist (served by Axum)
 
 # Validate 1Panel YAML after editing anything under apps/:
 ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f) }' \
-  apps/mihomo-subscription/data.yml apps/mihomo-subscription/0.1.0/{data,docker-compose}.yml
+  apps/mihomo-subscription/data.yml apps/mihomo-subscription/0.1.2/{data,docker-compose}.yml
 ```
 
 ## Architecture

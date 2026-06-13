@@ -24,7 +24,7 @@ then deploy through 1Panel.
 ```bash
 git clone https://github.com/ql0202cocou/1panel-mihomo-subscription.git
 cd 1panel-mihomo-subscription
-docker build -t mihomo-subscription:0.1.0 .
+docker build -t mihomo-subscription:0.1.2 .
 ```
 
 **2. 部署容器 / Deploy the container** — 用 1Panel「容器 → 编排」部署下面的 compose
@@ -34,7 +34,7 @@ below so the required environment variables are injected:
 ```yaml
 services:
   mihomo-subscription:
-    image: mihomo-subscription:0.1.0
+    image: mihomo-subscription:0.1.2
     container_name: mihomo-subscription
     restart: always
     networks: [1panel-network]
