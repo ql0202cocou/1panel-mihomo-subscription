@@ -1,6 +1,7 @@
 use std::{
     net::SocketAddr,
     sync::{Arc, RwLock},
+    time::Duration,
 };
 
 use anyhow::Context;
@@ -8,6 +9,8 @@ use mihomo_subscription::{
     app::{build_router, AppState},
     auth::{AdminAuth, SessionStore, SESSION_IDLE},
     db,
+    fetch::HttpFetcher,
+    single_flight::SingleFlight,
 };
 
 #[tokio::main]
@@ -37,6 +40,10 @@ async fn main() -> anyhow::Result<()> {
     let secure_cookies = public_base_url.starts_with("https://");
     let web_dir = std::env::var("WEB_DIR").unwrap_or_else(|_| "web/dist".to_string());
 
+    let fetch_timeout = Duration::from_secs(env_u64("FETCH_TIMEOUT_SECONDS", 15));
+    let max_bytes = env_u64("MAX_SUBSCRIPTION_SIZE_MB", 8) as usize * 1024 * 1024;
+    let cache_ttl = Duration::from_secs(env_u64("CACHE_TTL_MINUTES", 15) * 60);
+
     let state = Arc::new(AppState {
         db: pool,
         public_base_url,
@@ -45,6 +52,12 @@ async fn main() -> anyhow::Result<()> {
         sessions: SessionStore::new(SESSION_IDLE),
         secure_cookies,
         web_dir,
+        fetcher: Arc::new(HttpFetcher {
+            timeout: fetch_timeout,
+            max_bytes,
+        }),
+        cache_ttl,
+        single_flight: SingleFlight::new(),
     });
 
     let app = build_router(state);
@@ -60,6 +73,13 @@ async fn main() -> anyhow::Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+fn env_u64(key: &str, default: u64) -> u64 {
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
 }
 
 fn require_env(key: &str) -> anyhow::Result<String> {

@@ -2,6 +2,7 @@
 //! integration tests.
 
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use axum::{
     extract::DefaultBodyLimit,
@@ -15,7 +16,9 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
 use crate::auth::{self, AdminAuth, SessionStore};
-use crate::{profiles, settings};
+use crate::fetch::SubscriptionFetcher;
+use crate::single_flight::SingleFlight;
+use crate::{generate, profiles, settings};
 
 /// Maximum management request body size (see `docs/api-design.md`).
 const MAX_BODY_BYTES: usize = 1024 * 1024;
@@ -34,6 +37,12 @@ pub struct AppState {
     pub secure_cookies: bool,
     /// Directory of the built SPA assets to serve.
     pub web_dir: String,
+    /// Provider fetcher (real SSRF-protected client in production).
+    pub fetcher: Arc<dyn SubscriptionFetcher>,
+    /// Generated-cache TTL.
+    pub cache_ttl: Duration,
+    /// Per-profile refresh coalescing.
+    pub single_flight: SingleFlight,
 }
 
 impl AppState {
@@ -79,6 +88,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
                 .delete(profiles::delete),
         )
         .route("/profiles/:id/reset-token", post(profiles::reset_token))
+        .route("/profiles/:id/generate", post(generate::generate))
+        .route("/profiles/:id/preview", get(generate::preview))
         .route("/profiles/:id/rules", put(profiles::put_rules))
         .route(
             "/profiles/:id/nodes",
@@ -118,6 +129,11 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(health))
         .nest("/api", api)
+        // Public subscription download: no auth, path prefix + token.
+        .route(
+            "/:public_path_prefix/api/sub/:token",
+            get(generate::public_sub),
+        )
         .fallback_service(spa)
         .layer(TraceLayer::new_for_http())
         .with_state(state)

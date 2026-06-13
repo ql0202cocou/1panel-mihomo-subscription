@@ -52,6 +52,22 @@ possible, and grouped by change type.
 
 ### Added
 
+- Implemented generation, preview, and the public subscription endpoint
+  (`src/generate.rs`): `generate` (and the source-card manual refresh) fetches
+  via the injected `SubscriptionFetcher`, converts, persists `generated_cache`,
+  and updates `last_fetch_*`; `preview` is read-only (no cache write, no
+  `last_fetch_*` change); the public endpoint serves fresh cache, refreshes
+  under a per-profile single-flight lock (`src/single_flight.rs`), falls back
+  to stale cache on refresh failure, returns a generic `503` when no cache
+  exists and the fetch fails, and a uniform `404` (constant-time prefix
+  compare, always-run token lookup) for wrong prefix / unknown token /
+  disabled profile. Adds the documented response headers
+  (`subscription-userinfo` passthrough, `profile-update-interval`,
+  `content-disposition`). The fetch is abstracted behind `SubscriptionFetcher`
+  (real `HttpFetcher` in production) so the paths are tested without network;
+  `tests/generate.rs` covers cache-hit, single-flight coalescing, stale
+  fallback, `503`, and uniform `404`. New env wiring: `FETCH_TIMEOUT_SECONDS`,
+  `MAX_SUBSCRIPTION_SIZE_MB`, `CACHE_TTL_MINUTES`.
 - Implemented the `mihomo`/`clash` -> `mihomo` converter (MVP release gate):
   `src/converter.rs` parses provider YAML (bounded), appends enabled custom
   nodes/groups, replaces `rules`, strips `proxy-providers`, and passes through

@@ -19,8 +19,28 @@ use crate::ssrf::{self, SsrfError};
 const MAX_REDIRECTS: usize = 3;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
 
+/// Abstraction over the provider fetch so the generate/public paths can be
+/// tested without real network access. Production uses [`HttpFetcher`].
+#[async_trait::async_trait]
+pub trait SubscriptionFetcher: Send + Sync {
+    async fn fetch(&self, url: &str) -> Result<Fetched, FetchError>;
+}
+
+/// The real SSRF-protected fetcher with configured timeout and size cap.
+pub struct HttpFetcher {
+    pub timeout: Duration,
+    pub max_bytes: usize,
+}
+
+#[async_trait::async_trait]
+impl SubscriptionFetcher for HttpFetcher {
+    async fn fetch(&self, url: &str) -> Result<Fetched, FetchError> {
+        fetch_subscription(url, self.timeout, self.max_bytes).await
+    }
+}
+
 /// A successful provider fetch.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Fetched {
     pub body: String,
     /// Sanitized `subscription-userinfo` header, if present and well-formed.
