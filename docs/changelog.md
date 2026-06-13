@@ -52,6 +52,14 @@ possible, and grouped by change type.
 
 ### Added
 
+- Scaffolded the `web/` SPA (Vite + React + TypeScript + Ant Design +
+  react-i18next): routes for `/login`, `/` (profile list), `/profiles/:id`
+  (skeleton detail with hosted-link copy + QR), and `/settings` (public-path
+  reset with typed confirmation); a fetch client whose `401` handler clears the
+  session so `RequireAuth` redirects to `/login` preserving the return path;
+  the Vite dev server proxies `/api` and `/health` to the backend. Added a
+  frontend CI job (`npm ci` + `npm run build`). The full configuration cards
+  and editors come in the next step.
 - Implemented client-IP derivation and rate limiting: `src/net.rs` derives the
   client IP from `X-Forwarded-For` counting `TRUSTED_PROXY_HOPS` from the right
   (spoofed left entries ignored; falls back to the TCP peer), fully unit-tested;
