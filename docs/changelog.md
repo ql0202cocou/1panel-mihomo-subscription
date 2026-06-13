@@ -232,9 +232,6 @@ possible, and grouped by change type.
 - Documented masking requirements for original provider subscription URLs.
 - Documented administrator login requirements and 1Panel compose-based
   credential configuration.
-
-### Documentation
-
 - Added this changelog template and initial unreleased entries.
 - Simplified `AGENTS.md` into a concise handoff guide.
 - Updated `AGENTS.md` with login credential and 1Panel environment guidance.
