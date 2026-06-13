@@ -1,135 +1,79 @@
 # AGENTS.md
 
-Concise guidance for coding agents working on this repository.
+Concise guidance for coding agents. `mihomo-subscription` is a Rust/Axum service
+for self-hosted Mihomo subscription conversion/distribution on 1Panel.
 
-## Project
+## Layout
 
-`mihomo-subscription` is a Rust/Axum service for self-hosted Mihomo subscription
-conversion and distribution on 1Panel.
+- `src/`: library crate (`lib.rs` + per-feature modules) + thin `main.rs`;
+  `app.rs` wires all routes via `build_router`.
+- `migrations/`: SQLx SQLite migrations (embedded at compile time).
+- `web/`: Vite + React + TS SPA, built to `web/dist`, served by Axum.
+- `Dockerfile`: multi-stage (Node SPA + Rust). `apps/mihomo-subscription`: 1Panel package.
+- `docs/`: `api-design` (API, auth, converter top-level keys), `data-model`,
+  `security-design`, `1panel-app` (packaging + authoritative env-var table),
+  `release`, `changelog`. Read these before changing related code.
 
-Key paths:
-
-- `src/`: Rust service — a library crate (`lib.rs` + per-feature modules) plus a
-  thin `main.rs`; `app.rs` wires all routes via `build_router`.
-- `migrations/`: SQLx SQLite migrations (embedded into the binary at compile time).
-- `web/`: Vite + React + TypeScript SPA, built into `web/dist` and served by Axum.
-- `Dockerfile`: multi-stage container build (Node SPA stage + Rust stage).
-- `apps/mihomo-subscription`: 1Panel app package.
-- `docs`: product, technical, security, release, and changelog documents.
-- `.github/workflows/ci.yml`: CI gates.
-
-## Read First
-
-- `docs/plan.md`: product scope and MVP requirements.
-- `docs/technical-roadmap.md`: architecture and implementation direction.
-- `docs/api-design.md`: API contracts and authentication behavior.
-- `docs/data-model.md`: SQLite schema and migration strategy.
-- `docs/security-design.md`: required security behavior.
-- `docs/changelog.md`: change history and changelog rules.
-
-The documented design is implemented (backend + SPA). Keep code and docs
-aligned; track implementation trade-offs in `docs/changelog.md`. The 1Panel app
-package install form is not yet updated to match (see `docs/1panel-app.md`).
+The design is implemented (backend + SPA); the 1Panel install form is not yet
+updated to match (see `docs/1panel-app.md`).
 
 ## Commands
 
-Backend, from the repository root — these are the CI gates:
-
 ```bash
+# Backend, from repo root — the CI gates:
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
-cargo audit   # needs `cargo install cargo-audit`; per-advisory ignores in .cargo/audit.toml
+cargo audit            # needs `cargo install cargo-audit`; ignores in .cargo/audit.toml
+# Frontend, from web/:
+npm ci && npm run build # tsc --noEmit + vite build -> web/dist
+# Image / 1Panel YAML:
+docker build -t mihomo-subscription:0.1.2 .
+ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f) }' \
+  apps/mihomo-subscription/data.yml apps/mihomo-subscription/0.1.2/{data,docker-compose}.yml
 ```
-
-Frontend, from `web/`:
-
-```bash
-npm ci          # or npm install
-npm run build   # tsc --noEmit + vite build -> web/dist
-```
-
-Build image:
-
-```bash
-docker build -t mihomo-subscription:0.1.0 .
-```
-
-Validate 1Panel YAML:
-
-```bash
-ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
-  apps/mihomo-subscription/data.yml \
-  apps/mihomo-subscription/0.1.0/data.yml \
-  apps/mihomo-subscription/0.1.0/docker-compose.yml
-```
-
-## Repository & CI
-
-- Hosted on GitHub (`origin`), default branch `main`. Branch off `main` and
-  open a PR; avoid pushing directly to `main`.
-- GitHub Actions (`.github/workflows/ci.yml`) runs the backend gates
-  (fmt/clippy/test), the frontend build, and 1Panel YAML validation. Changes
-  must pass CI.
-- Releases: roll the changelog `[Unreleased]` into a dated version and tag
-  `vX.Y.Z` (current release: `v0.1.0`); keep `Cargo.toml`, `web/package.json`,
-  and the app package version directory/image tag in sync.
 
 ## Change Rules
 
-- Keep changes small and focused.
-- Do not delete user data, generated app package files, or changelog history
-  unless explicitly requested.
-- Every notable code, behavior, packaging, security, or documentation change
-  must update `docs/changelog.md` under `[Unreleased]`.
-- Every change must also update any affected technical/product docs so the
-  documentation stays aligned with the actual project state.
-- After every change, review `CLAUDE.md` and this `AGENTS.md` and update both
-  so agent guidance stays aligned with the actual project state.
-- Never delete old changelog versions. On release, move `[Unreleased]` items into
-  a dated version section and create a new empty `[Unreleased]` above it.
-- If product scope changes, update `docs/plan.md`.
-- If architecture or data model direction changes, update
-  `docs/technical-roadmap.md`.
-- If auth, public links, SSRF, logging, or sensitive-data handling changes,
-  update `docs/security-design.md`.
+- Branch off `main` and open a PR; never push to `main`. Changes must pass CI
+  (backend gates + frontend build + 1Panel YAML validation). Keep changes small.
+- Every notable code/behavior/packaging/security/doc change updates
+  `docs/changelog.md` under `[Unreleased]`, and any affected doc
+  (`api-design`/`data-model`/`security-design`/`1panel-app`). Then review and
+  align both `CLAUDE.md` and this file.
+- Never delete changelog history, user data, or generated app-package files
+  unless explicitly asked. On release: roll `[Unreleased]` into a dated version,
+  tag `vX.Y.Z`, and keep `Cargo.toml`, `web/package.json`, and the app-package
+  version dir / image tag in sync (current release `v0.1.2`).
 
-## Security Defaults
+## Security Defaults (see `docs/security-design.md` for rationale)
 
-- The management UI and management APIs require login.
-- Admin credentials come from 1Panel compose environment variables:
-  `ADMIN_USERNAME` and `ADMIN_PASSWORD`.
-- Public subscription links use both `PUBLIC_PATH_PREFIX` and a per-profile
-  token.
-- Invalid public path, invalid token, and disabled profile should all return
-  `404 Not Found`.
-- Do not log full provider subscription URLs.
-- Apply SSRF protection, timeout, redirect, and response-size limits before
-  fetching user-provided URLs; pin validated IPs (DNS-rebinding safe) and
-  unwrap IPv4-embedded IPv6 addresses per `docs/security-design.md`.
-- Never enable permissive CORS on the management API; the SPA is served
-  same-origin (no CORS layer). Verify `Origin` on state-changing requests.
-- Refresh provider subscriptions behind a per-profile single-flight lock to
-  avoid stale-cache stampedes; derive the client IP from a trusted reverse
-  proxy hop, not a client-spoofable header (see `docs/security-design.md`).
-- Set `foreign_keys`, `busy_timeout`, and `journal_mode` on every pooled
-  SQLite connection via an after-connect hook (see `docs/data-model.md`).
-- Parse all untrusted/admin YAML via `yaml::parse_limited` (anchor/alias cap
-  before parse, depth/node limits after). Rate-limit public downloads by client
-  IP (not path) so token enumeration is throttled. Keep `/health` minimal (no
-  version). The reverse proxy must preserve `Host` (`docs/1panel-app.md`).
+- Management UI/API require login; admin creds come from `ADMIN_USERNAME` /
+  `ADMIN_PASSWORD` env. Verify `Origin` on state-changing requests; the SPA is
+  same-origin — never add a permissive CORS layer.
+- Public links use `PUBLIC_PATH_PREFIX` + per-profile token; invalid path,
+  invalid token, and disabled profile all return a uniform `404`. Rate-limit
+  public downloads by client IP (not path) to throttle enumeration. Keep
+  `/health` minimal (no version).
+- Provider fetch: SSRF protection with timeout/redirect/size limits before
+  fetching user URLs; pin the validated IP (DNS-rebinding safe) and unwrap
+  IPv4-embedded IPv6; never log full provider URLs; coalesce refreshes behind a
+  per-profile single-flight lock.
+- Derive client IP from a trusted reverse-proxy hop, not a spoofable header.
+  Parse all untrusted/admin YAML via `yaml::parse_limited` (anchor/alias cap
+  before parse, depth/node limits after). Set `foreign_keys`/`busy_timeout`/
+  `journal_mode` on every pooled SQLite connection (see `docs/data-model.md`).
 
 ## 1Panel Notes
 
-- Keep the app package at `apps/mihomo-subscription`.
-- Use `${CONTAINER_NAME}` in `docker-compose.yml`.
-- Use `PANEL_APP_PORT_HTTP` for the web port.
-- Expose `ADMIN_USERNAME` and `ADMIN_PASSWORD` as install form fields and pass
-  them into the service environment.
-- Join the external `1panel-network`.
-- Persist app data through `./data`.
-- Images are built locally on the 1Panel host as
-  `mihomo-subscription:<version>`; keep the compose image tag in sync with the
-  release version (see `docs/release.md`).
-- `apps/mihomo-subscription/logo.png` is a generated placeholder; replace it
-  with a real design before public distribution.
+- Package lives at `apps/mihomo-subscription`; follow official layout. Use
+  `${CONTAINER_NAME}`, `PANEL_APP_PORT_HTTP` for the web port, join the external
+  `1panel-network`, persist data via `./data`, and expose `ADMIN_USERNAME` /
+  `ADMIN_PASSWORD` as install fields passed into the service environment.
+- Images are published to Docker Hub as `quinlanhoo/mihomo-subscription:<version>`
+  (multi-arch amd64+arm64) and pulled by the 1Panel host; on-host local build is
+  the offline/intranet fallback. Keep the compose image tag in sync with the
+  release (see `docs/release.md`). The reverse proxy must preserve `Host` (else
+  CSRF `403`).
+- `apps/mihomo-subscription/logo.png` is a placeholder; replace before public
+  distribution.

@@ -7,8 +7,8 @@
 > `migrations/0001_init.sql`, and the pool applies the per-connection pragmas
 > described here.
 
-相关文档 / Related documents: `technical-roadmap.md`(模型来源 / model source)、
-`api-design.md`、`security-design.md`。
+相关文档 / Related documents: `api-design.md`、`security-design.md`、
+`1panel-app.md`。
 
 ## 存储约定 / Storage Conventions
 
@@ -98,11 +98,10 @@ CREATE INDEX idx_profiles_enabled      ON profiles (enabled);
   masked by default in API responses (see `security-design.md`).
 - `last_fetch_at` / `last_fetch_status`:最近一次机场拉取的观测字段,
   状态分类如 `success`、`http_error:502`、`ssrf_rejected`、`timeout`、
-  `too_large`,供"原始订阅源"卡片展示(见 `plan.md`)。
+  `too_large`,供"原始订阅源"卡片展示。
 - `last_fetch_at` / `last_fetch_status`: observability fields for the latest
   provider fetch; status values such as `success`, `http_error:502`,
-  `ssrf_rejected`, `timeout`, `too_large`, displayed on the source card (see
-  `plan.md`).
+  `ssrf_rejected`, `timeout`, `too_large`, displayed on the source card.
 
 ### rulesets
 
