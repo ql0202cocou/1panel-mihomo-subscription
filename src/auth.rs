@@ -88,10 +88,14 @@ impl SessionStore {
         let mut bytes = [0u8; 32];
         rand::rngs::OsRng.fill_bytes(&mut bytes);
         let id = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
-        self.inner
-            .lock()
-            .unwrap()
-            .insert(id.clone(), Instant::now());
+        let mut map = self.inner.lock().unwrap();
+        // Sweep expired sessions on creation. Without this, idle/expired entries
+        // linger until the same ID is validated again (which never happens for
+        // an abandoned session), so the map could only grow. Creation is the
+        // sole growth point, so sweeping here bounds it.
+        let idle = self.idle;
+        map.retain(|_, last_seen| last_seen.elapsed() <= idle);
+        map.insert(id.clone(), Instant::now());
         id
     }
 
@@ -114,6 +118,11 @@ impl SessionStore {
 
     pub fn remove(&self, id: &str) {
         self.inner.lock().unwrap().remove(id);
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.inner.lock().unwrap().len()
     }
 }
 
@@ -215,4 +224,48 @@ fn session_cookie(req: &Request) -> Option<String> {
         let (name, value) = pair.trim().split_once('=')?;
         (name == SESSION_COOKIE).then(|| value.to_string())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn credential_check_is_pair_bound() {
+        let admin = AdminAuth::new("admin", "s3cret");
+        assert!(admin.verify("admin", "s3cret"));
+        assert!(!admin.verify("admin", "wrong"));
+        assert!(!admin.verify("other", "s3cret"));
+        // The separator prevents (user, pass) concatenation confusion.
+        assert!(!admin.verify("admins3cret", ""));
+        assert!(!admin.verify("admin\0s3cret", ""));
+    }
+
+    #[test]
+    fn create_sweeps_expired_sessions() {
+        let store = SessionStore::new(Duration::from_millis(20));
+        let stale = store.create();
+        assert_eq!(store.len(), 1);
+
+        std::thread::sleep(Duration::from_millis(30));
+        // Creating a fresh session sweeps the now-expired one.
+        let fresh = store.create();
+        assert_eq!(store.len(), 1, "expired session swept on create");
+        assert!(store.validate(&fresh));
+        assert!(!store.validate(&stale));
+    }
+
+    #[test]
+    fn origin_must_match_host() {
+        assert!(origin_matches_host(
+            Some("https://sub.example.com"),
+            Some("sub.example.com")
+        ));
+        assert!(!origin_matches_host(
+            Some("https://evil.example.org"),
+            Some("sub.example.com")
+        ));
+        assert!(!origin_matches_host(None, Some("sub.example.com")));
+        assert!(!origin_matches_host(Some("https://sub.example.com"), None));
+    }
 }

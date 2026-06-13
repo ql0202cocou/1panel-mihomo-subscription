@@ -134,6 +134,26 @@ async fn invalid_source_type_is_bad_request() {
 }
 
 #[tokio::test]
+async fn disallowed_source_url_is_rejected_at_write_time() {
+    let temp = TempDb::new();
+    let app = build_router(test_state(&temp).await);
+    let cookie = login(&app).await;
+
+    // Non-http scheme, loopback host, and a blocked literal IP are all rejected
+    // up front (defense in depth; the fetch path re-validates with DNS pinning).
+    for url in [
+        "file:///etc/passwd",
+        "http://localhost/sub",
+        "http://127.0.0.1/sub",
+    ] {
+        let body =
+            format!(r#"{{"name":"bad-{url:?}","source_type":"clash","source_url":"{url}"}}"#);
+        let resp = send(&app, authed("POST", "/api/profiles", &cookie, &body)).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "url={url}");
+    }
+}
+
+#[tokio::test]
 async fn update_keeps_url_when_omitted() {
     let temp = TempDb::new();
     let app = build_router(test_state(&temp).await);

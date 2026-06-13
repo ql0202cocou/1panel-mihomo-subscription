@@ -170,6 +170,14 @@ and only accepted in full in create/update requests.
 
 - `source_type` ∈ `mihomo | clash | surge | loon`(MVP 仅实现 / MVP implements
   only `mihomo`/`clash`)。
+- `source_url` 在写入时即做静态校验:必须是 http/https、不得内嵌凭据、不得指向
+  本地/私有地址(回环主机名或被封锁的字面 IP),否则返回 `400`。这是纵深防御,
+  真正的 SSRF 校验仍在拉取时按 DNS 解析并钉死 IP(见 `security-design.md`)。
+- `source_url` is statically validated on write: it must be http/https, carry no
+  embedded credentials, and not point at a local/private address (loopback
+  hostname or blocked literal IP), otherwise `400`. This is defense in depth; the
+  authoritative SSRF check still runs at fetch time with DNS resolution and IP
+  pinning (see `security-design.md`).
 - 创建时立即生成 `token`;`subscription_url` 由
   `PUBLIC_BASE_URL + public_path_prefix + token` 拼装,见 `security-design.md`。
 - A `token` is generated at creation time; `subscription_url` is assembled from

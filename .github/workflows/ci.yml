@@ -38,6 +38,23 @@ jobs:
       - name: Test
         run: cargo test
 
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      # Reads ignore rules (with rationale) from .cargo/audit.toml. Fails the
+      # build on any new, non-ignored advisory.
+      - name: Audit dependencies
+        run: cargo audit
+
   web:
     name: Frontend build
     runs-on: ubuntu-latest
