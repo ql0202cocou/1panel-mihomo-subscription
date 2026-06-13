@@ -28,12 +28,13 @@ agent guidance stays aligned with the actual project state.
 
 ## Commands
 
-The three gates CI enforces (`.github/workflows/ci.yml`), runnable locally:
+The gates CI enforces (`.github/workflows/ci.yml`), runnable locally:
 
 ```bash
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
+cargo audit                       # needs `cargo install cargo-audit`; ignores live in .cargo/audit.toml
 docker build -t mihomo-subscription:0.1.0 .
 ```
 

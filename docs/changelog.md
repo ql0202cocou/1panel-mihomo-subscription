@@ -52,13 +52,60 @@ possible, and grouped by change type.
 
 ### Added
 
+- New `SECURE_COOKIES` environment variable to force the `Secure` session-cookie
+  attribute. It defaults to inferring from an `https://` `PUBLIC_BASE_URL`, so
+  behind a TLS-terminating reverse proxy (where the app speaks plain HTTP and
+  `PUBLIC_BASE_URL` may be unset or `http`) the operator can now opt in
+  explicitly. The service also logs a startup warning whenever session cookies
+  end up without `Secure` (see `src/main.rs`, `docs/technical-roadmap.md` env
+  table).
+
 ### Changed
+
+- Removed the unused `tokio-cron-scheduler` dependency (no scheduler is wired
+  in `src/`), trimming the dependency graph and supply-chain surface.
+- Upgraded `sqlx` 0.7 → 0.8 and switched its feature set from
+  `runtime-tokio-rustls` to `runtime-tokio` (SQLite needs no TLS). This fixes
+  RUSTSEC-2024-0363 and drops the unused rustls stack, clearing three
+  `rustls-webpki` advisories and the `rustls-pemfile`/`paste` unmaintained
+  warnings. No code changes were required.
+- Replaced the fixed-window rate limiter with a token bucket (`src/rate_limit.rs`).
+  Same `max`/`window` knobs, but tokens refill continuously, removing the ~2x
+  burst a fixed window allows across its boundary while still permitting a
+  legitimate burst up to `max`.
 
 ### Fixed
 
 ### Security
 
+- Hardened session-cookie issuance: previously the `Secure` attribute was set
+  only when `PUBLIC_BASE_URL` began with `https://`, so a deployment behind an
+  HTTPS reverse proxy that left `PUBLIC_BASE_URL` unset would silently issue
+  session cookies without `Secure` (exposing them to plaintext transmission).
+  The new `SECURE_COOKIES` override plus startup warning close that gap.
+- Added a `cargo audit` CI gate (`.github/workflows/ci.yml`) with documented,
+  per-advisory ignores in `.cargo/audit.toml` (only `rsa` — pulled by the
+  feature-gated, never-compiled `sqlx-mysql` driver, no upstream fix — and the
+  informational `rustls-pemfile` unmaintained notice). New advisories now fail
+  the build.
+- Validate provider `source_url` at write time (profile create/update): reject
+  non-http(s) schemes, embedded credentials, loopback hostnames, and blocked
+  literal IPs up front with a generic `400`. This is defense in depth and a
+  clearer error — the authoritative SSRF check still runs at fetch time with DNS
+  resolution and IP pinning (`src/fetch.rs`).
+- Sweep expired sessions when a new one is created (`src/auth.rs`), bounding the
+  in-memory session map so abandoned/expired entries can no longer accumulate
+  (creation is the only growth point).
+- Audited the database-error log line (`src/error.rs`) and confirmed `sqlx`
+  error Display never includes bound parameter values (only driver/constraint
+  text), so provider URLs and tokens cannot leak through it; added a comment to
+  keep it that way.
+
 ### Documentation
+
+- Refreshed `README.md`: the development section now lists the actual CI gates
+  (`fmt`/`clippy`/`test`/`cargo audit`) and the frontend build, and the
+  capabilities list reflects the current security controls.
 
 ## [0.1.1] - 2026-06-13
 

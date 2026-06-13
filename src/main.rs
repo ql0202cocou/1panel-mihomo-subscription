@@ -37,8 +37,18 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Database ready at {db_path}");
 
     let public_base_url = std::env::var("PUBLIC_BASE_URL").unwrap_or_default();
-    // Use Secure cookies when the public origin is HTTPS.
-    let secure_cookies = public_base_url.starts_with("https://");
+    // Set the Secure cookie attribute. `SECURE_COOKIES` is an explicit override;
+    // when unset we infer it from an HTTPS public origin. Behind a TLS-terminating
+    // reverse proxy the app speaks plain HTTP, so without this override a missing
+    // or http `PUBLIC_BASE_URL` would silently issue session cookies without
+    // `Secure`, exposing them to plaintext transmission.
+    let secure_cookies = env_bool("SECURE_COOKIES", public_base_url.starts_with("https://"));
+    if !secure_cookies {
+        tracing::warn!(
+            "session cookies will be issued WITHOUT the Secure attribute; set \
+             SECURE_COOKIES=true (or an https:// PUBLIC_BASE_URL) when serving over HTTPS"
+        );
+    }
     let web_dir = std::env::var("WEB_DIR").unwrap_or_else(|_| "web/dist".to_string());
 
     let fetch_timeout = Duration::from_secs(env_u64("FETCH_TIMEOUT_SECONDS", 15));
@@ -89,6 +99,19 @@ fn env_u64(key: &str, default: u64) -> u64 {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(default)
+}
+
+/// Parse a boolean env var (`true`/`false`/`1`/`0`, case-insensitive); fall back
+/// to `default` when unset or unrecognized.
+fn env_bool(key: &str, default: bool) -> bool {
+    match std::env::var(key) {
+        Ok(v) => match v.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" | "yes" | "on" => true,
+            "false" | "0" | "no" | "off" => false,
+            _ => default,
+        },
+        Err(_) => default,
+    }
 }
 
 fn require_env(key: &str) -> anyhow::Result<String> {

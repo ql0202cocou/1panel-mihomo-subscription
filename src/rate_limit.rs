@@ -1,4 +1,9 @@
-//! In-memory fixed-window rate limiting and the login/download middleware.
+//! In-memory token-bucket rate limiting and the login/download middleware.
+//!
+//! A token bucket (rather than a fixed window) smooths traffic and avoids the
+//! ~2x burst a fixed window allows at its boundaries. Each key holds `max`
+//! tokens that refill continuously at `max / window` per second; a request is
+//! allowed when at least one whole token is available.
 //!
 //! In-memory limits are acceptable for the single-instance self-hosted MVP
 //! (see `docs/security-design.md`); a shared store would be needed only if the
@@ -19,55 +24,59 @@ use axum::{
 use crate::app::AppState;
 use crate::net;
 
-/// A fixed-window counter keyed by an arbitrary string.
+/// A token-bucket rate limiter keyed by an arbitrary string.
 pub struct RateLimiter {
-    inner: Mutex<HashMap<String, Window>>,
-    max: u32,
-    window: Duration,
+    inner: Mutex<HashMap<String, Bucket>>,
+    /// Bucket capacity (the burst size and steady-state max per window).
+    capacity: f64,
+    /// Tokens added per second.
+    refill_per_sec: f64,
 }
 
-struct Window {
-    start: Instant,
-    count: u32,
+struct Bucket {
+    tokens: f64,
+    last: Instant,
 }
 
 impl RateLimiter {
+    /// `max` requests per `window` (also the burst capacity).
     pub fn new(max: u32, window: Duration) -> Self {
+        let capacity = max as f64;
+        let secs = window.as_secs_f64().max(f64::MIN_POSITIVE);
         Self {
             inner: Mutex::new(HashMap::new()),
-            max,
-            window,
+            capacity,
+            refill_per_sec: capacity / secs,
         }
     }
 
-    /// Record a hit for `key`; return `true` if it is within the limit.
+    /// Record a hit for `key`; return `true` if a token was available.
     pub fn check(&self, key: &str) -> bool {
         let mut map = self.inner.lock().unwrap();
         let now = Instant::now();
 
-        // Opportunistic cleanup to bound memory under many distinct keys.
+        // Opportunistic cleanup to bound memory under many distinct keys. A
+        // fully refilled bucket is indistinguishable from a fresh one, so any
+        // bucket idle for a full window can be dropped without affecting limits.
         if map.len() > 10_000 {
-            map.retain(|_, w| now.duration_since(w.start) < self.window);
+            let window_secs = self.capacity / self.refill_per_sec;
+            map.retain(|_, b| now.duration_since(b.last).as_secs_f64() < window_secs);
         }
 
-        match map.get_mut(key) {
-            Some(w) if now.duration_since(w.start) < self.window => {
-                if w.count >= self.max {
-                    return false;
-                }
-                w.count += 1;
-                true
-            }
-            _ => {
-                map.insert(
-                    key.to_string(),
-                    Window {
-                        start: now,
-                        count: 1,
-                    },
-                );
-                true
-            }
+        let bucket = map.entry(key.to_string()).or_insert(Bucket {
+            tokens: self.capacity,
+            last: now,
+        });
+        // Refill for the elapsed time, capped at capacity.
+        let elapsed = now.duration_since(bucket.last).as_secs_f64();
+        bucket.tokens = (bucket.tokens + elapsed * self.refill_per_sec).min(self.capacity);
+        bucket.last = now;
+
+        if bucket.tokens >= 1.0 {
+            bucket.tokens -= 1.0;
+            true
+        } else {
+            false
         }
     }
 }
@@ -111,22 +120,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn allows_up_to_max_then_denies() {
+    fn allows_burst_up_to_capacity_then_denies() {
         let rl = RateLimiter::new(3, Duration::from_secs(60));
         assert!(rl.check("k"));
         assert!(rl.check("k"));
         assert!(rl.check("k"));
-        assert!(!rl.check("k"), "4th hit over the limit is denied");
-        // A different key has its own budget.
+        assert!(!rl.check("k"), "4th hit over the burst capacity is denied");
+        // A different key has its own bucket.
         assert!(rl.check("other"));
     }
 
     #[test]
-    fn window_resets_after_expiry() {
+    fn tokens_refill_over_time() {
         let rl = RateLimiter::new(1, Duration::from_millis(20));
         assert!(rl.check("k"));
         assert!(!rl.check("k"));
         std::thread::sleep(Duration::from_millis(30));
-        assert!(rl.check("k"), "new window after expiry");
+        assert!(rl.check("k"), "token refilled after the window elapsed");
+    }
+
+    #[test]
+    fn partial_refill_grants_partial_budget() {
+        // 10 tokens / 100ms = 1 token per 10ms. Drain, wait ~50ms, expect a
+        // partial (not full) budget back — the hallmark of a token bucket vs a
+        // fixed window, which would hand back the whole budget at the boundary.
+        let rl = RateLimiter::new(10, Duration::from_millis(100));
+        for _ in 0..10 {
+            assert!(rl.check("k"));
+        }
+        assert!(!rl.check("k"), "bucket drained");
+
+        std::thread::sleep(Duration::from_millis(50));
+        let granted = (0..10).filter(|_| rl.check("k")).count();
+        assert!(
+            (3..=7).contains(&granted),
+            "expected a partial refill (~5), got {granted}"
+        );
     }
 }

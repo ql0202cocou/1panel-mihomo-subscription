@@ -29,8 +29,11 @@ Mihomo subscription links.
   Custom rule replacement; custom node and proxy group appending.
 - 永久订阅链接:随机路径前缀 + per-profile token,支持重置。
   Permanent links: random path prefix + per-profile token, both resettable.
-- SSRF 防护、订阅 URL 脱敏、生成缓存。
-  SSRF protection, provider URL masking, generation caching.
+- 安全:SSRF 防护(连接时钉死已验证 IP)、订阅 URL 全程脱敏、生成缓存与单飞、
+  令牌桶限流、YAML 炸弹防护、同源 CSRF 校验。
+  Security: SSRF protection (connect-time pinned IP), provider URL masking,
+  generation caching with single-flight, token-bucket rate limiting, YAML-bomb
+  guarding, and same-origin CSRF checks.
 
 ## 架构 / Architecture
 
@@ -64,12 +67,26 @@ Public link: https://<host>/<public-path-prefix>/api/sub/<profile-token>
 
 ## 开发 / Development
 
-```bash
-cargo check
-cargo fmt
-cargo test
+后端门禁(与 CI 一致)/ Backend gates (same as CI):
 
-# 构建镜像 / build image
+```bash
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+cargo audit   # 需 / needs: cargo install cargo-audit；忽略项见 / ignores in .cargo/audit.toml
+```
+
+前端(在 `web/` 内)/ Frontend (inside `web/`):
+
+```bash
+npm install   # 首次 / first time
+npm run dev    # Vite 开发服务器,代理 /api 与 /health / dev server, proxies /api and /health
+npm run build  # tsc --noEmit + vite build -> web/dist(由 Axum 托管 / served by Axum）
+```
+
+构建镜像 / Build the image:
+
+```bash
 docker build -t mihomo-subscription:0.1.0 .
 ```
 
