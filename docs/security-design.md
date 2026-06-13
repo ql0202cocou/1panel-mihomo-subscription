@@ -120,7 +120,11 @@ Recommended initial approach:
   acceptable for a single-instance self-hosted app.
 - Expire sessions after a bounded idle time (default: 7 days).
 - Set cookies with `HttpOnly` and `SameSite=Lax`.
-- Set `Secure` when the deployment uses HTTPS.
+- Set `Secure` when the deployment uses HTTPS. This is inferred from an
+  `https://` `PUBLIC_BASE_URL`, but behind a TLS-terminating reverse proxy the
+  app speaks plain HTTP, so the explicit `SECURE_COOKIES` override should be set
+  to `true`; the service logs a warning whenever cookies end up without
+  `Secure`.
 - Add basic login failure rate limiting.
 
 CORS and CSRF:

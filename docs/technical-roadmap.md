@@ -302,6 +302,7 @@ prototype package already exposes.
 | `MAX_SUBSCRIPTION_SIZE_MB` | Install form | `8` | No | Provider response size limit |
 | `CACHE_TTL_MINUTES` | Install form | `15` | No | Generated YAML cache TTL (see `security-design.md`) |
 | `TRUSTED_PROXY_HOPS` | Install form | `1` | No | Reverse proxy hops to trust when deriving the client IP (see `security-design.md`) |
+| `SECURE_COOKIES` | Install form (optional) | inferred from `https://` `PUBLIC_BASE_URL` | No | Force the `Secure` session-cookie attribute. Set `true` when serving over HTTPS through a TLS-terminating reverse proxy (where the app itself speaks plain HTTP); the service logs a warning when cookies end up without `Secure` |
 | `PORT` | Compose (fixed) | `8080` | Yes | Container listen port |
 | `DATA_DIR` | Compose (fixed) | `/data` | Yes | SQLite data directory |
 
