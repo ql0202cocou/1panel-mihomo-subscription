@@ -155,15 +155,33 @@ git tag -a v${VERSION} -m "Release v${VERSION}"
 git push origin v${VERSION}
 ```
 
+## 创建 GitHub Release / Create the GitHub Release
+
+打完 tag 后,基于该 tag 发布一个 GitHub Release,release notes 取自
+`changelog.md` 对应版本段的要点(部署说明 + Added/Changed/Security)。
+
+After tagging, publish a GitHub Release from that tag; draw the notes from the
+matching version section of `changelog.md` (deployment notes + Added/Changed/
+Security).
+
+```bash
+gh release create v${VERSION} \
+  --verify-tag \
+  --title "v${VERSION}" \
+  --notes "$(...)"   # 从 changelog [${VERSION}] 整理 / summarize from changelog
+```
+
 ## 发布后 / Post-release
 
 - 确认 `[Unreleased]` 为空段并位于最新版本之上。
+- 确认 GitHub Release 已发布且指向正确的 tag。
 - 在 1Panel 实际环境安装新版本做最终验证。
 - 如发现发布缺陷,修复走新的 PATCH 版本,不覆盖已发布的镜像 tag。
 
 &nbsp;
 
 - Confirm `[Unreleased]` is an empty section above the newest version.
+- Confirm the GitHub Release is published and points at the correct tag.
 - Install the new version in a real 1Panel environment for final validation.
 - Fix release defects in a new PATCH version; never overwrite a published
   image tag.
