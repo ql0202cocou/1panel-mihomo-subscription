@@ -52,6 +52,14 @@ possible, and grouped by change type.
 
 ### Added
 
+- Reworked the `Dockerfile` into a three-stage build: a `node:20-slim` stage
+  builds the SPA (`web/dist`), the Rust stage compiles the binary (now copying
+  `migrations/` so `sqlx::migrate!` can embed them), and the runtime image
+  ships only the binary plus the built assets (served via `WEB_DIR`). Bumped
+  the build image to `rust:1.90-slim` (a transitive dependency now requires
+  edition2024). Expanded `.dockerignore`. Smoke-tested: `/health` OK, SPA
+  served, unauthenticated `/api` returns `401`. The 1Panel app package update
+  is intentionally deferred.
 - Built the profile detail page and editors (frontend step 2): hosted-link
   header (copy, QR, reset-token with confirm, and a "modified but not
   generated" banner derived client-side from the latest sub-resource
