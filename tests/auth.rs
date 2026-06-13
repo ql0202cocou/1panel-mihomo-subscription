@@ -137,6 +137,47 @@ async fn login_then_access_session_then_logout() {
 }
 
 #[tokio::test]
+async fn repeated_failed_logins_are_rate_limited() {
+    let temp = TempDb::new();
+    // Tighten the login limiter for this test.
+    let mut state = test_state(&temp).await;
+    {
+        use mihomo_subscription::rate_limit::RateLimiter;
+        use std::sync::Arc;
+        use std::time::Duration;
+        let s = Arc::get_mut(&mut state).unwrap();
+        s.login_limiter = Arc::new(RateLimiter::new(3, Duration::from_secs(60)));
+    }
+    let app = build_router(state);
+
+    // First 3 attempts hit the handler (401 for wrong creds); the 4th is
+    // blocked by the limiter (429) before reaching credential checks.
+    for _ in 0..3 {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post("/api/auth/login")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(login_body("admin", "wrong"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+    let resp = app
+        .oneshot(
+            Request::post("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(login_body("admin", "wrong"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[tokio::test]
 async fn cross_site_origin_on_login_is_forbidden() {
     let temp = TempDb::new();
     let app = build_router(test_state(&temp).await);

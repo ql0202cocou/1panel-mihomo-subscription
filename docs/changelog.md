@@ -52,6 +52,15 @@ possible, and grouped by change type.
 
 ### Added
 
+- Implemented client-IP derivation and rate limiting: `src/net.rs` derives the
+  client IP from `X-Forwarded-For` counting `TRUSTED_PROXY_HOPS` from the right
+  (spoofed left entries ignored; falls back to the TCP peer), fully unit-tested;
+  `src/rate_limit.rs` adds an in-memory fixed-window limiter plus login
+  (per-IP) and public-download (per-IP+path) middleware. `main` serves with
+  connect-info so the TCP peer is available, reads `TRUSTED_PROXY_HOPS`, and
+  configures the limiters. This also supplies the login-failure rate limiting
+  deferred from the auth step. Per-profile refresh limiting is provided
+  structurally by the single-flight lock plus cache TTL.
 - Implemented generation, preview, and the public subscription endpoint
   (`src/generate.rs`): `generate` (and the source-card manual refresh) fetches
   via the injected `SubscriptionFetcher`, converts, persists `generated_cache`,

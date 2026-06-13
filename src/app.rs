@@ -17,6 +17,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::auth::{self, AdminAuth, SessionStore};
 use crate::fetch::SubscriptionFetcher;
+use crate::rate_limit::{self, RateLimiter};
 use crate::single_flight::SingleFlight;
 use crate::{generate, profiles, settings};
 
@@ -43,6 +44,12 @@ pub struct AppState {
     pub cache_ttl: Duration,
     /// Per-profile refresh coalescing.
     pub single_flight: SingleFlight,
+    /// Reverse-proxy hops to trust when deriving the client IP.
+    pub trusted_proxy_hops: usize,
+    /// Login attempt limiter (keyed by client IP).
+    pub login_limiter: Arc<RateLimiter>,
+    /// Public download limiter (keyed by client IP + path).
+    pub download_limiter: Arc<RateLimiter>,
 }
 
 impl AppState {
@@ -117,8 +124,13 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             auth::require_session,
         ));
 
+    let login_route = post(auth::login).layer(middleware::from_fn_with_state(
+        state.clone(),
+        rate_limit::login,
+    ));
+
     let api = Router::new()
-        .route("/auth/login", post(auth::login))
+        .route("/auth/login", login_route)
         .merge(protected)
         .layer(middleware::from_fn(auth::check_origin))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES));
@@ -129,10 +141,14 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(health))
         .nest("/api", api)
-        // Public subscription download: no auth, path prefix + token.
+        // Public subscription download: no auth, path prefix + token, but
+        // rate-limited by client IP + path.
         .route(
             "/:public_path_prefix/api/sub/:token",
-            get(generate::public_sub),
+            get(generate::public_sub).layer(middleware::from_fn_with_state(
+                state.clone(),
+                rate_limit::download,
+            )),
         )
         .fallback_service(spa)
         .layer(TraceLayer::new_for_http())
