@@ -58,6 +58,12 @@ possible, and grouped by change type.
 
 ### Security
 
+### Documentation
+
+## [0.1.1] - 2026-06-13
+
+### Security
+
 - Hardened against YAML alias-expansion ("billion laughs"): `src/yaml.rs` now
   counts `&anchor`/`*alias` tokens in the raw text and rejects documents over a
   small cap *before* `serde_yaml` parses them (the bomb is tiny and expands
