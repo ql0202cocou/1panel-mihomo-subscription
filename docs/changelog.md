@@ -52,6 +52,18 @@ possible, and grouped by change type.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Security
+
+### Documentation
+
+## [0.1.0] - 2026-06-13
+
+### Added
+
 - Reworked the `Dockerfile` into a three-stage build: a `node:20-slim` stage
   builds the SPA (`web/dist`), the Rust stage compiles the binary (now copying
   `migrations/` so `sqlx::migrate!` can embed them), and the runtime image
