@@ -87,4 +87,6 @@ jobs:
           ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
             apps/mihomo-subscription/data.yml \
             apps/mihomo-subscription/0.1.0/data.yml \
-            apps/mihomo-subscription/0.1.0/docker-compose.yml
+            apps/mihomo-subscription/0.1.0/docker-compose.yml \
+            apps/mihomo-subscription/0.1.2/data.yml \
+            apps/mihomo-subscription/0.1.2/docker-compose.yml

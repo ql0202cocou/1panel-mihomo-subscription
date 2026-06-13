@@ -1,14 +1,17 @@
 # 发布流程 / Release Process
 
-> **状态:未发布。** 服务与多阶段镜像构建已实现,但尚未走完一次正式发布
-> (1Panel 应用包安装表单仍待补齐,见 `1panel-app.md`)。镜像策略:**本地镜像**,
-> 直接在 1Panel 主机上构建,不推送远程仓库;如需分发再启用文末可选推送流程。
+> **状态:0.1.2 应用包已就绪。** 服务、多阶段镜像构建与 1Panel 应用包安装表单
+> 均已完成(`apps/mihomo-subscription/0.1.2/`)。镜像策略:**发布到 Docker Hub**
+> (`quinlanhoo/mihomo-subscription`,多架构 amd64+arm64),1Panel 主机直接
+> `docker pull`,无需在主机上同步源码或本地构建;离线/内网环境可改用文末的
+> 本地构建备选流程。
 >
-> **Status: not yet released.** The service and the multi-stage image build are
-> implemented, but no formal release has been cut yet (the 1Panel app package
-> install form still needs updating — see `1panel-app.md`). Image strategy:
-> **local images** built on the 1Panel host, no remote registry; enable the
-> optional push flow at the end if distribution is needed.
+> **Status: 0.1.2 app package ready.** The service, the multi-stage image build,
+> and the 1Panel app package install form are all complete
+> (`apps/mihomo-subscription/0.1.2/`). Image strategy: **published to Docker Hub**
+> (`quinlanhoo/mihomo-subscription`, multi-arch amd64+arm64), so the 1Panel host
+> just `docker pull`s it — no source sync or on-host build. Use the local-build
+> fallback at the end for offline/intranet environments.
 
 相关文档 / Related documents: `changelog.md`(发布时滚动 / rolled at release)、
 `1panel-app.md`(应用包结构 / app package layout)。
@@ -36,8 +39,8 @@ cargo test
 # 校验 1Panel YAML / validate 1Panel YAML
 ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
   apps/mihomo-subscription/data.yml \
-  apps/mihomo-subscription/0.1.0/data.yml \
-  apps/mihomo-subscription/0.1.0/docker-compose.yml
+  apps/mihomo-subscription/0.1.2/data.yml \
+  apps/mihomo-subscription/0.1.2/docker-compose.yml
 ```
 
 人工确认 / Manual checks:
@@ -67,24 +70,42 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
 3. 不删除任何历史版本条目。
    Never delete historical entries.
 
-## 构建镜像 / Build the Image
+## 构建并推送镜像 / Build and Push the Image
 
-采用本地镜像策略:把仓库同步到 1Panel 主机,在主机上直接构建,镜像名与
-compose 中的 `image` 字段一致,无需推送。
+采用 Docker Hub 策略:在任意装有 docker buildx 的机器上多架构构建并推送,镜像名
+与 compose 中的 `image` 字段一致(`quinlanhoo/mihomo-subscription:<version>`)。
+1Panel 主机安装时直接 `docker pull`,无需同步源码或本地构建。
 
-Local-image strategy: sync the repository to the 1Panel host and build there
-directly. The image name matches the `image` field in compose; no push needed.
+Docker Hub strategy: multi-arch build and push from any machine with docker
+buildx; the image name matches the `image` field in compose
+(`quinlanhoo/mihomo-subscription:<version>`). The 1Panel host just `docker pull`s
+it at install time — no source sync or on-host build.
 
 ```bash
-VERSION=0.1.0
+VERSION=0.1.2
+NS=quinlanhoo
 
-# 在 1Panel 主机上构建 / build on the 1Panel host
-docker build -t mihomo-subscription:${VERSION} .
+# 登录 Docker Hub(建议用 Personal Access Token,非 TTY 用 --password-stdin)
+# log in to Docker Hub (prefer a Personal Access Token; use --password-stdin in non-TTY)
+echo "<token>" | docker login -u ${NS} --password-stdin
+
+# 多架构需要 docker-container driver 的 builder(默认的 docker driver 不支持)
+# multi-arch needs a docker-container driver builder (the default docker driver can't)
+docker buildx create --name multiarch --driver docker-container --use --bootstrap 2>/dev/null || \
+  docker buildx use multiarch
+
+# 多架构构建并推送 / multi-arch build and push
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t ${NS}/mihomo-subscription:${VERSION} \
+  -t ${NS}/mihomo-subscription:latest \
+  --push .
 ```
 
-安装前的冒烟验证 / Smoke test before installing:
+推送前可先做单架构本地冒烟验证 / Single-arch local smoke test before pushing:
 
 ```bash
+docker build -t mihomo-subscription:${VERSION} .
 docker run --rm -p 8080:8080 -v "$(pwd)/tmp-data:/data" \
   mihomo-subscription:${VERSION}
 curl -fsS http://localhost:8080/health
@@ -98,7 +119,7 @@ Each release adds a new version directory; old version directories are kept:
 
 ```bash
 VERSION=0.2.0
-PREV=0.1.0
+PREV=0.1.2
 cp -R apps/mihomo-subscription/${PREV} apps/mihomo-subscription/${VERSION}
 ```
 
@@ -147,25 +168,19 @@ git push origin v${VERSION}
 - Fix release defects in a new PATCH version; never overwrite a published
   image tag.
 
-## 可选:推送远程仓库 / Optional: Push to a Remote Registry
+## 可选:本地构建(离线/内网) / Optional: Local Build (Offline/Intranet)
 
-仅当需要分发到其他主机或第三方应用商店时启用。启用时需同步更新 compose 的
-`image` 字段和本文档的构建章节。
+当 1Panel 主机无法访问 Docker Hub(离线或内网)时,把仓库同步到主机上本地构建,
+并把该版本 compose 的 `image` 字段临时改成本地 tag。
 
-Only needed when distributing to other hosts or a third-party app store. When
-enabled, update the compose `image` field and the build section of this
-document accordingly.
+When the 1Panel host cannot reach Docker Hub (offline or intranet), sync the
+repository to the host and build locally, and temporarily change the version's
+compose `image` field to the local tag.
 
 ```bash
-VERSION=0.1.0
-REGISTRY=ghcr.io/<owner>          # 或 docker.io/<user>、自建仓库
-                                  # or docker.io/<user>, or a private registry
+VERSION=0.1.2
 
-# 多架构构建并推送(1Panel 主机常见 amd64/arm64)
-# multi-arch build and push (1Panel hosts are commonly amd64/arm64)
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  -t ${REGISTRY}/mihomo-subscription:${VERSION} \
-  -t ${REGISTRY}/mihomo-subscription:latest \
-  --push .
+# 在 1Panel 主机上构建,镜像名需与 compose 的 image 字段一致
+# build on the 1Panel host; the image name must match the compose image field
+docker build -t mihomo-subscription:${VERSION} .
 ```

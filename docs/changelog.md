@@ -50,8 +50,43 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+### Changed
+
+- Switched the 1Panel image strategy from on-host local builds to a Docker Hub
+  image. `apps/mihomo-subscription/0.1.2/docker-compose.yml` now references
+  `quinlanhoo/mihomo-subscription:0.1.2` (multi-arch amd64+arm64) so the 1Panel
+  host pulls the image at install instead of syncing source and building locally.
+
+### Documentation
+
+- Reworked `docs/release.md` to make multi-arch `docker buildx ... --push` to
+  Docker Hub the primary build step (with a Personal Access Token login note and
+  the required `docker-container` builder), and demoted on-host `docker build` to
+  an offline/intranet fallback appendix. Updated the image-reference item in the
+  `docs/1panel-app.md` validation checklist accordingly.
+- Updated `README.md`: the "Deploy in 1Panel" section now pulls the published
+  Docker Hub image and presents a hand-written Compose as the primary,
+  copy-paste-ready path — a complete env block with every variable (required /
+  fixed / optional grouped, only four values marked `← edit`) plus a healthcheck,
+  with the 1Panel app-package install demoted to a one-line pointer. The status
+  banner reflects the published `0.1.2` image and the complete 1Panel install
+  form. Synced the image-strategy notes in `CLAUDE.md` and `AGENTS.md`.
+
+## [0.1.2] - 2026-06-14
+
 ### Added
 
+- Completed the 1Panel app package and cut release `0.1.2`. The new
+  `apps/mihomo-subscription/0.1.2/` package exposes the full install form —
+  `ADMIN_USERNAME`/`ADMIN_PASSWORD`, `PUBLIC_BASE_URL`, `PUBLIC_PATH_PREFIX`,
+  `RUST_LOG`, `FETCH_TIMEOUT_SECONDS`, `MAX_SUBSCRIPTION_SIZE_MB`,
+  `CACHE_TTL_MINUTES`, `TRUSTED_PROXY_HOPS`, and a `SECURE_COOKIES`
+  `auto`/`true`/`false` selector — and its `docker-compose.yml` passes every
+  one through to the container (image `mihomo-subscription:0.1.2`). Bumped
+  `Cargo.toml`/`Cargo.lock` to `0.1.2`, pointed the README/CLAUDE/AGENTS build
+  commands and the CI 1Panel-YAML gate at the new package, and cleared the
+  "package update pending" markers in `docs/1panel-app.md`. The incomplete
+  `0.1.0/` directory is retained for history.
 - New `SECURE_COOKIES` environment variable to force the `Secure` session-cookie
   attribute. It defaults to inferring from an `https://` `PUBLIC_BASE_URL`, so
   behind a TLS-terminating reverse proxy (where the app speaks plain HTTP and
@@ -103,9 +138,25 @@ possible, and grouped by change type.
 
 ### Documentation
 
-- Refreshed `README.md`: the development section now lists the actual CI gates
-  (`fmt`/`clippy`/`test`/`cargo audit`) and the frontend build, and the
-  capabilities list reflects the current security controls.
+- Rewrote `README.md` into a concise user-facing guide (~185 → ~109 lines): a
+  short intro, a focused "Deploy in 1Panel" section (local-image build, Compose
+  with the required env vars including `SECURE_COOKIES`, and the Host-header
+  reverse-proxy requirement), and a brief usage walkthrough. The architecture
+  diagram, capabilities list, and full development section were dropped in favor
+  of pointers to `docs/`, `CLAUDE.md`, and `AGENTS.md`.
+- Removed the development-phase planning docs `docs/plan.md` and
+  `docs/technical-roadmap.md` now that the design is implemented. Their durable
+  content was folded into the maintenance docs: the authoritative environment
+  variable table moved to `docs/1panel-app.md`, and the converter's top-level
+  key handling moved to `docs/api-design.md`. All cross-references in
+  `README.md`, `CLAUDE.md`, `AGENTS.md`, `docs/`, and `src/converter.rs` were
+  repointed accordingly.
+- Compressed `AGENTS.md` (~137 → ~77 lines): merged the command blocks and
+  condensed the change-rule and security-default bullets without dropping any
+  rule.
+- Compressed `CLAUDE.md` (~147 → ~111 lines): dropped the implemented-files
+  enumeration that duplicated the code-layout map and merged the command blocks,
+  keeping the non-obvious implementation rules and module map intact.
 
 ## [0.1.1] - 2026-06-13
 
