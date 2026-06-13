@@ -58,8 +58,23 @@ possible, and grouped by change type.
 
 ### Security
 
+- Hardened against YAML alias-expansion ("billion laughs"): `src/yaml.rs` now
+  counts `&anchor`/`*alias` tokens in the raw text and rejects documents over a
+  small cap *before* `serde_yaml` parses them (the bomb is tiny and expands
+  inside the parser, so the size/depth/node checks can't help). Applies to both
+  admin node/group content and fetched provider YAML.
+- Made public-download rate limiting throttle token enumeration: the limiter is
+  now keyed by client IP only (not IP + path), so guessing many distinct tokens
+  from one IP shares a single budget and `404`-generating scans are throttled.
+- Removed the version number from the unauthenticated `/health` response (it
+  now returns only `{"status":"ok"}`) to avoid version disclosure.
+
 ### Documentation
 
+- Documented the reverse-proxy `Host` passthrough requirement in
+  `docs/1panel-app.md` (the `Origin` check 403s state-changing requests if the
+  proxy rewrites `Host`), and updated `docs/security-design.md` for the
+  pre-parse anchor/alias cap and the per-IP download limit.
 - Synced `AGENTS.md` with the current repo state and GitHub hosting: corrected
   the key-paths list (library/bin split, `web/`, `migrations/`, CI workflow),
   dropped the "target" wording now that the design is implemented, aligned the

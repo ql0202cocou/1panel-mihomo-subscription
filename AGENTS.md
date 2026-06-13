@@ -113,6 +113,10 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
   proxy hop, not a client-spoofable header (see `docs/security-design.md`).
 - Set `foreign_keys`, `busy_timeout`, and `journal_mode` on every pooled
   SQLite connection via an after-connect hook (see `docs/data-model.md`).
+- Parse all untrusted/admin YAML via `yaml::parse_limited` (anchor/alias cap
+  before parse, depth/node limits after). Rate-limit public downloads by client
+  IP (not path) so token enumeration is throttled. Keep `/health` minimal (no
+  version). The reverse proxy must preserve `Host` (`docs/1panel-app.md`).
 
 ## 1Panel Notes
 

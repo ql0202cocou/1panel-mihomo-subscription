@@ -48,7 +48,7 @@ pub struct AppState {
     pub trusted_proxy_hops: usize,
     /// Login attempt limiter (keyed by client IP).
     pub login_limiter: Arc<RateLimiter>,
-    /// Public download limiter (keyed by client IP + path).
+    /// Public download limiter (keyed by client IP; throttles enumeration).
     pub download_limiter: Arc<RateLimiter>,
 }
 
@@ -73,7 +73,8 @@ impl AppState {
 }
 
 async fn health() -> impl IntoResponse {
-    Json(serde_json::json!({"status": "ok", "version": env!("CARGO_PKG_VERSION")}))
+    // Intentionally minimal: no version, to avoid unauthenticated disclosure.
+    Json(serde_json::json!({"status": "ok"}))
 }
 
 /// Build the full application router.

@@ -229,11 +229,13 @@ Outbound request limits:
 Provider responses are untrusted input even after the URL passes SSRF checks.
 
 - Parse fetched YAML with resource limits. YAML anchors/aliases can amplify a
-  size-limited input into unbounded memory ("billion laughs"); cap alias
-  expansion and nesting depth, or reject documents that exceed them. Apply the
-  same parse limits to admin-submitted node/group YAML, and bound every
-  management request body (default 1 MB, reject with `413`) — an authenticated
-  admin is not a reason to allow unbounded memory or database growth.
+  size-limited input into unbounded memory ("billion laughs"); because the bomb
+  is tiny and expands inside the parser, cap anchors/aliases by scanning the raw
+  text *before* parsing (reject above a small threshold), then enforce nesting
+  depth and node count after. Apply the same parse limits to admin-submitted
+  node/group YAML, and bound every management request body (default 1 MB, reject
+  with `413`) — an authenticated admin is not a reason to allow unbounded memory
+  or database growth.
 - Sanitize the provider `subscription-userinfo` header before storing or
   echoing it on the public endpoint: accept only a single header value
   matching the expected `key=value; ...` shape, and reject values containing
@@ -273,7 +275,10 @@ to logs, API responses, and error messages.
 Recommended limits:
 
 - Login attempts: limit by IP and account scope.
-- Public subscription downloads: limit by token and source IP.
+- Public subscription downloads: limit by source IP independent of the token,
+  so guessing many distinct tokens from one IP shares a single budget and
+  enumeration/scanning is actually throttled (the limit applies before the
+  handler, so `404`s count too).
 - Provider refresh operations: limit per profile.
 - Manual generate/refresh API: authenticated and rate limited.
 

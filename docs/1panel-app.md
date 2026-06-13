@@ -80,3 +80,16 @@ environment:
 These credentials protect only the management UI and management APIs. Generated
 subscription links remain public but must still require the random public path
 prefix and per-profile token.
+
+## Reverse Proxy Host Header
+
+The management API verifies the `Origin` header against the request `Host` on
+state-changing requests (CSRF defense in depth). The reverse proxy in front of
+the app must therefore preserve the original Host — for nginx/OpenResty:
+
+```nginx
+proxy_set_header Host $host;
+```
+
+If the proxy rewrites `Host` to the backend address, browser `Origin` and
+`Host` will disagree and every login/POST/PUT/DELETE returns `403`.
