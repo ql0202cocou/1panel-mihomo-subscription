@@ -50,6 +50,28 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+### Changed
+
+- Switched the 1Panel image strategy from on-host local builds to a Docker Hub
+  image. `apps/mihomo-subscription/0.1.2/docker-compose.yml` now references
+  `quinlanhoo/mihomo-subscription:0.1.2` (multi-arch amd64+arm64) so the 1Panel
+  host pulls the image at install instead of syncing source and building locally.
+
+### Documentation
+
+- Reworked `docs/release.md` to make multi-arch `docker buildx ... --push` to
+  Docker Hub the primary build step (with a Personal Access Token login note and
+  the required `docker-container` builder), and demoted on-host `docker build` to
+  an offline/intranet fallback appendix. Updated the image-reference item in the
+  `docs/1panel-app.md` validation checklist accordingly.
+- Updated `README.md`: the "Deploy in 1Panel" section now pulls the published
+  Docker Hub image and presents a hand-written Compose as the primary,
+  copy-paste-ready path — a complete env block with every variable (required /
+  fixed / optional grouped, only four values marked `← edit`) plus a healthcheck,
+  with the 1Panel app-package install demoted to a one-line pointer. The status
+  banner reflects the published `0.1.2` image and the complete 1Panel install
+  form. Synced the image-strategy notes in `CLAUDE.md` and `AGENTS.md`.
+
 ## [0.1.2] - 2026-06-14
 
 ### Added
