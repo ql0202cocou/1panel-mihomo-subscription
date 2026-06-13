@@ -4,17 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status — Read This First
 
-The project is **actively implementing the documented design** under `docs/`,
-which remain the source of truth. Implemented so far: the SQLite migration and
-pool (`src/db.rs`), session auth and same-origin static serving (`src/auth.rs`,
+The documented design under `docs/` is **implemented** (backend + `web/` SPA),
+and the docs remain the source of truth. Implemented: SQLite migration and pool
+(`src/db.rs`), session auth and same-origin static serving (`src/auth.rs`,
 `src/app.rs`), profile + sub-resource CRUD and settings (`src/profiles.rs`,
-`src/settings.rs`), and the SSRF-protected provider fetch (`src/ssrf.rs`,
-`src/fetch.rs`). Still pending: the converter (`mihomo/clash -> mihomo`), the
-generate/preview/public subscription endpoint with caching, rate limiting and
-client-IP derivation, and the `web/` SPA frontend. The design docs still carry
-"状态:规划阶段 / Status: planning" banners; drop each banner (and the
-1panel-app.md pending markers) as the corresponding feature lands, and flip
-this status section when the MVP is complete.
+`src/settings.rs`), SSRF-protected fetch (`src/ssrf.rs`, `src/fetch.rs`), the
+`mihomo`/`clash` converter (`src/converter.rs`), generate/preview/public
+endpoint with caching and single-flight (`src/generate.rs`,
+`src/single_flight.rs`), rate limiting and client-IP derivation
+(`src/rate_limit.rs`, `src/net.rs`), and the SPA under `web/`. Remaining before
+a formal release: updating the 1Panel app package install form
+(`docs/1panel-app.md` pending markers) and cutting the release
+(`docs/release.md`). Implementation trade-offs are tracked in
+`docs/changelog.md`.
 
 `AGENTS.md` is the authoritative guide for change rules, security defaults, and
 1Panel packaging notes. Its most important rule: **every notable change must

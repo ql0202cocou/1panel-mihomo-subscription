@@ -1,13 +1,14 @@
 # 发布流程 / Release Process
 
-> **状态:规划阶段。** 本文档定义目标发布流程。镜像策略已定:**本地镜像**,
-> 即直接在 1Panel 主机上构建,不推送远程仓库;如后续需要分发,再启用文末的
-> 可选推送流程并同步更新 compose 镜像名。
+> **状态:未发布。** 服务与多阶段镜像构建已实现,但尚未走完一次正式发布
+> (1Panel 应用包安装表单仍待补齐,见 `1panel-app.md`)。镜像策略:**本地镜像**,
+> 直接在 1Panel 主机上构建,不推送远程仓库;如需分发再启用文末可选推送流程。
 >
-> **Status: planning.** This document defines the target release process. The
-> image strategy is decided: **local images** — built directly on the 1Panel
-> host, no remote registry. If distribution is needed later, enable the
-> optional push flow at the end and update the compose image name accordingly.
+> **Status: not yet released.** The service and the multi-stage image build are
+> implemented, but no formal release has been cut yet (the 1Panel app package
+> install form still needs updating — see `1panel-app.md`). Image strategy:
+> **local images** built on the 1Panel host, no remote registry; enable the
+> optional push flow at the end if distribution is needed.
 
 相关文档 / Related documents: `changelog.md`(发布时滚动 / rolled at release)、
 `1panel-app.md`(应用包结构 / app package layout)。

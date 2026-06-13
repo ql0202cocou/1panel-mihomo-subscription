@@ -15,5 +15,7 @@ materials for Mihomo Subscription Manager.
 - `release.md`: Image build, tag, and publish steps.
 - `changelog.md`: Changelog template and notable project changes.
 
-`api-design.md`, `data-model.md`, and `release.md` describe target designs;
-the project is still in the planning stage and implementation has not started.
+The documented design is implemented (backend + SPA). Remaining before a formal
+release: updating the 1Panel app package install form (`1panel-app.md`) and
+cutting the release (`release.md`). Implementation trade-offs are tracked in
+`changelog.md`.

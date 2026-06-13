@@ -1,11 +1,11 @@
 # 数据模型 / Data Model
 
-> **状态:规划阶段。** 本文档定义目标 SQLite 模式,尚未实现。当前代码中的
-> `subscriptions` 表是早期原型,将在首个正式迁移中被 `profiles` 体系取代。
+> **状态:已实现。** 本文档定义的 SQLite 模式已由 `migrations/0001_init.sql`
+> 实现,连接池按本文档应用每连接 pragma。
 >
-> **Status: planning.** This document defines the target SQLite schema; it is
-> not implemented yet. The current `subscriptions` table is an early prototype
-> and will be replaced by the `profiles` schema in the first real migration.
+> **Status: implemented.** The SQLite schema defined here is implemented by
+> `migrations/0001_init.sql`, and the pool applies the per-connection pragmas
+> described here.
 
 相关文档 / Related documents: `technical-roadmap.md`(模型来源 / model source)、
 `api-design.md`、`security-design.md`。
@@ -217,8 +217,8 @@ CREATE TABLE generated_cache (
 - 使用 `sqlx::migrate!`,迁移文件放在 `migrations/`,命名
   `NNNN_description.sql`(如 `0001_init.sql`),启动时自动执行。
 - 已应用的迁移文件不可修改,只能追加新迁移。
-- 项目处于规划阶段、无生产数据,首个迁移 `0001_init.sql` 直接建立本文档全部
-  表,并丢弃原型 `subscriptions` 表,不做数据搬迁。
+- 首版无生产数据,首个迁移 `0001_init.sql` 直接建立本文档全部表,并丢弃原型
+  `subscriptions` 表,不做数据搬迁。
 - SQLite 的 `ALTER TABLE` 能力有限,后续修改列时采用
   “建新表 → 拷贝 → 改名”模式。
 

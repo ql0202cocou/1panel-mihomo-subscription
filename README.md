@@ -1,11 +1,14 @@
 # Mihomo Subscription Manager
 
-> **状态:早期规划阶段。** 设计文档已完成,按文档实施尚未开始;当前代码仅为
-> 早期原型脚手架。
+> **状态:MVP 已实现,尚未发布。** 后端(认证、Profile 管理、SSRF 防护拉取、
+> 订阅转换、生成/缓存/公开端点、限流)与 Web SPA 均已实现并有测试与多阶段镜像;
+> 发布前仍需补齐 1Panel 应用包安装表单(见 `docs/1panel-app.md`)。
 >
-> **Status: early planning.** Design documents are complete; implementation
-> against them has not started. The current code is an early prototype
-> scaffold.
+> **Status: MVP implemented, not yet released.** The backend (auth, profile
+> management, SSRF-protected fetch, conversion, generate/cache/public endpoint,
+> rate limiting) and the web SPA are implemented with tests and a multi-stage
+> image. Before release, the 1Panel app package install form still needs
+> updating (see `docs/1panel-app.md`).
 
 面向 1Panel 自托管场景的轻量级 Mihomo 订阅转换与分发服务(类 Sub-Store Lite):
 录入机场订阅,配置自定义分流规则、节点和代理分组,生成长期有效的 Mihomo
@@ -16,7 +19,7 @@ service for 1Panel (a Sub-Store Lite): register provider subscriptions,
 configure custom rules, nodes, and proxy groups, and generate long-lived
 Mihomo subscription links.
 
-## 核心能力(规划)/ Planned Capabilities
+## 核心能力 / Capabilities
 
 - Web 管理页面,管理员登录(凭据来自 1Panel 安装参数)。
   Web admin UI with login (credentials from 1Panel install parameters).
