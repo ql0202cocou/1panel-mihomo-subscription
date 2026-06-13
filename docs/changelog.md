@@ -103,9 +103,25 @@ possible, and grouped by change type.
 
 ### Documentation
 
-- Refreshed `README.md`: the development section now lists the actual CI gates
-  (`fmt`/`clippy`/`test`/`cargo audit`) and the frontend build, and the
-  capabilities list reflects the current security controls.
+- Rewrote `README.md` into a concise user-facing guide (~185 → ~109 lines): a
+  short intro, a focused "Deploy in 1Panel" section (local-image build, Compose
+  with the required env vars including `SECURE_COOKIES`, and the Host-header
+  reverse-proxy requirement), and a brief usage walkthrough. The architecture
+  diagram, capabilities list, and full development section were dropped in favor
+  of pointers to `docs/`, `CLAUDE.md`, and `AGENTS.md`.
+- Removed the development-phase planning docs `docs/plan.md` and
+  `docs/technical-roadmap.md` now that the design is implemented. Their durable
+  content was folded into the maintenance docs: the authoritative environment
+  variable table moved to `docs/1panel-app.md`, and the converter's top-level
+  key handling moved to `docs/api-design.md`. All cross-references in
+  `README.md`, `CLAUDE.md`, `AGENTS.md`, `docs/`, and `src/converter.rs` were
+  repointed accordingly.
+- Compressed `AGENTS.md` (~137 → ~77 lines): merged the command blocks and
+  condensed the change-rule and security-default bullets without dropping any
+  rule.
+- Compressed `CLAUDE.md` (~147 → ~111 lines): dropped the implemented-files
+  enumeration that duplicated the code-layout map and merged the command blocks,
+  keeping the non-obvious implementation rules and module map intact.
 
 ## [0.1.1] - 2026-06-13
 
