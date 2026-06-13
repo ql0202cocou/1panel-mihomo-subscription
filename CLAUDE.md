@@ -44,6 +44,15 @@ cargo test --lib ssrf::tests::url_validation_rules   # a single unit test
 cargo test --test profiles                           # one integration test file
 ```
 
+Frontend (run inside `web/`; CI runs `npm ci` + `npm run build`):
+
+```bash
+npm install        # first time
+npm run dev        # Vite dev server; proxies /api and /health to :8080
+npm run build      # tsc --noEmit + vite build -> web/dist (served by Axum)
+npm run typecheck  # tsc --noEmit only
+```
+
 Validate 1Panel YAML after editing anything under `apps/`:
 
 ```bash
@@ -107,10 +116,16 @@ costly to retrofit; full rationale in `docs/security-design.md` and
 binary (`src/main.rs`) so integration tests can drive the app directly.
 `src/app.rs` holds `AppState` and `build_router` (the single source of route
 wiring); `src/main.rs` only loads env config, builds state, and serves.
-Per-feature modules: `db`, `auth`, `profiles`, `settings`, `ssrf`, `fetch`,
-plus helpers `error` (the API error envelope + `sqlx` UNIQUE→409 mapping),
-`mask` (provider-URL masking), `yaml` (bounded parsing), `util`. The DB lives
-at `${DATA_DIR:-/data}/mihomo-subscription.db`; migrations are in `migrations/`.
+Per-feature modules: `db`, `auth`, `profiles`, `settings`, `ssrf`, `fetch`
+(`SubscriptionFetcher` trait + `HttpFetcher`, injected into `AppState` so
+generate/public paths are testable without network), `converter`, `generate`
+(generate/preview + public endpoint), `single_flight`, `rate_limit`, `net`
+(client-IP derivation); plus helpers `error` (API error envelope + `sqlx`
+UNIQUE→409 mapping), `mask` (provider-URL masking), `yaml` (bounded parsing),
+`util`. The DB lives at `${DATA_DIR:-/data}/mihomo-subscription.db`; migrations
+are in `migrations/`. The SPA lives in `web/` (Vite + React + Ant Design +
+react-i18next) and is built into `web/dist`, which Axum serves with an
+`index.html` fallback (`WEB_DIR`).
 
 **Test pattern:** integration tests in `tests/` build the router with
 `build_router` and drive it via `tower::util::ServiceExt::oneshot` against a
