@@ -16,6 +16,7 @@ use axum::http::{header, Request, Response, StatusCode};
 use axum::Router;
 use mihomo_subscription::app::build_router;
 use mihomo_subscription::fetch::{FetchError, Fetched, SubscriptionFetcher};
+use mihomo_subscription::rate_limit::RateLimiter;
 use serde_json::Value;
 use tower::util::ServiceExt;
 
@@ -243,6 +244,41 @@ async fn stale_cache_is_served_when_refresh_fails() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn public_downloads_are_rate_limited_per_ip_across_tokens() {
+    let temp = TempDb::new();
+    let fetcher = Arc::new(FakeFetcher::default());
+    let mut state = test_state_with_fetcher(&temp, fetcher).await;
+    // Tighten the download limiter for this test.
+    Arc::get_mut(&mut state).unwrap().download_limiter =
+        Arc::new(RateLimiter::new(3, Duration::from_secs(60)));
+    let app = build_router(state);
+
+    // Each request targets a DIFFERENT (nonexistent) token; with per-IP keying
+    // they share one budget, so enumeration is throttled (404s count too).
+    for i in 0..3 {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::get(format!("/testprefix/api/sub/guess{i}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND, "within limit: 404");
+    }
+    let resp = app
+        .oneshot(
+            Request::get("/testprefix/api/sub/guess-over")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
 }
 
 #[tokio::test]

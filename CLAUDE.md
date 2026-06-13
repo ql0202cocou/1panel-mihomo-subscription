@@ -107,7 +107,10 @@ costly to retrofit; full rationale in `docs/security-design.md` and
 - Derive the client IP from a trusted reverse-proxy hop (`TRUSTED_PROXY_HOPS`),
   never a client-spoofable header.
 - Public token lookup runs unconditionally and compares in constant time
-  (no timing disclosure of the path prefix).
+  (no timing disclosure of the path prefix); public-download rate limiting is
+  keyed by client IP (not path) so it throttles token enumeration.
+- Parse untrusted/admin YAML through `yaml::parse_limited`, which caps
+  anchors/aliases *before* `serde_yaml` runs (billion-laughs), then depth/nodes.
 - The management API is same-origin with no CORS layer (enforced in
   `build_router`); keep it that way and verify `Origin` on state-changing
   requests.

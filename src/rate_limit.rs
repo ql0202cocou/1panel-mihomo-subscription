@@ -94,10 +94,12 @@ pub async fn login(State(state): State<Arc<AppState>>, req: Request, next: Next)
     next.run(req).await
 }
 
-/// Limit public subscription downloads by client IP + request path (which
-/// includes the path prefix and token).
+/// Limit public subscription requests per client IP, independent of the token
+/// in the path. Keying by IP only (not IP+path) means a client guessing many
+/// distinct tokens shares one budget, so the limiter actually throttles token
+/// enumeration / scanning — and runs before the handler, so 404s count too.
 pub async fn download(State(state): State<Arc<AppState>>, req: Request, next: Next) -> Response {
-    let key = format!("dl:{}:{}", client_ip(&state, &req), req.uri().path());
+    let key = format!("dl:{}", client_ip(&state, &req));
     if !state.download_limiter.check(&key) {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
