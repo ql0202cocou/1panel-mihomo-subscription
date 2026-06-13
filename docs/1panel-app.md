@@ -1,10 +1,10 @@
 # 1Panel App Packaging
 
-> **Status: package update pending.** The service is implemented, but the app
-> package still only exposes the `PANEL_APP_PORT_HTTP` and `RUST_LOG` install
-> fields. The authentication and conversion parameters in the Environment
-> Variables table below must be added to the package before the MVP release; the
-> checklist items marked **(pending)** track this.
+> **Status: package complete (0.1.2).** The `0.1.2` app package exposes the full
+> install form — admin credentials, public origin/path prefix, fetch/cache/proxy
+> tuning, and the `SECURE_COOKIES` override — and the compose file passes them all
+> to the service. The Environment Variables table below is the authoritative
+> reference; the install form, compose, and code stay consistent with it.
 
 The 1Panel app package lives at:
 
@@ -23,7 +23,11 @@ apps/mihomo-subscription/
   README.md
   README_en.md
   logo.png
-  0.1.0/
+  0.1.0/            # historical (incomplete; predates the full install form)
+    data.yml
+    docker-compose.yml
+    data/
+  0.1.2/            # current release
     data.yml
     docker-compose.yml
     data/
@@ -50,15 +54,15 @@ package already exposes.
 |----------|--------|---------|------------|---------|
 | `PANEL_APP_PORT_HTTP` | Install form | `8080` | Yes | Host web port mapping |
 | `RUST_LOG` | Install form | `info` | Yes | Log level |
-| `ADMIN_USERNAME` | Install form | — (required) | No | Management login account |
-| `ADMIN_PASSWORD` | Install form | — (required) | No | Management login password |
-| `PUBLIC_BASE_URL` | Install form | — (required) | No | Externally reachable origin for generated links |
-| `PUBLIC_PATH_PREFIX` | Install form (optional) | random | No | Seed for the public path prefix; runtime value lives in `app_settings` and is resettable (see `data-model.md`) |
-| `FETCH_TIMEOUT_SECONDS` | Install form | `15` | No | Provider fetch total timeout |
-| `MAX_SUBSCRIPTION_SIZE_MB` | Install form | `8` | No | Provider response size limit |
-| `CACHE_TTL_MINUTES` | Install form | `15` | No | Generated YAML cache TTL (see `security-design.md`) |
-| `TRUSTED_PROXY_HOPS` | Install form | `1` | No | Reverse proxy hops to trust when deriving the client IP (see `security-design.md`) |
-| `SECURE_COOKIES` | Install form (optional) | inferred from `https://` `PUBLIC_BASE_URL` | No | Force the `Secure` session-cookie attribute. Set `true` when serving over HTTPS through a TLS-terminating reverse proxy (where the app itself speaks plain HTTP); the service logs a warning when cookies end up without `Secure` |
+| `ADMIN_USERNAME` | Install form | — (required) | Yes | Management login account |
+| `ADMIN_PASSWORD` | Install form | — (required) | Yes | Management login password |
+| `PUBLIC_BASE_URL` | Install form | — (required) | Yes | Externally reachable origin for generated links |
+| `PUBLIC_PATH_PREFIX` | Install form (optional) | random | Yes | Seed for the public path prefix; runtime value lives in `app_settings` and is resettable (see `data-model.md`). Empty/blank is ignored and a random prefix is generated |
+| `FETCH_TIMEOUT_SECONDS` | Install form | `15` | Yes | Provider fetch total timeout |
+| `MAX_SUBSCRIPTION_SIZE_MB` | Install form | `8` | Yes | Provider response size limit |
+| `CACHE_TTL_MINUTES` | Install form | `15` | Yes | Generated YAML cache TTL (see `security-design.md`) |
+| `TRUSTED_PROXY_HOPS` | Install form | `1` | Yes | Reverse proxy hops to trust when deriving the client IP (see `security-design.md`) |
+| `SECURE_COOKIES` | Install form (optional) | `auto` (infer from `https://` `PUBLIC_BASE_URL`) | Yes | Force the `Secure` session-cookie attribute. The install form offers `auto`/`true`/`false`; `auto` (and any unrecognized value) falls back to inference. Set `true` when serving over HTTPS through a TLS-terminating reverse proxy (where the app itself speaks plain HTTP); the service logs a warning when cookies end up without `Secure` |
 | `PORT` | Compose (fixed) | `8080` | Yes | Container listen port |
 | `DATA_DIR` | Compose (fixed) | `/data` | Yes | SQLite data directory |
 
@@ -72,20 +76,21 @@ https://sub.example.com/<public-path-prefix>/api/sub/<token>
 
 ## Validation Checklist
 
-This checklist describes the package state required before the MVP release.
-Items marked **(pending)** are not yet satisfied by the current package.
+This checklist describes the package state required for a release. The `0.1.2`
+package satisfies every item below.
 
 - Root `data.yml` contains app metadata.
 - Version `data.yml` contains `additionalProperties.formFields`.
-- **(pending)** Version `data.yml` exposes `ADMIN_USERNAME` and
-  `ADMIN_PASSWORD` install fields for the management login.
-- **(pending)** Version `data.yml` exposes the remaining install parameters
-  from the Environment Variables table above
-  (`PUBLIC_BASE_URL`, `PUBLIC_PATH_PREFIX`, `FETCH_TIMEOUT_SECONDS`,
-  `MAX_SUBSCRIPTION_SIZE_MB`, `CACHE_TTL_MINUTES`, `SECURE_COOKIES`).
+- Version `data.yml` exposes `ADMIN_USERNAME` and `ADMIN_PASSWORD` install
+  fields for the management login.
+- Version `data.yml` exposes the remaining install parameters from the
+  Environment Variables table above (`PUBLIC_BASE_URL`, `PUBLIC_PATH_PREFIX`,
+  `FETCH_TIMEOUT_SECONDS`, `MAX_SUBSCRIPTION_SIZE_MB`, `CACHE_TTL_MINUTES`,
+  `TRUSTED_PROXY_HOPS`, `SECURE_COOKIES`).
 - `docker-compose.yml` uses `${CONTAINER_NAME}`.
-- **(pending)** `docker-compose.yml` passes `ADMIN_USERNAME` and
-  `ADMIN_PASSWORD` as environment variables.
+- `docker-compose.yml` passes every install-form variable as an environment
+  variable (admin credentials, public origin/prefix, fetch/cache/proxy tuning,
+  and `SECURE_COOKIES`).
 - Web port form field uses `PANEL_APP_PORT_HTTP`.
 - The service is attached to the external `1panel-network`.
 - Persistent data is mounted from `./data`.

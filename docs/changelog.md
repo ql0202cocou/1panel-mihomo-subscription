@@ -50,8 +50,21 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-06-14
+
 ### Added
 
+- Completed the 1Panel app package and cut release `0.1.2`. The new
+  `apps/mihomo-subscription/0.1.2/` package exposes the full install form —
+  `ADMIN_USERNAME`/`ADMIN_PASSWORD`, `PUBLIC_BASE_URL`, `PUBLIC_PATH_PREFIX`,
+  `RUST_LOG`, `FETCH_TIMEOUT_SECONDS`, `MAX_SUBSCRIPTION_SIZE_MB`,
+  `CACHE_TTL_MINUTES`, `TRUSTED_PROXY_HOPS`, and a `SECURE_COOKIES`
+  `auto`/`true`/`false` selector — and its `docker-compose.yml` passes every
+  one through to the container (image `mihomo-subscription:0.1.2`). Bumped
+  `Cargo.toml`/`Cargo.lock` to `0.1.2`, pointed the README/CLAUDE/AGENTS build
+  commands and the CI 1Panel-YAML gate at the new package, and cleared the
+  "package update pending" markers in `docs/1panel-app.md`. The incomplete
+  `0.1.0/` directory is retained for history.
 - New `SECURE_COOKIES` environment variable to force the `Secure` session-cookie
   attribute. It defaults to inferring from an `https://` `PUBLIC_BASE_URL`, so
   behind a TLS-terminating reverse proxy (where the app speaks plain HTTP and

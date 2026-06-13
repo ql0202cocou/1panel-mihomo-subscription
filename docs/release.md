@@ -1,14 +1,14 @@
 # 发布流程 / Release Process
 
-> **状态:未发布。** 服务与多阶段镜像构建已实现,但尚未走完一次正式发布
-> (1Panel 应用包安装表单仍待补齐,见 `1panel-app.md`)。镜像策略:**本地镜像**,
-> 直接在 1Panel 主机上构建,不推送远程仓库;如需分发再启用文末可选推送流程。
+> **状态:0.1.2 应用包已就绪。** 服务、多阶段镜像构建与 1Panel 应用包安装表单
+> 均已完成(`apps/mihomo-subscription/0.1.2/`)。镜像策略:**本地镜像**,直接
+> 在 1Panel 主机上构建,不推送远程仓库;如需分发再启用文末可选推送流程。
 >
-> **Status: not yet released.** The service and the multi-stage image build are
-> implemented, but no formal release has been cut yet (the 1Panel app package
-> install form still needs updating — see `1panel-app.md`). Image strategy:
-> **local images** built on the 1Panel host, no remote registry; enable the
-> optional push flow at the end if distribution is needed.
+> **Status: 0.1.2 app package ready.** The service, the multi-stage image build,
+> and the 1Panel app package install form are all complete
+> (`apps/mihomo-subscription/0.1.2/`). Image strategy: **local images** built on
+> the 1Panel host, no remote registry; enable the optional push flow at the end
+> if distribution is needed.
 
 相关文档 / Related documents: `changelog.md`(发布时滚动 / rolled at release)、
 `1panel-app.md`(应用包结构 / app package layout)。
@@ -36,8 +36,8 @@ cargo test
 # 校验 1Panel YAML / validate 1Panel YAML
 ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
   apps/mihomo-subscription/data.yml \
-  apps/mihomo-subscription/0.1.0/data.yml \
-  apps/mihomo-subscription/0.1.0/docker-compose.yml
+  apps/mihomo-subscription/0.1.2/data.yml \
+  apps/mihomo-subscription/0.1.2/docker-compose.yml
 ```
 
 人工确认 / Manual checks:
@@ -76,7 +76,7 @@ Local-image strategy: sync the repository to the 1Panel host and build there
 directly. The image name matches the `image` field in compose; no push needed.
 
 ```bash
-VERSION=0.1.0
+VERSION=0.1.2
 
 # 在 1Panel 主机上构建 / build on the 1Panel host
 docker build -t mihomo-subscription:${VERSION} .
@@ -98,7 +98,7 @@ Each release adds a new version directory; old version directories are kept:
 
 ```bash
 VERSION=0.2.0
-PREV=0.1.0
+PREV=0.1.2
 cp -R apps/mihomo-subscription/${PREV} apps/mihomo-subscription/${VERSION}
 ```
 
@@ -157,7 +157,7 @@ enabled, update the compose `image` field and the build section of this
 document accordingly.
 
 ```bash
-VERSION=0.1.0
+VERSION=0.1.2
 REGISTRY=ghcr.io/<owner>          # 或 docker.io/<user>、自建仓库
                                   # or docker.io/<user>, or a private registry
 
