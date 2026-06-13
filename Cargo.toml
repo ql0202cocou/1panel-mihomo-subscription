@@ -30,6 +30,7 @@ rand = "0.8"
 sha2 = "0.10"
 subtle = "2.5"
 ipnet = "2"
+async-trait = "0.1"
 
 [profile.release]
 opt-level = 3

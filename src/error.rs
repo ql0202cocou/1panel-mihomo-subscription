@@ -15,6 +15,8 @@ pub enum ApiError {
     Validation(Vec<String>),
     NotFound,
     Conflict(String),
+    /// Upstream provider fetch/parse failure; carries a safe status label.
+    Upstream(String),
     Internal,
 }
 
@@ -37,6 +39,12 @@ impl ApiError {
                 None,
             ),
             ApiError::Conflict(msg) => (StatusCode::CONFLICT, "conflict", msg.clone(), None),
+            ApiError::Upstream(label) => (
+                StatusCode::BAD_GATEWAY,
+                "upstream_error",
+                format!("Provider fetch failed: {label}"),
+                None,
+            ),
             ApiError::Internal => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal_error",
