@@ -201,6 +201,10 @@ possible, and grouped by change type.
 
 ### Documentation
 
+- Updated `CLAUDE.md` for the frontend: added the `web/` npm commands
+  (dev/build/typecheck) and completed the Code-layout module list
+  (`converter`, `generate`, `single_flight`, `rate_limit`, `net`, the
+  injectable `SubscriptionFetcher`) plus the SPA serving note.
 - Flipped the project status from planning to implemented: removed the
   "状态:规划阶段 / Status: planning" banners from `api-design.md` and
   `data-model.md` (now implemented), reworded the `release.md` and
