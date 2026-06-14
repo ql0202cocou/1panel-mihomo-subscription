@@ -37,6 +37,19 @@ export interface CustomNode {
   updated_at: string;
 }
 
+/** A proxy as it appears in the generated output (provider or custom). */
+export interface ProxyPreview {
+  name: string;
+  type: string;
+}
+
+export interface ProxiesResponse {
+  generated: boolean;
+  generated_at: string | null;
+  proxies: ProxyPreview[];
+  groups: string[];
+}
+
 export interface CustomGroup {
   id: string;
   name: string;
