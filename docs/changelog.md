@@ -50,6 +50,22 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-06-14
+
+### Fixed
+
+- Fixed the container failing to start with `unable to open database file`
+  (SQLite code 14) on 1Panel / any `./data:/data` bind mount. The image ran as
+  the unprivileged `appuser`, but a bind mount overrides the build-time
+  `chown appuser /data` with the host directory's (usually root-owned)
+  ownership, so the process could not create the SQLite file. The container now
+  starts as root, a new `docker-entrypoint.sh` `chown`s `DATA_DIR` and re-execs
+  the app as `appuser` via `gosu` (added to the runtime image), preserving the
+  least-privilege runtime while making bind-mounted data directories work
+  out of the box. Added the `apps/mihomo-subscription/0.1.3/` package
+  (image `quinlanhoo/mihomo-subscription:0.1.3`) and bumped
+  `Cargo.toml`/`Cargo.lock` to `0.1.3`.
+
 ### Documentation
 
 - Added a "Create the GitHub Release" step to `docs/release.md` (`gh release
