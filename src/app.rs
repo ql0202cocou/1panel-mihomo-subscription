@@ -99,6 +99,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/profiles/:id/generate", post(generate::generate))
         .route("/profiles/:id/preview", get(generate::preview))
         .route("/profiles/:id/rules", put(profiles::put_rules))
+        .route("/profiles/:id/proxies", get(profiles::list_proxies))
         .route(
             "/profiles/:id/nodes",
             get(profiles::list_nodes).post(profiles::create_node),

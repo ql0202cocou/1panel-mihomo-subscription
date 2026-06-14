@@ -447,6 +447,98 @@ pub struct NodeBody {
     enabled: Option<bool>,
 }
 
+/// A provider/custom proxy as it appears in the generated output, surfaced for
+/// the "node preview" card. Read-only; the frontend marks which names are
+/// editable custom nodes by cross-referencing the custom-node list.
+#[derive(Serialize)]
+struct ProxyPreview {
+    name: String,
+    #[serde(rename = "type")]
+    proxy_type: String,
+}
+
+#[derive(Serialize)]
+struct ProxiesResponse {
+    /// Whether a generated cache exists yet (provider nodes are parsed from it).
+    generated: bool,
+    generated_at: Option<String>,
+    proxies: Vec<ProxyPreview>,
+    /// Proxy-group names in the generated output (for member suggestions).
+    groups: Vec<String>,
+}
+
+/// List every proxy in the latest generated output (provider proxies + merged
+/// custom nodes). Parsed from `generated_cache.output_yaml`; returns
+/// `generated: false` with an empty list when the profile has never been
+/// generated.
+pub async fn list_proxies(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<impl IntoResponse> {
+    let _ = load_profile_row(&state, &id).await?;
+    let cache = sqlx::query_as::<_, (String, String)>(
+        "SELECT output_yaml, generated_at FROM generated_cache WHERE profile_id = ?",
+    )
+    .bind(&id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    let Some((output_yaml, generated_at)) = cache else {
+        return Ok(Json(ProxiesResponse {
+            generated: false,
+            generated_at: None,
+            proxies: Vec::new(),
+            groups: Vec::new(),
+        }));
+    };
+
+    // The output is trusted (we produced it), but parse through the bounded
+    // parser anyway and degrade gracefully to an empty list on any surprise.
+    let (proxies, groups) = yaml::parse_limited(&output_yaml)
+        .ok()
+        .map(|v| (extract_proxy_previews(&v), extract_group_names(&v)))
+        .unwrap_or_default();
+
+    Ok(Json(ProxiesResponse {
+        generated: true,
+        generated_at: Some(generated_at),
+        proxies,
+        groups,
+    }))
+}
+
+fn extract_proxy_previews(root: &serde_yaml::Value) -> Vec<ProxyPreview> {
+    match root.get("proxies") {
+        Some(serde_yaml::Value::Sequence(items)) => items
+            .iter()
+            .filter_map(|item| {
+                let name = item.get("name").and_then(|v| v.as_str())?.to_string();
+                let proxy_type = item
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                Some(ProxyPreview { name, proxy_type })
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn extract_group_names(root: &serde_yaml::Value) -> Vec<String> {
+    match root.get("proxy-groups") {
+        Some(serde_yaml::Value::Sequence(items)) => items
+            .iter()
+            .filter_map(|item| {
+                item.get("name")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
 fn validate_node(body: &NodeBody) -> ApiResult<()> {
     if body.name.trim().is_empty() || body.node_type.trim().is_empty() {
         return Err(ApiError::BadRequest(

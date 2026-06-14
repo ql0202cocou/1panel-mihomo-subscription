@@ -50,6 +50,49 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-06-14
+
+### Added
+
+- 节点预览:订阅详情页的「自定义节点」卡片改名为「节点预览」,在自定义节点之外
+  同时只读列出机场节点(解析自最近一次生成的输出)。新增只读接口
+  `GET /api/profiles/:id/proxies`。
+  Node preview: the profile detail page's "Custom nodes" card is renamed to
+  "Node preview" and now also lists provider (airport) proxies read-only,
+  parsed from the latest generated output, alongside the editable custom nodes.
+  Adds the read-only `GET /api/profiles/:id/proxies` endpoint (now also
+  returning provider proxy-group names for member suggestions).
+
+### Changed
+
+- 自定义节点改用结构化 UI 表单编辑(按类型给出 server/port/密码/加密/uuid/tls/sni
+  等常用字段,其余字段以高级键值行补充),不再要求管理员手写 Mihomo proxy YAML;
+  保存时由前端序列化为 `content`。前端新增 `yaml` 依赖。
+  Custom nodes are now edited through a structured UI form (common per-type
+  fields such as server/port/password/cipher/uuid/tls/sni, with everything else
+  as advanced key/value rows) instead of a hand-written Mihomo proxy YAML
+  editor; the frontend serializes the form to `content` on save. Adds the
+  `yaml` frontend dependency.
+- 自定义分组改用结构化 UI 表单编辑:按分组类型给出选项字段
+  (`url`/`interval`/`tolerance`/`lazy`/`strategy`)+ 高级键值行,取代原先的
+  选项 JSON 文本框;成员选择改为从机场节点/分组、自定义节点/分组与内置策略中
+  下拉候选(仍可手动输入)。节点与分组共用一套结构化字段组件。
+  Custom groups are now edited through a structured UI form: per-type option
+  fields (`url`/`interval`/`tolerance`/`lazy`/`strategy`) plus advanced
+  key/value rows replace the old options-JSON textarea, and members are picked
+  from suggestions (provider proxies/groups, custom nodes/groups, built-in
+  policies) while still allowing free input. Nodes and groups share one set of
+  structured-field components.
+
+### Documentation
+
+- 新增 `apps/mihomo-subscription/0.1.4/` 应用包(镜像
+  `quinlanhoo/mihomo-subscription:0.1.4`),将 `Cargo.toml`/`Cargo.lock` 与
+  `web/package.json` 升到 `0.1.4`。
+  Added the `apps/mihomo-subscription/0.1.4/` app package (image
+  `quinlanhoo/mihomo-subscription:0.1.4`) and bumped `Cargo.toml`/`Cargo.lock`
+  and `web/package.json` to `0.1.4`.
+
 ## [0.1.3] - 2026-06-14
 
 ### Fixed

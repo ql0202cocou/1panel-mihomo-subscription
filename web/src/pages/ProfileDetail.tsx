@@ -88,8 +88,19 @@ export default function ProfileDetail() {
 
       <BasicInfo detail={detail} onSaved={reload} />
       <SourceInfo detail={detail} onRefresh={generate} onSaved={reload} refreshing={generating} />
-      <NodesCard profileId={detail.id} nodes={detail.nodes} onChange={reload} />
-      <GroupsCard profileId={detail.id} groups={detail.groups} onChange={reload} />
+      <NodesCard
+        profileId={detail.id}
+        nodes={detail.nodes}
+        generatedAt={detail.last_generated_at}
+        onChange={reload}
+      />
+      <GroupsCard
+        profileId={detail.id}
+        groups={detail.groups}
+        nodes={detail.nodes}
+        generatedAt={detail.last_generated_at}
+        onChange={reload}
+      />
       <RulesCard
         profileId={detail.id}
         initial={detail.rules?.content ?? ""}

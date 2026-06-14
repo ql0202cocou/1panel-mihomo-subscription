@@ -5,8 +5,8 @@ Guidance for Claude Code (claude.ai/code) working in this repository.
 ## Project Status — Read This First
 
 The documented design under `docs/` is **implemented** (Rust/Axum backend +
-`web/` SPA); the docs remain the source of truth. The `0.1.3` 1Panel app
-package is complete (`apps/mihomo-subscription/0.1.3/`, full install form). To
+`web/` SPA); the docs remain the source of truth. The `0.1.4` 1Panel app
+package is complete (`apps/mihomo-subscription/0.1.4/`, full install form). To
 ship a new version, follow the release process in `docs/release.md` (multi-arch
 `docker buildx ... --push` to Docker Hub `quinlanhoo/mihomo-subscription` and tag
 `vX.Y.Z`; on-host local build is the offline/intranet fallback).
@@ -26,7 +26,7 @@ cargo test
 cargo audit                          # needs `cargo install cargo-audit`; ignores in .cargo/audit.toml
 
 # Local Dockerfile sanity check (not a CI gate):
-docker build -t mihomo-subscription:0.1.3 .
+docker build -t mihomo-subscription:0.1.4 .
 
 # One test / one file:
 cargo test --lib ssrf::tests::url_validation_rules
@@ -39,7 +39,7 @@ npm run build      # tsc --noEmit + vite build -> web/dist (served by Axum)
 
 # Validate 1Panel YAML after editing anything under apps/:
 ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f) }' \
-  apps/mihomo-subscription/data.yml apps/mihomo-subscription/0.1.3/{data,docker-compose}.yml
+  apps/mihomo-subscription/data.yml apps/mihomo-subscription/0.1.4/{data,docker-compose}.yml
 ```
 
 ## Architecture
@@ -114,3 +114,9 @@ suites are release gates.
   `quinlanhoo/mihomo-subscription:<version>` (multi-arch amd64+arm64) and pulled
   by the 1Panel host; on-host local build is the offline/intranet fallback (see
   `docs/release.md`). `logo.png` is a placeholder — replace before distribution.
+- Container runtime user model: the image **starts as root** so
+  `docker-entrypoint.sh` can `chown ${DATA_DIR}` (a `./data:/data` bind mount
+  overrides the build-time `chown`, otherwise the app crashes with SQLite
+  `code 14 (CANTOPEN)`), then drops to the unprivileged `appuser` via `gosu`
+  before exec'ing the binary. Keep this drop intact when editing the
+  `Dockerfile` / entrypoint; the business process must not run as root.
