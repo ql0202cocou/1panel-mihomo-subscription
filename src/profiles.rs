@@ -463,8 +463,9 @@ struct ProxiesResponse {
     generated: bool,
     generated_at: Option<String>,
     proxies: Vec<ProxyPreview>,
-    /// Proxy-group names in the generated output (for member suggestions).
-    groups: Vec<String>,
+    /// Proxy-groups in the generated output (name + type), for the group
+    /// preview and for member suggestions.
+    groups: Vec<ProxyPreview>,
 }
 
 /// List every proxy in the latest generated output (provider proxies + merged
@@ -496,7 +497,12 @@ pub async fn list_proxies(
     // parser anyway and degrade gracefully to an empty list on any surprise.
     let (proxies, groups) = yaml::parse_limited(&output_yaml)
         .ok()
-        .map(|v| (extract_proxy_previews(&v), extract_group_names(&v)))
+        .map(|v| {
+            (
+                extract_previews(&v, "proxies"),
+                extract_previews(&v, "proxy-groups"),
+            )
+        })
         .unwrap_or_default();
 
     Ok(Json(ProxiesResponse {
@@ -507,8 +513,10 @@ pub async fn list_proxies(
     }))
 }
 
-fn extract_proxy_previews(root: &serde_yaml::Value) -> Vec<ProxyPreview> {
-    match root.get("proxies") {
+/// Extract `name` + `type` previews from a top-level sequence (`proxies` or
+/// `proxy-groups`) of the generated output.
+fn extract_previews(root: &serde_yaml::Value, key: &str) -> Vec<ProxyPreview> {
+    match root.get(key) {
         Some(serde_yaml::Value::Sequence(items)) => items
             .iter()
             .filter_map(|item| {
@@ -519,20 +527,6 @@ fn extract_proxy_previews(root: &serde_yaml::Value) -> Vec<ProxyPreview> {
                     .unwrap_or_default()
                     .to_string();
                 Some(ProxyPreview { name, proxy_type })
-            })
-            .collect(),
-        _ => Vec::new(),
-    }
-}
-
-fn extract_group_names(root: &serde_yaml::Value) -> Vec<String> {
-    match root.get("proxy-groups") {
-        Some(serde_yaml::Value::Sequence(items)) => items
-            .iter()
-            .filter_map(|item| {
-                item.get("name")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_string)
             })
             .collect(),
         _ => Vec::new(),
