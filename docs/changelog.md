@@ -50,6 +50,12 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+### Documentation
+
+- 将根 `README.md` 的版本号与镜像 tag 同步到 `0.1.4`(0.1.4 发布时遗漏)。
+  Synced the version string and image tag in the root `README.md` to `0.1.4`
+  (missed during the 0.1.4 release).
+
 ## [0.1.4] - 2026-06-14
 
 ### Added

@@ -9,9 +9,9 @@ A lightweight self-hosted Mihomo subscription converter/distributor for 1Panel
 nodes, and proxy groups, and generate long-lived Mihomo links. Ships a web admin
 UI with login, SSRF protection, and provider-URL masking.
 
-> 状态:已实现并经安全审计加固。当前版本 `0.1.3`,镜像已发布到 Docker Hub
+> 状态:已实现并经安全审计加固。当前版本 `0.1.4`,镜像已发布到 Docker Hub
 > (`quinlanhoo/mihomo-subscription`,多架构 amd64+arm64),1Panel 应用包安装表单完整。
-> Status: implemented and security-hardened. Current version `0.1.3`; the image is
+> Status: implemented and security-hardened. Current version `0.1.4`; the image is
 > published on Docker Hub (`quinlanhoo/mihomo-subscription`, multi-arch
 > amd64+arm64) and the 1Panel app package ships a complete install form.
 
@@ -34,7 +34,7 @@ create:
 ```yaml
 services:
   mihomo-subscription:
-    image: quinlanhoo/mihomo-subscription:0.1.3
+    image: quinlanhoo/mihomo-subscription:0.1.4
     container_name: mihomo-subscription
     restart: always
     networks: [1panel-network]
