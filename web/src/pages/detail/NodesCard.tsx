@@ -1,54 +1,80 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Button,
   Card,
   Empty,
-  Form,
-  Input,
   List,
   Modal,
   Popconfirm,
   Space,
   Tag,
+  Typography,
   message,
 } from "antd";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../../api";
-import type { CustomNode } from "../../types";
-import YamlEditor from "../../components/YamlEditor";
+import type { CustomNode, ProxiesResponse, ProxyPreview } from "../../types";
+import NodeForm, { contentToModel, modelToContent, type NodeModel } from "./NodeForm";
 
 interface Props {
   profileId: string;
   nodes: CustomNode[];
+  /** Changes when the profile is (re)generated; triggers a provider-node refetch. */
+  generatedAt: string | null;
   onChange: () => void;
 }
 
-export default function NodesCard({ profileId, nodes, onChange }: Props) {
+const EMPTY_MODEL: NodeModel = { name: "", type: "", fields: {} };
+
+export default function NodesCard({ profileId, nodes, generatedAt, onChange }: Props) {
   const { t } = useTranslation();
-  const [editing, setEditing] = useState<CustomNode | null>(null);
+  const [providers, setProviders] = useState<ProxyPreview[]>([]);
+  const [generated, setGenerated] = useState(true);
+
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [nodeType, setNodeType] = useState("");
-  const [content, setContent] = useState("");
+  const [editing, setEditing] = useState<CustomNode | null>(null);
+  const [model, setModel] = useState<NodeModel>(EMPTY_MODEL);
+  const [formKey, setFormKey] = useState("new");
+
+  const loadProviders = useCallback(async () => {
+    try {
+      const res = await api<ProxiesResponse>(`/api/profiles/${profileId}/proxies`);
+      setProviders(res.proxies);
+      setGenerated(res.generated);
+    } catch {
+      // Non-fatal: the card still works for custom nodes without the preview.
+    }
+  }, [profileId]);
+
+  useEffect(() => {
+    void loadProviders();
+  }, [loadProviders, generatedAt]);
 
   function startAdd() {
     setEditing(null);
-    setName("");
-    setNodeType("");
-    setContent("");
+    setModel(EMPTY_MODEL);
+    setFormKey(`new-${Date.now()}`);
     setOpen(true);
   }
 
   function startEdit(node: CustomNode) {
     setEditing(node);
-    setName(node.name);
-    setNodeType(node.node_type);
-    setContent(node.content);
+    setModel(contentToModel(node.content));
+    setFormKey(node.id);
     setOpen(true);
   }
 
   async function save() {
-    const body = JSON.stringify({ name, node_type: nodeType, content, enabled: true });
+    if (!model.name.trim() || !model.type.trim()) {
+      message.error(t("nodes.nameTypeRequired"));
+      return;
+    }
+    const body = JSON.stringify({
+      name: model.name.trim(),
+      node_type: model.type.trim(),
+      content: modelToContent(model),
+      enabled: editing ? editing.enabled : true,
+    });
     try {
       if (editing) {
         await api(`/api/profiles/${profileId}/nodes/${editing.id}`, { method: "PUT", body });
@@ -58,7 +84,7 @@ export default function NodesCard({ profileId, nodes, onChange }: Props) {
       setOpen(false);
       onChange();
     } catch (e) {
-      message.error((e as ApiError).message ?? "保存失败");
+      message.error((e as ApiError).message ?? t("common.saveFailed"));
     }
   }
 
@@ -67,18 +93,27 @@ export default function NodesCard({ profileId, nodes, onChange }: Props) {
     onChange();
   }
 
+  // Custom nodes are editable; provider proxies already merged into the output
+  // (matched by name) are dropped from the read-only section to avoid duplicates.
+  const customNames = new Set(nodes.map((n) => n.name));
+  const providerOnly = providers.filter((p) => !customNames.has(p.name));
+  const total = nodes.length + providerOnly.length;
+
   return (
     <Card
-      title={`${t("nodes.title")} (${nodes.length})`}
+      title={`${t("nodes.title")} (${total})`}
       extra={<Button onClick={startAdd}>{t("nodes.add")}</Button>}
     >
-      {nodes.length === 0 ? (
+      {!generated && (
+        <Typography.Paragraph type="secondary">{t("nodes.notGenerated")}</Typography.Paragraph>
+      )}
+      {total === 0 ? (
         <Empty description={t("nodes.empty")} />
       ) : (
-        <List
-          dataSource={nodes}
-          renderItem={(node) => (
+        <List>
+          {nodes.map((node) => (
             <List.Item
+              key={`c-${node.id}`}
               actions={[
                 <a key="edit" onClick={() => startEdit(node)}>
                   {t("basic.edit")}
@@ -94,11 +129,22 @@ export default function NodesCard({ profileId, nodes, onChange }: Props) {
             >
               <Space>
                 <span>{node.name}</span>
-                <Tag>{node.node_type}</Tag>
+                {node.node_type && <Tag>{node.node_type}</Tag>}
+                <Tag color="blue">{t("nodes.customTag")}</Tag>
+                {!node.enabled && <Tag>{t("profiles.disabled")}</Tag>}
               </Space>
             </List.Item>
-          )}
-        />
+          ))}
+          {providerOnly.map((p) => (
+            <List.Item key={`p-${p.name}`}>
+              <Space>
+                <span>{p.name}</span>
+                {p.type && <Tag>{p.type}</Tag>}
+                <Tag>{t("nodes.providerTag")}</Tag>
+              </Space>
+            </List.Item>
+          ))}
+        </List>
       )}
 
       <Modal
@@ -107,22 +153,9 @@ export default function NodesCard({ profileId, nodes, onChange }: Props) {
         onCancel={() => setOpen(false)}
         onOk={save}
         width={680}
+        destroyOnClose
       >
-        <Form layout="vertical">
-          <Form.Item label={t("nodes.name")} required>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </Form.Item>
-          <Form.Item label={t("nodes.type")} required>
-            <Input
-              value={nodeType}
-              onChange={(e) => setNodeType(e.target.value)}
-              placeholder="ss / vmess / vless / trojan / hysteria2"
-            />
-          </Form.Item>
-          <Form.Item label={t("nodes.content")} required>
-            <YamlEditor value={content} onChange={setContent} height="200px" />
-          </Form.Item>
-        </Form>
+        <NodeForm key={formKey} value={model} onChange={setModel} />
       </Modal>
     </Card>
   );

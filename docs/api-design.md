@@ -116,6 +116,7 @@ endpoint require a valid session and otherwise return `401`.
 | PUT | `/api/profiles/:id` | 是/Yes | 更新基础信息 / Update base fields |
 | DELETE | `/api/profiles/:id` | 是/Yes | 删除配置 / Delete profile |
 | PUT | `/api/profiles/:id/rules` | 是/Yes | 替换自定义规则 / Replace custom rules |
+| GET | `/api/profiles/:id/proxies` | 是/Yes | 节点预览:生成输出中的全部代理与分组名(机场+自定义,只读) / Node preview: all proxies and group names in the generated output (provider + custom, read-only) |
 | GET / POST | `/api/profiles/:id/nodes` | 是/Yes | 自定义节点 / Custom nodes |
 | PUT / DELETE | `/api/profiles/:id/nodes/:node_id` | 是/Yes | 单个节点 / Single node |
 | GET / POST | `/api/profiles/:id/groups` | 是/Yes | 自定义分组 / Custom groups |
@@ -218,6 +219,38 @@ POST /api/profiles/:id/groups
   `data-model.md`).
 - `PUT` 使用与 `POST` 相同的请求体,整体替换。
 - `PUT` takes the same body as `POST` and replaces the resource wholesale.
+
+节点预览 / Node preview:
+
+```text
+GET /api/profiles/:id/proxies
+{
+  "generated": true,
+  "generated_at": "2026-06-14T00:00:00Z",
+  "proxies": [ { "name": "hk-1", "type": "ss" }, { "name": "my-ss", "type": "ss" } ],
+  "groups": [ "Proxy" ]
+}
+```
+
+- 只读。`proxies`(`name`/`type`)与 `groups`(分组名)解析自
+  `generated_cache.output_yaml`,因此同时包含机场与已并入的自定义条目;未生成过时
+  返回 `generated: false` 与空数组。前端据自定义节点名集合区分可编辑(自定义)与
+  只读(机场)节点,并用 `proxies`/`groups` 为自定义分组的成员选择提供候选。
+- Read-only. `proxies` (`name`/`type`) and `groups` (group names) are parsed
+  from `generated_cache.output_yaml`, so they contain both provider and merged
+  custom entries; before the first generation it returns `generated: false`
+  and empty arrays. The frontend distinguishes editable (custom) from read-only
+  (provider) nodes via the custom-node name set, and uses `proxies`/`groups`
+  as member suggestions for the custom-group editor.
+- 编辑自定义节点与自定义分组均通过结构化表单完成:节点给出常用字段 + 高级键值;
+  分组按类型给出选项(`url`/`interval`/`tolerance`/`lazy`/`strategy`)+ 高级键值,
+  成员从候选下拉中选择。前端保存时分别序列化为节点 `content` 的 Mihomo proxy YAML
+  与分组 `options` 的 JSON 对象。
+- Both custom nodes and custom groups are edited through structured forms: nodes
+  expose common fields plus advanced key/value rows; groups expose per-type
+  options (`url`/`interval`/`tolerance`/`lazy`/`strategy`) plus advanced rows,
+  with members chosen from suggestions. The frontend serializes these to the
+  node `content` Mihomo proxy YAML and the group `options` JSON object on save.
 
 ## 生成与校验 / Generate and Validation
 
