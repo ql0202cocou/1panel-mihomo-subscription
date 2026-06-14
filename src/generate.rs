@@ -115,6 +115,37 @@ pub async fn preview(
     Ok(yaml_body(yaml))
 }
 
+#[derive(Serialize)]
+struct ProviderRules {
+    rules: Vec<String>,
+}
+
+/// `GET /api/profiles/:id/provider-rules` — fetch the provider subscription and
+/// return its `rules` lines, so the admin can seed the rule editor with the
+/// airport's own rules (which the converter otherwise replaces). Live,
+/// SSRF-protected fetch; not cached and does not touch `last_fetch_*`.
+pub async fn provider_rules(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<Response> {
+    let profile = load_core(&state, &id).await?.ok_or(ApiError::NotFound)?;
+    let fetched = state
+        .fetcher
+        .fetch(&profile.source_url)
+        .await
+        .map_err(|e| ApiError::Upstream(e.status_label()))?;
+    let root = crate::yaml::parse_limited(&fetched.body)
+        .map_err(|_| ApiError::Upstream("provider_parse".to_string()))?;
+    let rules = match root.get("rules") {
+        Some(serde_yaml::Value::Sequence(items)) => items
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect(),
+        _ => Vec::new(),
+    };
+    Ok(Json(ProviderRules { rules }).into_response())
+}
+
 /// `GET /:public_path_prefix/api/sub/:token` — public subscription download.
 pub async fn public_sub(
     State(state): State<Arc<AppState>>,

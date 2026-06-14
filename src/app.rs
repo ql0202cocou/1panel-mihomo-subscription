@@ -98,6 +98,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/profiles/:id/reset-token", post(profiles::reset_token))
         .route("/profiles/:id/generate", post(generate::generate))
         .route("/profiles/:id/preview", get(generate::preview))
+        .route(
+            "/profiles/:id/provider-rules",
+            get(generate::provider_rules),
+        )
         .route("/profiles/:id/rules", put(profiles::put_rules))
         .route("/profiles/:id/proxies", get(profiles::list_proxies))
         .route(

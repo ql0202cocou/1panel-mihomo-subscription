@@ -50,6 +50,29 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-06-14
+
+### Added
+
+- 规则预览支持「导入机场规则」:由于转换时自定义规则会整体替换机场规则,新增
+  `GET /api/profiles/:id/provider-rules`(实时 SSRF 拉取机场订阅并解析 `rules`),
+  前端「导入机场规则」按钮把机场规则追加到列表末尾(跳过重复),便于以机场规则为
+  起点再做定制。
+  Rule preview can now import the provider's rules: since the converter replaces
+  provider rules wholesale, added `GET /api/profiles/:id/provider-rules` (a live
+  SSRF-protected fetch that parses the provider's `rules`), with an "Import
+  provider rules" button that appends them to the list (skipping duplicates) so
+  the airport's rules can be a starting point.
+
+### Documentation
+
+- 新增 `apps/mihomo-subscription/0.1.8/` 应用包(镜像
+  `quinlanhoo/mihomo-subscription:0.1.8`),将 `Cargo.toml`/`Cargo.lock` 与
+  `web/package.json` 升到 `0.1.8`。
+  Added the `apps/mihomo-subscription/0.1.8/` app package (image
+  `quinlanhoo/mihomo-subscription:0.1.8`) and bumped `Cargo.toml`/`Cargo.lock`
+  and `web/package.json` to `0.1.8`.
+
 ## [0.1.7] - 2026-06-14
 
 ### Changed
