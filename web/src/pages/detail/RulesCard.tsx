@@ -1,88 +1,306 @@
-import { useEffect, useRef, useState } from "react";
-import { Button, Card, Space, Typography, message } from "antd";
+import { useCallback, useEffect, useState } from "react";
+import {
+  Alert,
+  AutoComplete,
+  Button,
+  Card,
+  Empty,
+  Form,
+  Input,
+  List,
+  Modal,
+  Popconfirm,
+  Space,
+  Switch,
+  Tag,
+  Typography,
+  message,
+} from "antd";
 import { useTranslation } from "react-i18next";
-import { EditorSelection } from "@codemirror/state";
-import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { api, type ApiError } from "../../api";
-import YamlEditor from "../../components/YamlEditor";
+import type { CustomGroup, CustomNode, ProxiesResponse } from "../../types";
+import { BUILTIN_POLICIES } from "./groupSchema";
 
 interface Props {
   profileId: string;
   initial: string;
-  /// Validation errors from the last generate attempt (itemized).
+  nodes: CustomNode[];
+  groups: CustomGroup[];
+  /** Changes when the profile is (re)generated; refreshes policy suggestions. */
+  generatedAt: string | null;
+  /** Validation errors from the last generate attempt (itemized). */
   errors: string[];
   onSaved: () => void;
 }
 
-/// Parse a "rules line N ..." message to its 1-based line number.
-function lineOf(message: string): number | null {
-  const m = message.match(/rules line (\d+)/);
-  return m ? Number(m[1]) : null;
+// Common Mihomo rule types (free text still allowed in the selector).
+const RULE_TYPES = [
+  "DOMAIN-SUFFIX",
+  "DOMAIN",
+  "DOMAIN-KEYWORD",
+  "DOMAIN-REGEX",
+  "GEOSITE",
+  "IP-CIDR",
+  "IP-CIDR6",
+  "GEOIP",
+  "IP-ASN",
+  "SRC-IP-CIDR",
+  "DST-PORT",
+  "SRC-PORT",
+  "PROCESS-NAME",
+  "PROCESS-PATH",
+  "RULE-SET",
+  "MATCH",
+];
+// Types whose match resolves an IP and thus accept the `no-resolve` modifier.
+const IP_TYPES = new Set(["IP-CIDR", "IP-CIDR6", "GEOIP", "IP-ASN", "SRC-IP-CIDR"]);
+
+interface RuleModel {
+  type: string;
+  payload: string;
+  policy: string;
+  noResolve: boolean;
 }
 
-export default function RulesCard({ profileId, initial, errors, onSaved }: Props) {
+const EMPTY_RULE: RuleModel = { type: "DOMAIN-SUFFIX", payload: "", policy: "", noResolve: false };
+
+function parseRule(line: string): RuleModel {
+  const parts = line.split(",").map((p) => p.trim());
+  const type = parts[0] ?? "";
+  if (type.toUpperCase() === "MATCH") {
+    return { type, payload: "", policy: parts[1] ?? "", noResolve: false };
+  }
+  return {
+    type,
+    payload: parts[1] ?? "",
+    policy: parts[2] ?? "",
+    noResolve: parts.slice(3).some((p) => p === "no-resolve"),
+  };
+}
+
+function serializeRule(r: RuleModel): string {
+  if (r.type.toUpperCase() === "MATCH") return `MATCH,${r.policy}`;
+  const base = `${r.type},${r.payload},${r.policy}`;
+  return r.noResolve ? `${base},no-resolve` : base;
+}
+
+const isComment = (line: string) => line.startsWith("#");
+
+export default function RulesCard({
+  profileId,
+  initial,
+  nodes,
+  groups,
+  generatedAt,
+  errors,
+  onSaved,
+}: Props) {
   const { t } = useTranslation();
-  const [content, setContent] = useState(initial);
-  const editorRef = useRef<ReactCodeMirrorRef>(null);
+  // Source of truth is the raw, non-empty lines so comments and uncommon rules
+  // (e.g. logical AND/OR) are preserved verbatim until explicitly edited.
+  const [lines, setLines] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [model, setModel] = useState<RuleModel>(EMPTY_RULE);
+  const [policies, setPolicies] = useState<string[]>([]);
 
   useEffect(() => {
-    setContent(initial);
+    setLines(
+      initial
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l !== ""),
+    );
   }, [initial]);
 
-  async function save() {
+  const loadPolicies = useCallback(async () => {
+    try {
+      const res = await api<ProxiesResponse>(`/api/profiles/${profileId}/proxies`);
+      setPolicies([...res.proxies.map((p) => p.name), ...res.groups.map((g) => g.name)]);
+    } catch {
+      // Non-fatal: policies can still be typed in by hand.
+    }
+  }, [profileId]);
+
+  useEffect(() => {
+    void loadPolicies();
+  }, [loadPolicies, generatedAt]);
+
+  async function persist(next: string[]) {
     try {
       await api(`/api/profiles/${profileId}/rules`, {
         method: "PUT",
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content: next.join("\n") }),
       });
-      message.success(t("rules.saved"));
       onSaved();
     } catch (e) {
-      message.error((e as ApiError).message ?? "保存失败");
+      message.error((e as ApiError).message ?? t("common.saveFailed"));
     }
   }
 
-  function jumpTo(line: number) {
-    const view = editorRef.current?.view;
-    if (!view) return;
-    const lineInfo = view.state.doc.line(Math.min(line, view.state.doc.lines));
-    view.dispatch({
-      selection: EditorSelection.cursor(lineInfo.from),
-      scrollIntoView: true,
-    });
-    view.focus();
+  function startAdd() {
+    setEditingIndex(null);
+    setModel(EMPTY_RULE);
+    setOpen(true);
   }
+
+  function startEdit(index: number) {
+    setEditingIndex(index);
+    setModel(parseRule(lines[index]));
+    setOpen(true);
+  }
+
+  function save() {
+    const isMatch = model.type.trim().toUpperCase() === "MATCH";
+    if (!model.type.trim() || !model.policy.trim() || (!isMatch && !model.payload.trim())) {
+      message.error(t("rules.incomplete"));
+      return;
+    }
+    const line = serializeRule(model);
+    const next =
+      editingIndex === null
+        ? [...lines, line]
+        : lines.map((l, i) => (i === editingIndex ? line : l));
+    setOpen(false);
+    void persist(next);
+  }
+
+  function remove(index: number) {
+    void persist(lines.filter((_, i) => i !== index));
+  }
+
+  const policyOptions = Array.from(
+    new Set(
+      [
+        ...policies,
+        ...nodes.map((n) => n.name),
+        ...groups.map((g) => g.name),
+        ...BUILTIN_POLICIES,
+      ].filter((s) => s.trim() !== ""),
+    ),
+  ).map((value) => ({ value }));
+
+  const isMatch = model.type.trim().toUpperCase() === "MATCH";
 
   return (
     <Card
-      title={t("rules.title")}
-      extra={
-        <Button type="primary" onClick={save}>
-          {t("rules.save")}
-        </Button>
-      }
+      title={`${t("rules.title")} (${lines.length})`}
+      extra={<Button onClick={startAdd}>{t("rules.add")}</Button>}
     >
       <Space direction="vertical" style={{ width: "100%" }} size="small">
         <Typography.Text type="secondary">{t("rules.hint")}</Typography.Text>
-        <YamlEditor ref={editorRef} value={content} onChange={setContent} height="260px" />
         {errors.length > 0 && (
-          <div>
-            {errors.map((err, i) => {
-              const line = lineOf(err);
+          <Alert
+            type="error"
+            showIcon
+            message={t("rules.invalid")}
+            description={errors.map((err, i) => (
+              <div key={i}>{err}</div>
+            ))}
+          />
+        )}
+        {lines.length === 0 ? (
+          <Empty description={t("rules.empty")} />
+        ) : (
+          <List>
+            {lines.map((line, index) => {
+              const r = parseRule(line);
               return (
-                <div key={i} style={{ color: "#cf1322", marginTop: 4 }}>
-                  {err}
-                  {line && (
-                    <Button type="link" size="small" onClick={() => jumpTo(line)}>
-                      {t("rules.jump")}
-                    </Button>
+                <List.Item
+                  key={`${index}-${line}`}
+                  actions={
+                    isComment(line)
+                      ? [
+                          <Popconfirm
+                            key="del"
+                            title={t("rules.deleteConfirm")}
+                            onConfirm={() => remove(index)}
+                          >
+                            <a>{t("rules.delete")}</a>
+                          </Popconfirm>,
+                        ]
+                      : [
+                          <a key="edit" onClick={() => startEdit(index)}>
+                            {t("basic.edit")}
+                          </a>,
+                          <Popconfirm
+                            key="del"
+                            title={t("rules.deleteConfirm")}
+                            onConfirm={() => remove(index)}
+                          >
+                            <a>{t("rules.delete")}</a>
+                          </Popconfirm>,
+                        ]
+                  }
+                >
+                  {isComment(line) ? (
+                    <Typography.Text type="secondary">{line}</Typography.Text>
+                  ) : (
+                    <Space wrap>
+                      <Tag>{r.type}</Tag>
+                      {r.type.toUpperCase() !== "MATCH" && <span>{r.payload}</span>}
+                      <span style={{ color: "#999" }}>→</span>
+                      <Tag color="blue">{r.policy}</Tag>
+                      {r.noResolve && <Tag>no-resolve</Tag>}
+                    </Space>
                   )}
-                </div>
+                </List.Item>
               );
             })}
-          </div>
+          </List>
         )}
       </Space>
+
+      <Modal
+        title={editingIndex === null ? t("rules.add") : t("rules.edit")}
+        open={open}
+        onCancel={() => setOpen(false)}
+        onOk={save}
+        width={560}
+        destroyOnClose
+      >
+        <Form layout="vertical">
+          <Form.Item label={t("rules.ruleType")} required>
+            <AutoComplete
+              style={{ width: "100%" }}
+              options={RULE_TYPES.map((v) => ({ value: v }))}
+              value={model.type}
+              onChange={(type) => setModel({ ...model, type })}
+              filterOption={(input, opt) =>
+                (opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
+              }
+            />
+          </Form.Item>
+          {!isMatch && (
+            <Form.Item label={t("rules.payload")} required>
+              <Input
+                value={model.payload}
+                onChange={(e) => setModel({ ...model, payload: e.target.value })}
+                placeholder="example.com / 1.2.3.4/24 / CN"
+              />
+            </Form.Item>
+          )}
+          <Form.Item label={t("rules.policy")} required>
+            <AutoComplete
+              style={{ width: "100%" }}
+              options={policyOptions}
+              value={model.policy}
+              onChange={(policy) => setModel({ ...model, policy })}
+              filterOption={(input, opt) =>
+                String(opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
+              }
+            />
+          </Form.Item>
+          {!isMatch && IP_TYPES.has(model.type.trim().toUpperCase()) && (
+            <Form.Item label={t("rules.noResolve")}>
+              <Switch
+                checked={model.noResolve}
+                onChange={(noResolve) => setModel({ ...model, noResolve })}
+              />
+            </Form.Item>
+          )}
+        </Form>
+      </Modal>
     </Card>
   );
 }
