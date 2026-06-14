@@ -50,6 +50,31 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+### Documentation
+
+- 删除 `AGENTS.md`,将其独有内容(分支/PR 工作流、变更规则、「不得删除 changelog
+  历史」、1Panel 安装字段与反代保留 `Host` 等)并入 `CLAUDE.md`,并把 `README.md`
+  与 `docs/release.md` 中对 `AGENTS.md` 的引用改指 `CLAUDE.md`。`CLAUDE.md` 同时
+  补充前端 schema 驱动编辑器架构与预览端点(`/proxies`、`/provider-rules`)、
+  `FETCH_USER_AGENT` 等说明。`CLAUDE.md` 现为变更规则/安全默认/1Panel 打包的唯一
+  权威文档。
+  Removed `AGENTS.md`, folding its unique content (branch/PR workflow, change
+  rules, "never delete changelog history", 1Panel install fields, reverse-proxy
+  `Host` preservation) into `CLAUDE.md`, and repointed the `AGENTS.md` references
+  in `README.md` and `docs/release.md` to `CLAUDE.md`. `CLAUDE.md` also gained
+  notes on the frontend schema-driven editor architecture, the preview endpoints
+  (`/proxies`, `/provider-rules`), and `FETCH_USER_AGENT`. `CLAUDE.md` is now the
+  single authoritative guide for change rules, security defaults, and 1Panel
+  packaging.
+- 文档校对:修正 `docs/README.md` 中过时的「发布前待办」段落(0.1.8 已发布、安装
+  表单已完成);在 `docs/1panel-app.md` 环境变量表补充容器内部变量 `WEB_DIR`
+  (Dockerfile 内置,非安装项),使该「权威清单」与代码一致。
+  Docs review: corrected the stale "remaining before release" paragraph in
+  `docs/README.md` (0.1.8 is released and the install form is complete), and
+  added the container-internal `WEB_DIR` (baked into the Dockerfile, not an
+  install field) to the `docs/1panel-app.md` env-var table so the "authoritative
+  list" matches the code.
+
 ## [0.1.8] - 2026-06-14
 
 ### Added

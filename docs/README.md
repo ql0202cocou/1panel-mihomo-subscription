@@ -21,7 +21,7 @@ converter's top-level-key handling into `api-design.md`.)
 - `release.md`: Image build, tag, and publish steps.
 - `changelog.md`: Changelog template and notable project changes.
 
-The documented design is implemented (backend + SPA). Remaining before a formal
-release: updating the 1Panel app package install form (`1panel-app.md`) and
-cutting the release (`release.md`). Implementation trade-offs are tracked in
-`changelog.md`.
+The documented design is implemented (backend + SPA) and released: the `0.1.8`
+1Panel app package with its full install form is complete (`1panel-app.md`), and
+the image is published to Docker Hub (`release.md`). Implementation trade-offs
+and per-version changes are tracked in `changelog.md`.

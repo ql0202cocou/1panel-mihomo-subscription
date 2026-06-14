@@ -46,7 +46,7 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
 人工确认 / Manual checks:
 
 - `docs/changelog.md` 的 `[Unreleased]` 包含本次发布的全部变更。
-- 受影响的产品/技术/安全文档已与实现对齐(见 `AGENTS.md` Change Rules)。
+- 受影响的产品/技术/安全文档已与实现对齐(见 `CLAUDE.md` Change Rules)。
 - compose 中镜像名与本次版本一致(`mihomo-subscription:X.Y.Z`)。
 - 如计划公开分发:将占位 `logo.png` 替换为正式设计。
 
@@ -54,7 +54,7 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
 
 - `[Unreleased]` in `docs/changelog.md` covers everything in this release.
 - All affected product/technical/security docs match the implementation (see
-  Change Rules in `AGENTS.md`).
+  Change Rules in `CLAUDE.md`).
 - The compose image name matches this release (`mihomo-subscription:X.Y.Z`).
 - If distributing publicly: replace the placeholder `logo.png` with a real
   design.
