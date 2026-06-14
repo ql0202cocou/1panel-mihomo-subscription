@@ -10,6 +10,7 @@ import {
   Divider,
   Input,
   InputNumber,
+  Select,
   Space,
   Switch,
   Typography,
@@ -55,9 +56,22 @@ export function FieldInput({
           value={value == null ? "" : String(value)}
           onChange={(s) => onChange(s)}
           placeholder={def.placeholder}
+          allowClear
           filterOption={(input, opt) =>
             (opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
           }
+        />
+      );
+    case "tags":
+      return (
+        <Select
+          mode="tags"
+          style={{ width: "100%" }}
+          value={Array.isArray(value) ? (value as string[]) : []}
+          onChange={(v) => onChange(v)}
+          options={(def.options ?? []).map((o) => ({ value: o }))}
+          tokenSeparators={[","]}
+          placeholder={def.placeholder}
         />
       );
     default:
@@ -178,4 +192,47 @@ export function splitAdvanced(
   known: Set<string>,
 ): [string, unknown][] {
   return Object.entries(obj).filter(([k]) => !known.has(k));
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return v != null && typeof v === "object" && !Array.isArray(v);
+}
+
+export function isEmptyValue(v: unknown): boolean {
+  return (
+    v === "" ||
+    v === undefined ||
+    v === null ||
+    (Array.isArray(v) && v.length === 0) ||
+    (isObject(v) && Object.keys(v).length === 0)
+  );
+}
+
+/** Read a possibly dotted path (e.g. `headers.Host`) from a nested object. */
+export function getPath(obj: Record<string, unknown>, path: string): unknown {
+  return path.split(".").reduce<unknown>((acc, k) => (isObject(acc) ? acc[k] : undefined), obj);
+}
+
+/**
+ * Immutably set/clear a dotted path in a nested object, pruning any parent
+ * objects left empty. Returns the new root (empty when nothing remains).
+ */
+export function setPath(
+  obj: Record<string, unknown>,
+  path: string,
+  value: unknown,
+): Record<string, unknown> {
+  const keys = path.split(".");
+  const root: Record<string, unknown> = { ...obj };
+  if (keys.length === 1) {
+    if (isEmptyValue(value)) delete root[keys[0]];
+    else root[keys[0]] = value;
+    return root;
+  }
+  const [head, ...rest] = keys;
+  const child = isObject(root[head]) ? (root[head] as Record<string, unknown>) : {};
+  const nextChild = setPath(child, rest.join("."), value);
+  if (Object.keys(nextChild).length === 0) delete root[head];
+  else root[head] = nextChild;
+  return root;
 }
