@@ -261,6 +261,38 @@ async fn proxies_endpoint_reflects_generated_cache() {
 }
 
 #[tokio::test]
+async fn provider_rules_endpoint_returns_upstream_rules() {
+    let temp = TempDb::new();
+    let fetcher = Arc::new(FakeFetcher::default());
+    let app = build_router(test_state_with_fetcher(&temp, fetcher.clone()).await);
+    let cookie = login(&app).await;
+
+    let profile = create_profile(&app, &cookie).await;
+    let id = profile["id"].as_str().unwrap();
+
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/api/profiles/{id}/provider-rules"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = json(resp).await;
+    let rules: Vec<&str> = body["rules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r.as_str().unwrap())
+        .collect();
+    // PROVIDER_YAML carries a single `MATCH,DIRECT` rule.
+    assert_eq!(rules, vec!["MATCH,DIRECT"]);
+}
+
+#[tokio::test]
 async fn concurrent_public_requests_coalesce_into_one_fetch() {
     let temp = TempDb::new();
     let fetcher = Arc::new(FakeFetcher::default());
