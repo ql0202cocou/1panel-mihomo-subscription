@@ -28,9 +28,9 @@ cargo audit            # needs `cargo install cargo-audit`; ignores in .cargo/au
 # Frontend, from web/:
 npm ci && npm run build # tsc --noEmit + vite build -> web/dist
 # Image / 1Panel YAML:
-docker build -t mihomo-subscription:0.1.4 .
+docker build -t mihomo-subscription:0.1.5 .
 ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f) }' \
-  apps/mihomo-subscription/data.yml apps/mihomo-subscription/0.1.4/{data,docker-compose}.yml
+  apps/mihomo-subscription/data.yml apps/mihomo-subscription/0.1.5/{data,docker-compose}.yml
 ```
 
 ## Change Rules
@@ -44,7 +44,7 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f) }' \
 - Never delete changelog history, user data, or generated app-package files
   unless explicitly asked. On release: roll `[Unreleased]` into a dated version,
   tag `vX.Y.Z`, and keep `Cargo.toml`, `web/package.json`, and the app-package
-  version dir / image tag in sync (current release `v0.1.4`).
+  version dir / image tag in sync (current release `v0.1.5`).
 
 ## Security Defaults (see `docs/security-design.md` for rationale)
 
