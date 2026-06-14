@@ -70,6 +70,7 @@ package already exposes.
 | `SECURE_COOKIES` | Install form (optional) | `auto` (infer from `https://` `PUBLIC_BASE_URL`) | Yes | Force the `Secure` session-cookie attribute. The install form offers `auto`/`true`/`false`; `auto` (and any unrecognized value) falls back to inference. Set `true` when serving over HTTPS through a TLS-terminating reverse proxy (where the app itself speaks plain HTTP); the service logs a warning when cookies end up without `Secure` |
 | `PORT` | Compose (fixed) | `8080` | Yes | Container listen port |
 | `DATA_DIR` | Compose (fixed) | `/data` | Yes | SQLite data directory |
+| `WEB_DIR` | Dockerfile (internal) | `/app/web/dist` | n/a | Built SPA assets directory served by Axum. Baked into the image; not a user/install field — listed for completeness |
 
 `PUBLIC_BASE_URL` should only store the externally reachable origin. The random
 `PUBLIC_PATH_PREFIX` is prepended before the tokenized subscription endpoint
