@@ -53,6 +53,7 @@ pub async fn test_state(temp: &TempDb) -> Arc<AppState> {
     let fetcher = Arc::new(HttpFetcher {
         timeout: Duration::from_secs(5),
         max_bytes: 1024 * 1024,
+        user_agent: "test-agent".to_string(),
     });
     test_state_with_fetcher(temp, fetcher).await
 }

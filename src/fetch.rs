@@ -19,6 +19,13 @@ use crate::ssrf::{self, SsrfError};
 const MAX_REDIRECTS: usize = 3;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
 
+/// Default `User-Agent` for provider fetches. Many airport panels (SSPanel,
+/// V2board, …) gate the subscription on a Clash-family UA and return `403`/`401`
+/// — or a non-YAML page — to unknown clients. `clash.meta` both matches the
+/// common `/clash/i` check and signals Meta support so panels serve Mihomo YAML.
+/// Overridable via `FETCH_USER_AGENT`.
+pub const DEFAULT_USER_AGENT: &str = "clash.meta/1.0";
+
 /// Abstraction over the provider fetch so the generate/public paths can be
 /// tested without real network access. Production uses [`HttpFetcher`].
 #[async_trait::async_trait]
@@ -30,12 +37,14 @@ pub trait SubscriptionFetcher: Send + Sync {
 pub struct HttpFetcher {
     pub timeout: Duration,
     pub max_bytes: usize,
+    /// `User-Agent` sent on provider requests (see [`DEFAULT_USER_AGENT`]).
+    pub user_agent: String,
 }
 
 #[async_trait::async_trait]
 impl SubscriptionFetcher for HttpFetcher {
     async fn fetch(&self, url: &str) -> Result<Fetched, FetchError> {
-        fetch_subscription(url, self.timeout, self.max_bytes).await
+        fetch_subscription(url, self.timeout, self.max_bytes, &self.user_agent).await
     }
 }
 
@@ -89,6 +98,7 @@ pub async fn fetch_subscription(
     raw_url: &str,
     total_timeout: Duration,
     max_bytes: usize,
+    user_agent: &str,
 ) -> Result<Fetched, FetchError> {
     let mut url = Url::parse(raw_url).map_err(|_| FetchError::Ssrf(SsrfError::Host))?;
 
@@ -100,6 +110,7 @@ pub async fn fetch_subscription(
         let client = reqwest::Client::builder()
             .connect_timeout(CONNECT_TIMEOUT)
             .timeout(total_timeout)
+            .user_agent(user_agent) // many panels gate the subscription on a Clash-family UA
             .redirect(Policy::none()) // we follow redirects manually to re-validate each hop
             .resolve(host, addr) // pin the validated IP
             .build()
@@ -237,6 +248,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn default_user_agent_is_clash_compatible() {
+        // Panels commonly gate on a case-insensitive `clash` match; keep it so.
+        assert!(DEFAULT_USER_AGENT.to_ascii_lowercase().contains("clash"));
+    }
+
+    #[test]
     fn sanitize_rejects_control_characters() {
         assert_eq!(
             sanitize_userinfo("upload=1; download=2; total=3"),
@@ -248,7 +265,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_blocked_host_before_any_connection() {
-        let err = fetch_subscription("http://127.0.0.1/x", Duration::from_secs(5), 1024)
+        let err = fetch_subscription("http://127.0.0.1/x", Duration::from_secs(5), 1024, "ua")
             .await
             .unwrap_err();
         assert!(matches!(err, FetchError::Ssrf(SsrfError::BlockedIp)));
@@ -257,7 +274,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_non_http_scheme() {
-        let err = fetch_subscription("file:///etc/passwd", Duration::from_secs(5), 1024)
+        let err = fetch_subscription("file:///etc/passwd", Duration::from_secs(5), 1024, "ua")
             .await
             .unwrap_err();
         assert!(matches!(err, FetchError::Ssrf(SsrfError::Scheme)));
@@ -265,9 +282,14 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_ipv4_mapped_ipv6_loopback() {
-        let err = fetch_subscription("http://[::ffff:127.0.0.1]/x", Duration::from_secs(5), 1024)
-            .await
-            .unwrap_err();
+        let err = fetch_subscription(
+            "http://[::ffff:127.0.0.1]/x",
+            Duration::from_secs(5),
+            1024,
+            "ua",
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(err, FetchError::Ssrf(SsrfError::BlockedIp)));
     }
 }
