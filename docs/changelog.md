@@ -50,6 +50,31 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-06-14
+
+### Added
+
+- 节点编辑器扩充图形化字段:VLESS 新增 REALITY(`reality-opts`:public-key /
+  short-id)、传输层(`ws-opts` 含 path 与 Host、`grpc-opts`)、`flow`、
+  `client-fingerprint`、`alpn`、`udp`、`skip-cert-verify` 等;vmess/trojan/
+  hysteria2/tuic 也补齐常用项。字段按 TLS/传输协议条件显示,嵌套选项以结构化子表单
+  编辑,无需再手写 YAML。
+  Expanded the node editor's graphical fields: VLESS gains REALITY
+  (`reality-opts`: public-key / short-id), transport options (`ws-opts` with
+  path and Host, `grpc-opts`), plus `flow`, `client-fingerprint`, `alpn`,
+  `udp`, `skip-cert-verify`; vmess/trojan/hysteria2/tuic gain their common
+  options too. Fields show conditionally by TLS/network and nested option blocks
+  are edited as structured sub-forms — no hand-written YAML needed.
+
+### Documentation
+
+- 新增 `apps/mihomo-subscription/0.1.6/` 应用包(镜像
+  `quinlanhoo/mihomo-subscription:0.1.6`),将 `Cargo.toml`/`Cargo.lock` 与
+  `web/package.json` 升到 `0.1.6`。
+  Added the `apps/mihomo-subscription/0.1.6/` app package (image
+  `quinlanhoo/mihomo-subscription:0.1.6`) and bumped `Cargo.toml`/`Cargo.lock`
+  and `web/package.json` to `0.1.6`.
+
 ## [0.1.5] - 2026-06-14
 
 ### Fixed
