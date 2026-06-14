@@ -114,11 +114,11 @@ settings to invalidate all links at once.
 参考文档见 [docs/](docs/)([api-design](docs/api-design.md)、
 [data-model](docs/data-model.md)、[security-design](docs/security-design.md)、
 [1panel-app](docs/1panel-app.md)、[release](docs/release.md)、
-[changelog](docs/changelog.md))。本地开发与 CI 门禁见
-[CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md)。
+[changelog](docs/changelog.md))。本地开发、CI 门禁与变更规则见
+[CLAUDE.md](CLAUDE.md)。
 
-Reference docs are in [docs/](docs/); local development and CI gates are in
-[CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md).
+Reference docs are in [docs/](docs/); local development, CI gates, and change
+rules are in [CLAUDE.md](CLAUDE.md).
 
 ## 许可证 / License
 
