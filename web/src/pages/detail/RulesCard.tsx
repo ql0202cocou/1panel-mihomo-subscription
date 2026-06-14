@@ -18,7 +18,12 @@ import {
 } from "antd";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../../api";
-import type { CustomGroup, CustomNode, ProxiesResponse } from "../../types";
+import type {
+  CustomGroup,
+  CustomNode,
+  ProviderRulesResponse,
+  ProxiesResponse,
+} from "../../types";
 import { BUILTIN_POLICIES } from "./groupSchema";
 
 interface Props {
@@ -103,6 +108,7 @@ export default function RulesCard({
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [model, setModel] = useState<RuleModel>(EMPTY_RULE);
   const [policies, setPolicies] = useState<string[]>([]);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     setLines(
@@ -169,6 +175,29 @@ export default function RulesCard({
     void persist(lines.filter((_, i) => i !== index));
   }
 
+  // Seed the editor with the airport's own rules (the converter otherwise
+  // replaces provider rules). Appends, skipping lines already present.
+  async function importProviderRules() {
+    setImporting(true);
+    try {
+      const res = await api<ProviderRulesResponse>(`/api/profiles/${profileId}/provider-rules`);
+      const existing = new Set(lines);
+      const incoming = res.rules
+        .map((l) => l.trim())
+        .filter((l) => l !== "" && !existing.has(l));
+      if (incoming.length === 0) {
+        message.info(t("rules.importNone"));
+        return;
+      }
+      await persist([...lines, ...incoming]);
+      message.success(t("rules.imported", { count: incoming.length }));
+    } catch (e) {
+      message.error((e as ApiError).message ?? t("rules.importFailed"));
+    } finally {
+      setImporting(false);
+    }
+  }
+
   const policyOptions = Array.from(
     new Set(
       [
@@ -185,7 +214,14 @@ export default function RulesCard({
   return (
     <Card
       title={`${t("rules.title")} (${lines.length})`}
-      extra={<Button onClick={startAdd}>{t("rules.add")}</Button>}
+      extra={
+        <Space>
+          <Popconfirm title={t("rules.importConfirm")} onConfirm={importProviderRules}>
+            <Button loading={importing}>{t("rules.importProvider")}</Button>
+          </Popconfirm>
+          <Button onClick={startAdd}>{t("rules.add")}</Button>
+        </Space>
+      }
     >
       <Space direction="vertical" style={{ width: "100%" }} size="small">
         <Typography.Text type="secondary">{t("rules.hint")}</Typography.Text>
