@@ -50,11 +50,34 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-06-14
+
+### Fixed
+
+- 修复机场订阅拉取返回 `http_error:403/401` 导致无法生成的问题:此前拉取请求未带
+  `User-Agent`,而大量机场后端(SSPanel/V2board 等)会校验 UA 是否为 Clash 家族,
+  否则拒绝或返回非 YAML 页面。现默认发送 `clash.meta/1.0`(可用环境变量
+  `FETCH_USER_AGENT` 覆盖)。
+  Fixed provider fetch failing with `http_error:403/401` (and thus no generated
+  output): requests carried no `User-Agent`, but many airport panels (SSPanel,
+  V2board, …) gate the subscription on a Clash-family UA and otherwise reject or
+  serve a non-YAML page. Provider fetches now send `clash.meta/1.0` by default,
+  overridable via the `FETCH_USER_AGENT` env var.
+
 ### Documentation
 
 - 将根 `README.md` 的版本号与镜像 tag 同步到 `0.1.4`(0.1.4 发布时遗漏)。
   Synced the version string and image tag in the root `README.md` to `0.1.4`
   (missed during the 0.1.4 release).
+- 新增 `apps/mihomo-subscription/0.1.5/` 应用包(镜像
+  `quinlanhoo/mihomo-subscription:0.1.5`),将 `Cargo.toml`/`Cargo.lock` 与
+  `web/package.json` 升到 `0.1.5`;在 `1panel-app.md` 环境变量表登记
+  `FETCH_USER_AGENT`(可选,代码内置默认,不在安装表单中)。
+  Added the `apps/mihomo-subscription/0.1.5/` app package (image
+  `quinlanhoo/mihomo-subscription:0.1.5`), bumped `Cargo.toml`/`Cargo.lock` and
+  `web/package.json` to `0.1.5`, and documented `FETCH_USER_AGENT` in the
+  `1panel-app.md` env-var table (optional, code-defaulted, not in the install
+  form).
 
 ## [0.1.4] - 2026-06-14
 

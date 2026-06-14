@@ -9,7 +9,7 @@ use mihomo_subscription::{
     app::{build_router, AppState},
     auth::{AdminAuth, SessionStore, SESSION_IDLE},
     db,
-    fetch::HttpFetcher,
+    fetch::{HttpFetcher, DEFAULT_USER_AGENT},
     rate_limit::RateLimiter,
     single_flight::SingleFlight,
 };
@@ -54,6 +54,10 @@ async fn main() -> anyhow::Result<()> {
     let fetch_timeout = Duration::from_secs(env_u64("FETCH_TIMEOUT_SECONDS", 15));
     let max_bytes = env_u64("MAX_SUBSCRIPTION_SIZE_MB", 8) as usize * 1024 * 1024;
     let cache_ttl = Duration::from_secs(env_u64("CACHE_TTL_MINUTES", 15) * 60);
+    let fetch_user_agent = std::env::var("FETCH_USER_AGENT")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_USER_AGENT.to_string());
 
     let state = Arc::new(AppState {
         db: pool,
@@ -66,6 +70,7 @@ async fn main() -> anyhow::Result<()> {
         fetcher: Arc::new(HttpFetcher {
             timeout: fetch_timeout,
             max_bytes,
+            user_agent: fetch_user_agent,
         }),
         cache_ttl,
         single_flight: SingleFlight::new(),
