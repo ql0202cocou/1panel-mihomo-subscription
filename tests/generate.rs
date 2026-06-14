@@ -166,6 +166,94 @@ async fn generate_populates_cache_and_public_link_serves_it() {
 }
 
 #[tokio::test]
+async fn proxies_endpoint_reflects_generated_cache() {
+    let temp = TempDb::new();
+    let fetcher = Arc::new(FakeFetcher::default());
+    let app = build_router(test_state_with_fetcher(&temp, fetcher.clone()).await);
+    let cookie = login(&app).await;
+
+    let profile = create_profile(&app, &cookie).await;
+    let id = profile["id"].as_str().unwrap();
+
+    // Before generation: no cache, so the preview reports `generated: false`.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/api/profiles/{id}/proxies"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = json(resp).await;
+    assert_eq!(body["generated"], false);
+    assert_eq!(body["proxies"].as_array().unwrap().len(), 0);
+
+    // Add a custom node, then generate.
+    let node = r#"{"name":"my-vmess","node_type":"vmess","content":"{ name: my-vmess, type: vmess, server: 9.9.9.9, port: 443, uuid: abc }"}"#;
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/nodes"),
+            &cookie,
+            node,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/generate"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // After generation: provider proxy + merged custom node, each with a type.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/api/profiles/{id}/proxies"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    let body = json(resp).await;
+    assert_eq!(body["generated"], true);
+    let names: Vec<&str> = body["proxies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["name"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&"hk-1"), "provider proxy listed");
+    assert!(names.contains(&"my-vmess"), "custom node listed");
+    let groups: Vec<&str> = body["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|g| g.as_str().unwrap())
+        .collect();
+    assert!(groups.contains(&"Proxy"), "provider group listed");
+    let hk = body["proxies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["name"] == "hk-1")
+        .unwrap();
+    assert_eq!(hk["type"], "ss");
+}
+
+#[tokio::test]
 async fn concurrent_public_requests_coalesce_into_one_fetch() {
     let temp = TempDb::new();
     let fetcher = Arc::new(FakeFetcher::default());
