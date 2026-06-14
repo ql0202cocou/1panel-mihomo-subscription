@@ -1,14 +1,14 @@
 # 发布流程 / Release Process
 
-> **状态:0.1.6 应用包已就绪。** 服务、多阶段镜像构建与 1Panel 应用包安装表单
-> 均已完成(`apps/mihomo-subscription/0.1.6/`)。镜像策略:**发布到 Docker Hub**
+> **状态:0.1.7 应用包已就绪。** 服务、多阶段镜像构建与 1Panel 应用包安装表单
+> 均已完成(`apps/mihomo-subscription/0.1.7/`)。镜像策略:**发布到 Docker Hub**
 > (`quinlanhoo/mihomo-subscription`,多架构 amd64+arm64),1Panel 主机直接
 > `docker pull`,无需在主机上同步源码或本地构建;离线/内网环境可改用文末的
 > 本地构建备选流程。
 >
-> **Status: 0.1.6 app package ready.** The service, the multi-stage image build,
+> **Status: 0.1.7 app package ready.** The service, the multi-stage image build,
 > and the 1Panel app package install form are all complete
-> (`apps/mihomo-subscription/0.1.6/`). Image strategy: **published to Docker Hub**
+> (`apps/mihomo-subscription/0.1.7/`). Image strategy: **published to Docker Hub**
 > (`quinlanhoo/mihomo-subscription`, multi-arch amd64+arm64), so the 1Panel host
 > just `docker pull`s it — no source sync or on-host build. Use the local-build
 > fallback at the end for offline/intranet environments.
@@ -39,8 +39,8 @@ cargo test
 # 校验 1Panel YAML / validate 1Panel YAML
 ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
   apps/mihomo-subscription/data.yml \
-  apps/mihomo-subscription/0.1.6/data.yml \
-  apps/mihomo-subscription/0.1.6/docker-compose.yml
+  apps/mihomo-subscription/0.1.7/data.yml \
+  apps/mihomo-subscription/0.1.7/docker-compose.yml
 ```
 
 人工确认 / Manual checks:
@@ -82,7 +82,7 @@ buildx; the image name matches the `image` field in compose
 it at install time — no source sync or on-host build.
 
 ```bash
-VERSION=0.1.6
+VERSION=0.1.7
 NS=quinlanhoo
 
 # 登录 Docker Hub(建议用 Personal Access Token,非 TTY 用 --password-stdin)
@@ -119,7 +119,7 @@ Each release adds a new version directory; old version directories are kept:
 
 ```bash
 VERSION=0.2.0
-PREV=0.1.6
+PREV=0.1.7
 cp -R apps/mihomo-subscription/${PREV} apps/mihomo-subscription/${VERSION}
 ```
 
@@ -196,7 +196,7 @@ repository to the host and build locally, and temporarily change the version's
 compose `image` field to the local tag.
 
 ```bash
-VERSION=0.1.6
+VERSION=0.1.7
 
 # 在 1Panel 主机上构建,镜像名需与 compose 的 image 字段一致
 # build on the 1Panel host; the image name must match the compose image field

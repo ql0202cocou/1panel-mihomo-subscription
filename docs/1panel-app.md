@@ -1,6 +1,6 @@
 # 1Panel App Packaging
 
-> **Status: package complete (0.1.6).** The `0.1.6` app package exposes the full
+> **Status: package complete (0.1.7).** The `0.1.7` app package exposes the full
 > install form — admin credentials, public origin/path prefix, fetch/cache/proxy
 > tuning, and the `SECURE_COOKIES` override — and the compose file passes them all
 > to the service. The Environment Variables table below is the authoritative
@@ -31,7 +31,7 @@ apps/mihomo-subscription/
     data.yml
     docker-compose.yml
     data/
-  0.1.6/            # current release
+  0.1.7/            # current release
     data.yml
     docker-compose.yml
     data/
@@ -81,7 +81,7 @@ https://sub.example.com/<public-path-prefix>/api/sub/<token>
 
 ## Validation Checklist
 
-This checklist describes the package state required for a release. The `0.1.6`
+This checklist describes the package state required for a release. The `0.1.7`
 package satisfies every item below.
 
 - Root `data.yml` contains app metadata.

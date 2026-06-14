@@ -50,6 +50,42 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-06-14
+
+### Changed
+
+- 「自定义分组」卡片改名为「分组预览」,交互对齐「节点预览」:在自定义分组(可编辑)
+  之外只读列出机场分组(解析自最近一次生成的输出),沿用相同的标签、计数与未生成
+  提示。`GET /api/profiles/:id/proxies` 的 `groups` 由名称数组改为 `name`+`type`
+  对象数组(机场分组预览也显示类型)。
+  Renamed the "Custom groups" card to "Group preview" and aligned its
+  interaction with "Node preview": provider groups are listed read-only
+  alongside the editable custom groups (parsed from the latest generated
+  output), with the same tags, count, and not-generated hint. The `groups`
+  field of `GET /api/profiles/:id/proxies` changed from a name array to
+  `name`+`type` objects so provider groups show their type too.
+- 「分流规则」卡片改名为「规则预览」,交互对齐「节点预览」:整块 YAML 文本编辑器改为
+  逐条规则的列表,单条规则用结构化表单增/改/删(规则类型 / 匹配内容 / 策略下拉 /
+  no-resolve),策略候选来自机场节点/分组、自定义节点/分组与内置策略。注释与不常见
+  规则(如逻辑 AND/OR)按原文保留。随之移除已无用的 CodeMirror YAML 编辑器组件与
+  依赖(前端构建产物显著减小)。
+  Renamed the "Rules" card to "Rule preview" and aligned its interaction with
+  "Node preview": the bulk YAML text editor became a per-rule list with a
+  structured add/edit/delete form (rule type / payload / policy dropdown /
+  no-resolve); policy suggestions come from provider proxies/groups, custom
+  nodes/groups, and built-in policies. Comments and uncommon rules (e.g. logical
+  AND/OR) are preserved verbatim. Removed the now-unused CodeMirror YAML editor
+  component and dependencies (notably smaller frontend bundle).
+
+### Documentation
+
+- 新增 `apps/mihomo-subscription/0.1.7/` 应用包(镜像
+  `quinlanhoo/mihomo-subscription:0.1.7`),将 `Cargo.toml`/`Cargo.lock` 与
+  `web/package.json` 升到 `0.1.7`。
+  Added the `apps/mihomo-subscription/0.1.7/` app package (image
+  `quinlanhoo/mihomo-subscription:0.1.7`) and bumped `Cargo.toml`/`Cargo.lock`
+  and `web/package.json` to `0.1.7`.
+
 ## [0.1.6] - 2026-06-14
 
 ### Added

@@ -104,6 +104,9 @@ export default function ProfileDetail() {
       <RulesCard
         profileId={detail.id}
         initial={detail.rules?.content ?? ""}
+        nodes={detail.nodes}
+        groups={detail.groups}
+        generatedAt={detail.last_generated_at}
         errors={genErrors}
         onSaved={reload}
       />

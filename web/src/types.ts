@@ -47,7 +47,8 @@ export interface ProxiesResponse {
   generated: boolean;
   generated_at: string | null;
   proxies: ProxyPreview[];
-  groups: string[];
+  /** Provider proxy-groups (name + type) from the latest generated output. */
+  groups: ProxyPreview[];
 }
 
 export interface CustomGroup {
