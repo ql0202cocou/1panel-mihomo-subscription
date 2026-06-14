@@ -116,6 +116,7 @@ endpoint require a valid session and otherwise return `401`.
 | PUT | `/api/profiles/:id` | 是/Yes | 更新基础信息 / Update base fields |
 | DELETE | `/api/profiles/:id` | 是/Yes | 删除配置 / Delete profile |
 | PUT | `/api/profiles/:id/rules` | 是/Yes | 替换自定义规则 / Replace custom rules |
+| GET | `/api/profiles/:id/provider-rules` | 是/Yes | 拉取机场原始 `rules`(用于规则预览预填,实时拉取,不缓存) / Fetch the provider's `rules` (seeds the rule preview; live fetch, not cached) |
 | GET | `/api/profiles/:id/proxies` | 是/Yes | 节点/分组预览:生成输出中的全部代理与分组(name+type,机场+自定义,只读) / Node/group preview: all proxies and groups (name+type) in the generated output (provider + custom, read-only) |
 | GET / POST | `/api/profiles/:id/nodes` | 是/Yes | 自定义节点 / Custom nodes |
 | PUT / DELETE | `/api/profiles/:id/nodes/:node_id` | 是/Yes | 单个节点 / Single node |

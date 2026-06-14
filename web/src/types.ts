@@ -27,6 +27,10 @@ export interface RuleSet {
   updated_at: string;
 }
 
+export interface ProviderRulesResponse {
+  rules: string[];
+}
+
 export interface CustomNode {
   id: string;
   name: string;
