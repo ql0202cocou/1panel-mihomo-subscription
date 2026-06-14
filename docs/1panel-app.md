@@ -1,6 +1,6 @@
 # 1Panel App Packaging
 
-> **Status: package complete (0.1.3).** The `0.1.3` app package exposes the full
+> **Status: package complete (0.1.5).** The `0.1.5` app package exposes the full
 > install form — admin credentials, public origin/path prefix, fetch/cache/proxy
 > tuning, and the `SECURE_COOKIES` override — and the compose file passes them all
 > to the service. The Environment Variables table below is the authoritative
@@ -31,7 +31,7 @@ apps/mihomo-subscription/
     data.yml
     docker-compose.yml
     data/
-  0.1.3/            # current release
+  0.1.5/            # current release
     data.yml
     docker-compose.yml
     data/
@@ -63,6 +63,7 @@ package already exposes.
 | `PUBLIC_BASE_URL` | Install form | — (required) | Yes | Externally reachable origin for generated links |
 | `PUBLIC_PATH_PREFIX` | Install form (optional) | random | Yes | Seed for the public path prefix; runtime value lives in `app_settings` and is resettable (see `data-model.md`). Empty/blank is ignored and a random prefix is generated |
 | `FETCH_TIMEOUT_SECONDS` | Install form | `15` | Yes | Provider fetch total timeout |
+| `FETCH_USER_AGENT` | Env (optional) | `clash.meta/1.0` | No | `User-Agent` for provider fetches. Many airport panels gate the subscription on a Clash-family UA and return `403`/`401` to unknown clients; the default matches the common `/clash/i` check and signals Meta support. Override only for panels that require a specific client UA (e.g. Shadowrocket/Stash) |
 | `MAX_SUBSCRIPTION_SIZE_MB` | Install form | `8` | Yes | Provider response size limit |
 | `CACHE_TTL_MINUTES` | Install form | `15` | Yes | Generated YAML cache TTL (see `security-design.md`) |
 | `TRUSTED_PROXY_HOPS` | Install form | `1` | Yes | Reverse proxy hops to trust when deriving the client IP (see `security-design.md`) |
@@ -80,7 +81,7 @@ https://sub.example.com/<public-path-prefix>/api/sub/<token>
 
 ## Validation Checklist
 
-This checklist describes the package state required for a release. The `0.1.3`
+This checklist describes the package state required for a release. The `0.1.5`
 package satisfies every item below.
 
 - Root `data.yml` contains app metadata.
