@@ -12,11 +12,12 @@ import {
   Select,
   Space,
   Tag,
+  Typography,
   message,
 } from "antd";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../../api";
-import type { CustomGroup, CustomNode, GroupType, ProxiesResponse } from "../../types";
+import type { CustomGroup, CustomNode, GroupType, ProxiesResponse, ProxyPreview } from "../../types";
 import { AdvancedFields, FieldInput, splitAdvanced } from "./fields";
 import {
   BUILTIN_POLICIES,
@@ -45,15 +46,18 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
   const [members, setMembers] = useState<string[]>([]);
   const [options, setOptions] = useState<Options>({});
 
-  // Provider proxies/groups from the latest generated output, for suggestions.
+  // Provider proxies/groups from the latest generated output, for the read-only
+  // preview and for member suggestions.
   const [providerProxies, setProviderProxies] = useState<string[]>([]);
-  const [providerGroups, setProviderGroups] = useState<string[]>([]);
+  const [providerGroups, setProviderGroups] = useState<ProxyPreview[]>([]);
+  const [generated, setGenerated] = useState(true);
 
   const loadProviders = useCallback(async () => {
     try {
       const res = await api<ProxiesResponse>(`/api/profiles/${profileId}/proxies`);
       setProviderProxies(res.proxies.map((p) => p.name));
       setProviderGroups(res.groups);
+      setGenerated(res.generated);
     } catch {
       // Non-fatal: members can still be typed in by hand.
     }
@@ -136,7 +140,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
   // being edited, which cannot reference itself) and built-in policies.
   const memberOptions = dedupe([
     ...providerProxies,
-    ...providerGroups,
+    ...providerGroups.map((g) => g.name),
     ...nodes.map((n) => n.name),
     ...groups.filter((g) => g.id !== editing?.id).map((g) => g.name),
     ...BUILTIN_POLICIES,
@@ -145,18 +149,27 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
   const optionFields = groupOptionFields(groupType);
   const advancedOptions = splitAdvanced(options, groupOptionKeys(groupType));
 
+  // Custom groups are editable; provider groups already merged into the output
+  // (matched by name) are dropped from the read-only section to avoid duplicates.
+  const customNames = new Set(groups.map((g) => g.name));
+  const providerOnly = providerGroups.filter((g) => !customNames.has(g.name));
+  const total = groups.length + providerOnly.length;
+
   return (
     <Card
-      title={`${t("groups.title")} (${groups.length})`}
+      title={`${t("groups.title")} (${total})`}
       extra={<Button onClick={startAdd}>{t("groups.add")}</Button>}
     >
-      {groups.length === 0 ? (
+      {!generated && (
+        <Typography.Paragraph type="secondary">{t("groups.notGenerated")}</Typography.Paragraph>
+      )}
+      {total === 0 ? (
         <Empty description={t("groups.empty")} />
       ) : (
-        <List
-          dataSource={groups}
-          renderItem={(group) => (
+        <List>
+          {groups.map((group) => (
             <List.Item
+              key={`c-${group.id}`}
               actions={[
                 <a key="edit" onClick={() => startEdit(group)}>
                   {t("basic.edit")}
@@ -173,13 +186,24 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
               <Space>
                 <span>{group.name}</span>
                 <Tag>{group.group_type}</Tag>
+                <Tag color="blue">{t("groups.customTag")}</Tag>
                 <span style={{ color: "#999" }}>
                   {t("groups.membersCount", { count: group.members.length })}
                 </span>
+                {!group.enabled && <Tag>{t("profiles.disabled")}</Tag>}
               </Space>
             </List.Item>
-          )}
-        />
+          ))}
+          {providerOnly.map((g) => (
+            <List.Item key={`p-${g.name}`}>
+              <Space>
+                <span>{g.name}</span>
+                {g.type && <Tag>{g.type}</Tag>}
+                <Tag>{t("groups.providerTag")}</Tag>
+              </Space>
+            </List.Item>
+          ))}
+        </List>
       )}
 
       <Modal

@@ -241,9 +241,16 @@ async fn proxies_endpoint_reflects_generated_cache() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|g| g.as_str().unwrap())
+        .map(|g| g["name"].as_str().unwrap())
         .collect();
     assert!(groups.contains(&"Proxy"), "provider group listed");
+    let proxy_group = body["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["name"] == "Proxy")
+        .unwrap();
+    assert_eq!(proxy_group["type"], "select");
     let hk = body["proxies"]
         .as_array()
         .unwrap()

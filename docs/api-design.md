@@ -116,7 +116,7 @@ endpoint require a valid session and otherwise return `401`.
 | PUT | `/api/profiles/:id` | 是/Yes | 更新基础信息 / Update base fields |
 | DELETE | `/api/profiles/:id` | 是/Yes | 删除配置 / Delete profile |
 | PUT | `/api/profiles/:id/rules` | 是/Yes | 替换自定义规则 / Replace custom rules |
-| GET | `/api/profiles/:id/proxies` | 是/Yes | 节点预览:生成输出中的全部代理与分组名(机场+自定义,只读) / Node preview: all proxies and group names in the generated output (provider + custom, read-only) |
+| GET | `/api/profiles/:id/proxies` | 是/Yes | 节点/分组预览:生成输出中的全部代理与分组(name+type,机场+自定义,只读) / Node/group preview: all proxies and groups (name+type) in the generated output (provider + custom, read-only) |
 | GET / POST | `/api/profiles/:id/nodes` | 是/Yes | 自定义节点 / Custom nodes |
 | PUT / DELETE | `/api/profiles/:id/nodes/:node_id` | 是/Yes | 单个节点 / Single node |
 | GET / POST | `/api/profiles/:id/groups` | 是/Yes | 自定义分组 / Custom groups |
@@ -228,20 +228,22 @@ GET /api/profiles/:id/proxies
   "generated": true,
   "generated_at": "2026-06-14T00:00:00Z",
   "proxies": [ { "name": "hk-1", "type": "ss" }, { "name": "my-ss", "type": "ss" } ],
-  "groups": [ "Proxy" ]
+  "groups": [ { "name": "Proxy", "type": "select" } ]
 }
 ```
 
-- 只读。`proxies`(`name`/`type`)与 `groups`(分组名)解析自
+- 只读。`proxies` 与 `groups` 均为 `name`/`type` 对,解析自
   `generated_cache.output_yaml`,因此同时包含机场与已并入的自定义条目;未生成过时
-  返回 `generated: false` 与空数组。前端据自定义节点名集合区分可编辑(自定义)与
-  只读(机场)节点,并用 `proxies`/`groups` 为自定义分组的成员选择提供候选。
-- Read-only. `proxies` (`name`/`type`) and `groups` (group names) are parsed
-  from `generated_cache.output_yaml`, so they contain both provider and merged
-  custom entries; before the first generation it returns `generated: false`
-  and empty arrays. The frontend distinguishes editable (custom) from read-only
-  (provider) nodes via the custom-node name set, and uses `proxies`/`groups`
-  as member suggestions for the custom-group editor.
+  返回 `generated: false` 与空数组。前端据自定义名集合区分可编辑(自定义)与只读
+  (机场)条目:节点预览与分组预览采用同一套交互,`proxies`/`groups` 也作为自定义
+  分组成员选择的候选。
+- Read-only. Both `proxies` and `groups` are `name`/`type` pairs parsed from
+  `generated_cache.output_yaml`, so they contain provider and merged custom
+  entries; before the first generation it returns `generated: false` and empty
+  arrays. The frontend distinguishes editable (custom) from read-only (provider)
+  entries via the custom name set — the node preview and group preview share one
+  interaction — and `proxies`/`groups` also seed the custom-group member
+  suggestions.
 - 编辑自定义节点与自定义分组均通过结构化表单完成:节点给出常用字段 + 高级键值;
   分组按类型给出选项(`url`/`interval`/`tolerance`/`lazy`/`strategy`)+ 高级键值,
   成员从候选下拉中选择。前端保存时分别序列化为节点 `content` 的 Mihomo proxy YAML
