@@ -33,20 +33,23 @@ FROM debian:bookworm-slim
 
 WORKDIR /app
 
+# gosu drops privileges from the entrypoint after fixing /data ownership.
 RUN apt-get update \
-    && apt-get install -y ca-certificates wget \
+    && apt-get install -y ca-certificates wget gosu \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/mihomo-subscription /app/mihomo-subscription
 # Built SPA assets served by Axum (see WEB_DIR).
 COPY --from=web /web/dist /app/web/dist
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 RUN useradd -r -s /bin/false appuser && \
     mkdir -p /data && \
-    chown appuser:appuser /data
+    chown appuser:appuser /data && \
+    chmod +x /usr/local/bin/docker-entrypoint.sh
 
-USER appuser
-
+# The container starts as root so the entrypoint can chown a bind-mounted /data
+# (which overrides the build-time chown above), then re-execs as appuser.
 VOLUME ["/data"]
 
 ENV PORT=8080
@@ -59,4 +62,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:8080/health || exit 1
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["/app/mihomo-subscription"]
