@@ -1,8 +1,8 @@
-import { AutoComplete, Form, Input } from "antd";
+import { AutoComplete, Divider, Form, Input } from "antd";
 import { useTranslation } from "react-i18next";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import { commonFields, commonKeys, NODE_TYPES, type FieldDef } from "./nodeSchema";
-import { AdvancedFields, FieldInput, splitAdvanced } from "./fields";
+import { commonFields, commonKeys, groupsFor, NODE_TYPES, type FieldDef } from "./nodeSchema";
+import { AdvancedFields, FieldInput, getPath, isEmptyValue, setPath, splitAdvanced } from "./fields";
 
 export interface NodeModel {
   name: string;
@@ -39,7 +39,7 @@ export function modelToContent(m: NodeModel): string {
   if (m.name) obj.name = m.name;
   if (m.type) obj.type = m.type;
   for (const [k, v] of Object.entries(m.fields)) {
-    if (k.trim() === "" || v === "" || v === undefined || v === null) continue;
+    if (k.trim() === "" || isEmptyValue(v)) continue;
     obj[k] = v;
   }
   return stringifyYaml(obj);
@@ -58,8 +58,22 @@ export default function NodeForm({ value, onChange }: Props) {
 
   function setField(key: string, v: unknown) {
     const fields = { ...value.fields };
-    if (v === "" || v === undefined || v === null) delete fields[key];
+    if (isEmptyValue(v)) delete fields[key];
     else fields[key] = v;
+    onChange({ ...value, fields });
+  }
+
+  // Edit one subfield of a nested option block (e.g. `reality-opts.public-key`).
+  // The group object is pruned and removed entirely once it has no entries left.
+  function setGroupField(groupKey: string, path: string, v: unknown) {
+    const current = value.fields[groupKey];
+    const nested = current && typeof current === "object" && !Array.isArray(current)
+      ? (current as Record<string, unknown>)
+      : {};
+    const next = setPath(nested, path, v);
+    const fields = { ...value.fields };
+    if (Object.keys(next).length === 0) delete fields[groupKey];
+    else fields[groupKey] = next;
     onChange({ ...value, fields });
   }
 
@@ -101,15 +115,39 @@ export default function NodeForm({ value, onChange }: Props) {
         />
       </Form.Item>
 
-      {commonFields(value.type).map((def) => (
-        <Form.Item key={def.key} label={fieldLabel(def)}>
-          <FieldInput
-            def={def}
-            value={value.fields[def.key]}
-            onChange={(v) => setField(def.key, v)}
-          />
-        </Form.Item>
-      ))}
+      {commonFields(value.type)
+        .filter((def) => !def.showWhen || def.showWhen(value.fields))
+        .map((def) => (
+          <Form.Item key={def.key} label={fieldLabel(def)}>
+            <FieldInput
+              def={def}
+              value={value.fields[def.key]}
+              onChange={(v) => setField(def.key, v)}
+            />
+          </Form.Item>
+        ))}
+
+      {groupsFor(value.type)
+        .filter((group) => !group.showWhen || group.showWhen(value.fields))
+        .map((group) => {
+          const nested = (value.fields[group.key] ?? {}) as Record<string, unknown>;
+          return (
+            <div key={group.key}>
+              <Divider orientation="left" plain>
+                {t(`nodeGroups.${group.key}`, group.key)}
+              </Divider>
+              {group.fields.map((sub) => (
+                <Form.Item key={sub.key} label={fieldLabel(sub)}>
+                  <FieldInput
+                    def={sub}
+                    value={getPath(nested, sub.key)}
+                    onChange={(v) => setGroupField(group.key, sub.key, v)}
+                  />
+                </Form.Item>
+              ))}
+            </div>
+          );
+        })}
 
       <AdvancedFields entries={advanced} onChange={setAdvanced} />
     </Form>
