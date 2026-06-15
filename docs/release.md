@@ -1,14 +1,14 @@
 # 发布流程 / Release Process
 
-> **状态:0.1.11 应用包已就绪。** 服务、多阶段镜像构建与 1Panel 应用包安装表单
-> 均已完成(`apps/mihomo-subscription/0.1.11/`)。镜像策略:**发布到 Docker Hub**
+> **状态:0.1.12 应用包已就绪。** 服务、多阶段镜像构建与 1Panel 应用包安装表单
+> 均已完成(`apps/mihomo-subscription/0.1.12/`)。镜像策略:**发布到 Docker Hub**
 > (`quinlanhoo/mihomo-subscription`,多架构 amd64+arm64),1Panel 主机直接
 > `docker pull`,无需在主机上同步源码或本地构建;离线/内网环境可改用文末的
 > 本地构建备选流程。
 >
-> **Status: 0.1.11 app package ready.** The service, the multi-stage image build,
+> **Status: 0.1.12 app package ready.** The service, the multi-stage image build,
 > and the 1Panel app package install form are all complete
-> (`apps/mihomo-subscription/0.1.11/`). Image strategy: **published to Docker Hub**
+> (`apps/mihomo-subscription/0.1.12/`). Image strategy: **published to Docker Hub**
 > (`quinlanhoo/mihomo-subscription`, multi-arch amd64+arm64), so the 1Panel host
 > just `docker pull`s it — no source sync or on-host build. Use the local-build
 > fallback at the end for offline/intranet environments.

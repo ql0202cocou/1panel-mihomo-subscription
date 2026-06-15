@@ -50,6 +50,8 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-06-15
+
 ### Changed
 
 - **(破坏性)机场分组改为「导入才生效」模型(同规则):** 转换器不再透传机场原生
