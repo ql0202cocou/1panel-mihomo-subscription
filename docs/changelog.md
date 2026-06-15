@@ -50,6 +50,26 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-06-15
+
+### Fixed
+
+- 修复节点/分组预览拖动后卡片又「弹回」原位的问题:拖动时已乐观更新顺序,但行列表
+  会在每次从服务端重新派生时直接覆盖该顺序;当重新派生的列表暂时无法体现刚拖动的
+  顺序(配置尚未生成,或新增但未重新生成的自定义节点——按 `created_at` 重建)时,
+  卡片会弹回旧位置(顺序其实已持久化)。现改为按成员合并:对仍存在的行保留当前
+  屏幕顺序(数据刷新),新增项追加、移除项删除,从而保住拖动顺序。规则不受影响
+  (其内容本身即顺序,重载即返回新序)。仅前端可视修复。
+  Fixed the node/group preview cards snapping back to the old position after a
+  drag: the row list is re-derived from the server on every reload and was
+  blindly overwriting the optimistic order; when the re-derived list could not
+  yet reflect the just-dragged order (a not-yet-generated profile, or a custom
+  node added but not regenerated — rebuilt from `nodes` in creation order) the
+  card reverted even though the order was already persisted. Now derived rows are
+  reconciled into the current on-screen order (keep surviving rows in place with
+  refreshed data, append new ones, drop removed ones). Rules are unaffected
+  (their content is the order). Visual-only fix.
+
 ## [0.1.10] - 2026-06-15
 
 ### Changed
