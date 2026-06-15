@@ -16,6 +16,21 @@ import {
   Typography,
   message,
 } from "antd";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../../api";
 import type {
@@ -110,6 +125,8 @@ export default function RulesCard({
   const [policies, setPolicies] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
 
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
   useEffect(() => {
     setLines(
       initial
@@ -142,6 +159,20 @@ export default function RulesCard({
     } catch (e) {
       message.error((e as ApiError).message ?? t("common.saveFailed"));
     }
+  }
+
+  // Rule order is semantic (first match wins), so reordering directly changes
+  // behavior. Ids are list indices — stable within a render, which is all dnd
+  // needs; on drop we reorder and persist the joined content.
+  function onDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = Number(active.id);
+    const newIndex = Number(over.id);
+    const next = arrayMove(lines, oldIndex, newIndex);
+    setLines(next); // optimistic; persist + reload reconciles
+    void persist(next);
+    message.success(t("rules.orderSaved"));
   }
 
   function startAdd() {
@@ -238,52 +269,27 @@ export default function RulesCard({
         {lines.length === 0 ? (
           <Empty description={t("rules.empty")} />
         ) : (
-          <List>
-            {lines.map((line, index) => {
-              const r = parseRule(line);
-              return (
-                <List.Item
-                  key={`${index}-${line}`}
-                  actions={
-                    isComment(line)
-                      ? [
-                          <Popconfirm
-                            key="del"
-                            title={t("rules.deleteConfirm")}
-                            onConfirm={() => remove(index)}
-                          >
-                            <a>{t("rules.delete")}</a>
-                          </Popconfirm>,
-                        ]
-                      : [
-                          <a key="edit" onClick={() => startEdit(index)}>
-                            {t("basic.edit")}
-                          </a>,
-                          <Popconfirm
-                            key="del"
-                            title={t("rules.deleteConfirm")}
-                            onConfirm={() => remove(index)}
-                          >
-                            <a>{t("rules.delete")}</a>
-                          </Popconfirm>,
-                        ]
-                  }
-                >
-                  {isComment(line) ? (
-                    <Typography.Text type="secondary">{line}</Typography.Text>
-                  ) : (
-                    <Space wrap>
-                      <Tag>{r.type}</Tag>
-                      {r.type.toUpperCase() !== "MATCH" && <span>{r.payload}</span>}
-                      <span style={{ color: "#999" }}>→</span>
-                      <Tag color="blue">{r.policy}</Tag>
-                      {r.noResolve && <Tag>no-resolve</Tag>}
-                    </Space>
-                  )}
-                </List.Item>
-              );
-            })}
-          </List>
+          <>
+            <Typography.Text type="secondary">{t("rules.dragHint")}</Typography.Text>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+              <SortableContext
+                items={lines.map((_, i) => String(i))}
+                strategy={verticalListSortingStrategy}
+              >
+                <List>
+                  {lines.map((line, index) => (
+                    <SortableRuleItem
+                      key={index}
+                      id={String(index)}
+                      line={line}
+                      onEdit={() => startEdit(index)}
+                      onRemove={() => remove(index)}
+                    />
+                  ))}
+                </List>
+              </SortableContext>
+            </DndContext>
+          </>
         )}
       </Space>
 
@@ -338,5 +344,67 @@ export default function RulesCard({
         </Form>
       </Modal>
     </Card>
+  );
+}
+
+interface RuleItemProps {
+  id: string;
+  line: string;
+  onEdit: () => void;
+  onRemove: () => void;
+}
+
+function SortableRuleItem({ id, line, onEdit, onRemove }: RuleItemProps) {
+  const { t } = useTranslation();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    background: isDragging ? "rgba(0,0,0,0.04)" : undefined,
+  };
+  const comment = isComment(line);
+  const r = parseRule(line);
+
+  const actions = comment
+    ? [
+        <Popconfirm key="del" title={t("rules.deleteConfirm")} onConfirm={onRemove}>
+          <a>{t("rules.delete")}</a>
+        </Popconfirm>,
+      ]
+    : [
+        <a key="edit" onClick={onEdit}>
+          {t("basic.edit")}
+        </a>,
+        <Popconfirm key="del" title={t("rules.deleteConfirm")} onConfirm={onRemove}>
+          <a>{t("rules.delete")}</a>
+        </Popconfirm>,
+      ];
+
+  return (
+    <List.Item ref={setNodeRef} style={style} actions={actions}>
+      <Space>
+        <span
+          {...attributes}
+          {...listeners}
+          style={{ cursor: "grab", color: "#999", userSelect: "none", touchAction: "none" }}
+          aria-label="drag handle"
+        >
+          ⋮⋮
+        </span>
+        {comment ? (
+          <Typography.Text type="secondary">{line}</Typography.Text>
+        ) : (
+          <Space wrap>
+            <Tag>{r.type}</Tag>
+            {r.type.toUpperCase() !== "MATCH" && <span>{r.payload}</span>}
+            <span style={{ color: "#999" }}>→</span>
+            <Tag color="blue">{r.policy}</Tag>
+            {r.noResolve && <Tag>no-resolve</Tag>}
+          </Space>
+        )}
+      </Space>
+    </List.Item>
   );
 }

@@ -261,6 +261,354 @@ async fn proxies_endpoint_reflects_generated_cache() {
 }
 
 #[tokio::test]
+async fn node_order_reorders_preview_and_survives_regeneration() {
+    let temp = TempDb::new();
+    let fetcher = Arc::new(FakeFetcher::default());
+    let app = build_router(test_state_with_fetcher(&temp, fetcher.clone()).await);
+    let cookie = login(&app).await;
+
+    let profile = create_profile(&app, &cookie).await;
+    let id = profile["id"].as_str().unwrap();
+
+    // Two custom nodes; default order is provider-first: [hk-1, a, b].
+    for name in ["a", "b"] {
+        let node = format!(
+            r#"{{"name":"{name}","node_type":"ss","content":"{{ name: {name}, type: ss, server: 9.9.9.9, port: 1080 }}"}}"#
+        );
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/api/profiles/{id}/nodes"),
+                &cookie,
+                &node,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/generate"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+
+    let proxy_names = |app: Router, cookie: String| async move {
+        let resp = app
+            .oneshot(authed(
+                "GET",
+                &format!("/api/profiles/{id}/proxies"),
+                &cookie,
+                "",
+            ))
+            .await
+            .unwrap();
+        let body = json(resp).await;
+        body["proxies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["name"].as_str().unwrap().to_string())
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        proxy_names(app.clone(), cookie.clone()).await,
+        vec!["hk-1", "a", "b"],
+        "default order is provider-first"
+    );
+
+    // Reorder to [b, hk-1]; `a` is unlisted and must fall to the end.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/api/profiles/{id}/node-order"),
+            &cookie,
+            r#"{"order":["b","hk-1"]}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    // Preview reflects the saved order immediately (before regeneration).
+    assert_eq!(
+        proxy_names(app.clone(), cookie.clone()).await,
+        vec!["b", "hk-1", "a"],
+        "preview honors saved order pre-regenerate"
+    );
+
+    // Regenerate: the generated `proxies` output carries the same order.
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/generate"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        proxy_names(app.clone(), cookie.clone()).await,
+        vec!["b", "hk-1", "a"],
+        "order persists through regeneration"
+    );
+
+    // Empty order clears the manual order; after regenerating, the output
+    // (and preview) return to the provider-first default.
+    app.clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/api/profiles/{id}/node-order"),
+            &cookie,
+            r#"{"order":[]}"#,
+        ))
+        .await
+        .unwrap();
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/generate"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        proxy_names(app.clone(), cookie.clone()).await,
+        vec!["hk-1", "a", "b"],
+        "empty order restores default after regenerate"
+    );
+}
+
+#[tokio::test]
+async fn group_order_reorders_preview_and_survives_regeneration() {
+    let temp = TempDb::new();
+    let fetcher = Arc::new(FakeFetcher::default());
+    let app = build_router(test_state_with_fetcher(&temp, fetcher.clone()).await);
+    let cookie = login(&app).await;
+
+    let profile = create_profile(&app, &cookie).await;
+    let id = profile["id"].as_str().unwrap();
+
+    // Two custom groups; default order is provider-first: [Proxy, G1, G2].
+    for name in ["G1", "G2"] {
+        let group = format!(r#"{{"name":"{name}","group_type":"select","members":["hk-1"]}}"#);
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/api/profiles/{id}/groups"),
+                &cookie,
+                &group,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/generate"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+
+    let group_names = |app: Router, cookie: String| async move {
+        let resp = app
+            .oneshot(authed(
+                "GET",
+                &format!("/api/profiles/{id}/proxies"),
+                &cookie,
+                "",
+            ))
+            .await
+            .unwrap();
+        let body = json(resp).await;
+        body["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|g| g["name"].as_str().unwrap().to_string())
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        group_names(app.clone(), cookie.clone()).await,
+        vec!["Proxy", "G1", "G2"],
+        "default order is provider-first"
+    );
+
+    // Reorder to [G2, Proxy]; `G1` is unlisted and must fall to the end.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/api/profiles/{id}/group-order"),
+            &cookie,
+            r#"{"order":["G2","Proxy"]}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    // Preview reflects the saved order immediately (before regeneration).
+    assert_eq!(
+        group_names(app.clone(), cookie.clone()).await,
+        vec!["G2", "Proxy", "G1"],
+        "preview honors saved order pre-regenerate"
+    );
+
+    // Regenerate: the generated `proxy-groups` output carries the same order.
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/generate"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        group_names(app.clone(), cookie.clone()).await,
+        vec!["G2", "Proxy", "G1"],
+        "order persists through regeneration"
+    );
+}
+
+/// A fetcher whose body can be swapped between fetches, to simulate a provider
+/// updating node info and adding nodes across a subscription refresh.
+#[derive(Clone)]
+struct SwapFetcher {
+    body: Arc<std::sync::Mutex<String>>,
+}
+
+#[async_trait::async_trait]
+impl SubscriptionFetcher for SwapFetcher {
+    async fn fetch(&self, _url: &str) -> Result<Fetched, FetchError> {
+        Ok(Fetched {
+            body: self.body.lock().unwrap().clone(),
+            subscription_userinfo: None,
+        })
+    }
+}
+
+#[tokio::test]
+async fn refresh_keeps_known_node_order_and_appends_new_nodes() {
+    let temp = TempDb::new();
+    let body = Arc::new(std::sync::Mutex::new(
+        "proxies:\n  - { name: hk-1, type: ss, server: 1.1.1.1, port: 8388 }\nrules:\n  - MATCH,DIRECT\n"
+            .to_string(),
+    ));
+    let fetcher = Arc::new(SwapFetcher { body: body.clone() });
+    let app = build_router(test_state_with_fetcher(&temp, fetcher).await);
+    let cookie = login(&app).await;
+
+    let profile = create_profile(&app, &cookie).await;
+    let id = profile["id"].as_str().unwrap();
+
+    // Add a custom node, then generate: output is [hk-1, mine].
+    let node = r#"{"name":"mine","node_type":"ss","content":"{ name: mine, type: ss, server: 9.9.9.9, port: 1080 }"}"#;
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/nodes"),
+            &cookie,
+            node,
+        ))
+        .await
+        .unwrap();
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/generate"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+
+    let proxy_names = |app: Router, cookie: String| async move {
+        let resp = app
+            .oneshot(authed(
+                "GET",
+                &format!("/api/profiles/{id}/proxies"),
+                &cookie,
+                "",
+            ))
+            .await
+            .unwrap();
+        let body = json(resp).await;
+        body["proxies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["name"].as_str().unwrap().to_string())
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        proxy_names(app.clone(), cookie.clone()).await,
+        vec!["hk-1", "mine"]
+    );
+
+    // User manually reorders to [mine, hk-1].
+    app.clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/api/profiles/{id}/node-order"),
+            &cookie,
+            r#"{"order":["mine","hk-1"]}"#,
+        ))
+        .await
+        .unwrap();
+
+    // Provider updates hk-1's info and adds a new node hk-2.
+    *body.lock().unwrap() =
+        "proxies:\n  - { name: hk-1, type: ss, server: 8.8.8.8, port: 8388 }\n  - { name: hk-2, type: ss, server: 2.2.2.2, port: 8388 }\nrules:\n  - MATCH,DIRECT\n"
+            .to_string();
+
+    // Refresh: known nodes keep the manual order, the new node lands at the end.
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/generate"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        proxy_names(app.clone(), cookie.clone()).await,
+        vec!["mine", "hk-1", "hk-2"],
+        "manual order preserved by name; new provider node appended at the end"
+    );
+
+    // The generated output also carries hk-1's refreshed server (updated by name).
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/api/profiles/{id}/preview"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    let yaml = text(resp).await;
+    assert!(
+        yaml.contains("8.8.8.8"),
+        "hk-1 info refreshed from provider"
+    );
+}
+
+#[tokio::test]
 async fn provider_rules_endpoint_returns_upstream_rules() {
     let temp = TempDb::new();
     let fetcher = Arc::new(FakeFetcher::default());

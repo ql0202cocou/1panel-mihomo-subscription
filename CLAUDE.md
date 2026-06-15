@@ -95,6 +95,21 @@ and `docs/data-model.md`):
   (`GET /api/profiles/:id/provider-rules`) — discarded rules aren't in
   `generated_cache`. `GET /api/profiles/:id/proxies` surfaces provider+custom
   proxy/group names from the last generated output for editor autocomplete.
+- Node/group ordering: `profiles.node_order` / `group_order` (JSON name arrays,
+  `NULL`=default) drive a unified manual order of all proxies / proxy-groups.
+  `converter::reorder_by_name` reorders the assembled `proxies` / `proxy-groups`
+  by them (unlisted/new entries fall to the end); both `generate` and
+  `list_proxies` apply them (so the preview reflects a saved order before
+  regeneration). `PUT /api/profiles/:id/node-order` and `.../group-order` persist
+  them (shared `set_order`/`load_order` over an `OrderKind` column allowlist);
+  the `NodesCard`/`GroupsCard` previews drag via `@dnd-kit` and submit the full
+  name list. Every generation snapshots the output's proxy/group name order back
+  into `node_order`/`group_order` (`persist_cache` → `snapshot_orders`), so a
+  provider refresh keeps existing entries in place by name (info refreshed by
+  name) and appends new ones at the end; a manual drag overwrites the column. The
+  `RulesCard` preview is also `@dnd-kit`-sortable, but rule order is already
+  semantic ordered text, so it reorders the lines and saves via the existing
+  `PUT /api/profiles/:id/rules` — no `*_order` column.
 - Outbound fetches send `FETCH_USER_AGENT` (default `clash.meta/1.0`); many
   airport panels 403 a non-clash UA, so don't blank it.
 - Keep `/health` minimal (no version). Admin creds from

@@ -50,6 +50,41 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+### Added
+
+- 节点 / 分组 / 规则预览支持拖拽排序:在三张预览卡片均可直接拖动列表调整顺序,
+  松手即保存。节点 / 分组:新增 `profiles.node_order` / `group_order`(JSON 名字
+  数组,迁移 `0002_node_order.sql` / `0003_group_order.sql`)与
+  `PUT /api/profiles/:id/node-order` / `group-order` 端点;转换器在组装
+  `proxies` / `proxy-groups` 后按对应顺序重排,`GET /api/profiles/:id/proxies` 也
+  按其返回,使预览在重新生成前即反映新顺序;未列出的新条目回退到末尾默认位置。
+  规则:规则顺序本就是有序文本且具语义(命中即止),前端拖动后经现有
+  `PUT /api/profiles/:id/rules` 整体保存,无需新增列/端点。所有排序于下一次
+  「生成配置」时应用到订阅输出。前端引入 `@dnd-kit`。
+  The node / group / rule previews support drag-and-drop sorting: drag the list
+  in any of the three preview cards and the order is saved on drop. Nodes /
+  groups: adds `profiles.node_order` / `group_order` (JSON arrays of names,
+  migrations `0002_node_order.sql` / `0003_group_order.sql`) and
+  `PUT /api/profiles/:id/node-order` / `group-order`; the converter reorders
+  `proxies` / `proxy-groups` by them after assembly and
+  `GET /api/profiles/:id/proxies` returns them reordered so the preview reflects
+  a saved order before regenerating; unlisted new entries fall back to the end.
+  Rules: rule order is already a semantic ordered text (first match wins), so the
+  frontend reorders lines and saves via the existing `PUT /api/profiles/:id/rules`
+  with no new column/endpoint. All orderings apply to the subscription output on
+  the next "generate". The frontend adds `@dnd-kit`.
+- 订阅更新时的节点/分组排序保持稳定:每次生成都会把输出的节点/分组实际顺序快照
+  回写到 `node_order` / `group_order`(`persist_cache` → `snapshot_orders`)。因此
+  后续自动拉取机场订阅时,已存在的节点/分组按名字保留原位置(其信息按名从新机场
+  YAML 刷新),新增的节点/分组排到列表末尾;管理员的手动拖拽顺序仍会被保留并在新增
+  时向后追加。
+  Node/group ordering is now stable across subscription refreshes: every
+  generation snapshots the output's node/group order back into `node_order` /
+  `group_order` (`persist_cache` → `snapshot_orders`). On a later provider fetch,
+  existing nodes/groups keep their position by name (their info refreshed by name
+  from the new provider YAML) and newly added ones land at the end; an admin's
+  manual drag order is preserved and only appended to as new entries appear.
+
 ### Documentation
 
 - 删除 `AGENTS.md`,将其独有内容(分支/PR 工作流、变更规则、「不得删除 changelog

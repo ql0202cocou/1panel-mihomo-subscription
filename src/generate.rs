@@ -304,12 +304,32 @@ async fn convert(
     })
     .collect();
 
+    // Manual proxy / proxy-group ordering (NULL/garbage -> empty -> default).
+    let (node_order, group_order) = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+        "SELECT node_order, group_order FROM profiles WHERE id = ?",
+    )
+    .bind(profile_id)
+    .fetch_optional(&state.db)
+    .await?
+    .map(|(n, g)| (parse_order(n), parse_order(g)))
+    .unwrap_or_default();
+
     Ok(converter::convert(ConvertInput {
         provider_yaml,
         rules: &rules,
         nodes,
         groups,
+        node_order,
+        group_order,
     }))
+}
+
+/// Parse a stored `node_order`/`group_order` JSON array; NULL or malformed
+/// values yield an empty list (= default order).
+fn parse_order(stored: Option<String>) -> Vec<String> {
+    stored
+        .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+        .unwrap_or_default()
 }
 
 fn map_convert_err(e: ConvertError) -> ApiError {
@@ -365,7 +385,54 @@ async fn persist_cache(state: &AppState, profile_id: &str, built: &Built) -> Api
     .bind(&built.generated_at)
     .execute(&state.db)
     .await?;
+
+    // Snapshot the output's proxy/group name order so it stays stable across
+    // provider refreshes: a node/group that still exists keeps its slot (its
+    // info is refreshed by name from the new provider YAML), and any newly added
+    // provider/custom entry lands at the end. A later manual drag overwrites this
+    // via `set_node_order`/`set_group_order`. Best-effort; never fails generation.
+    if snapshot_orders(state, profile_id, &built.yaml)
+        .await
+        .is_err()
+    {
+        tracing::warn!(profile = %profile_id, "failed to snapshot node/group order");
+    }
     Ok(())
+}
+
+/// Persist the output's `proxies`/`proxy-groups` name order into
+/// `profiles.node_order`/`group_order`. Empty sequences store NULL.
+async fn snapshot_orders(state: &AppState, profile_id: &str, yaml: &str) -> ApiResult<()> {
+    let Ok(root) = crate::yaml::parse_limited(yaml) else {
+        return Ok(());
+    };
+    let node_order = order_json(&root, "proxies");
+    let group_order = order_json(&root, "proxy-groups");
+    sqlx::query("UPDATE profiles SET node_order = ?, group_order = ? WHERE id = ?")
+        .bind(&node_order)
+        .bind(&group_order)
+        .bind(profile_id)
+        .execute(&state.db)
+        .await?;
+    Ok(())
+}
+
+/// Extract the ordered `name` values of a top-level sequence (`proxies` or
+/// `proxy-groups`) and serialize them as a JSON array, or `None` (→ SQL NULL)
+/// when there are none.
+fn order_json(root: &serde_yaml::Value, key: &str) -> Option<String> {
+    let names: Vec<&str> = match root.get(key) {
+        Some(serde_yaml::Value::Sequence(items)) => items
+            .iter()
+            .filter_map(|item| item.get("name").and_then(|v| v.as_str()))
+            .collect(),
+        _ => Vec::new(),
+    };
+    if names.is_empty() {
+        None
+    } else {
+        serde_json::to_string(&names).ok()
+    }
 }
 
 async fn update_last_fetch(state: &AppState, profile_id: &str, status: &str) -> ApiResult<()> {
