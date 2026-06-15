@@ -50,6 +50,8 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-06-16
+
 ### Changed
 
 - **节点预览重构为「可展开式分组」:** 节点预览不再是机场+自定义混排的扁平列表,而是
