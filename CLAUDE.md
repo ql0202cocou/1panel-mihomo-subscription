@@ -56,8 +56,10 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f) }' \
 **What this is:** a self-hosted Mihomo subscription converter for 1Panel
 ("Sub-Store Lite"). Admin registers a provider subscription and custom
 rules/nodes/groups via the Web UI; the service fetches provider YAML, appends
-custom nodes/groups, **replaces** `rules`, and serves the result at a permanent
-link: `https://<host>/<public-path-prefix>/api/sub/<profile-token>`.
+custom nodes, **replaces** `rules` and `proxy-groups` with the admin's custom
+ones (provider rules/groups are imported on demand, not passed through), and
+serves the result at a permanent link:
+`https://<host>/<public-path-prefix>/api/sub/<profile-token>`.
 
 **Reference docs** (read the relevant one before changing related code):
 
@@ -90,11 +92,16 @@ and `docs/data-model.md`):
   *before* `serde_yaml` — billion-laughs — then depth/nodes).
 - Management API is same-origin with no CORS layer (enforced in `build_router`);
   keep it so and verify `Origin` on state-changing requests.
-- The converter **replaces** provider `rules`/`proxy-groups`, so the UI's
-  "import provider rules" uses a separate live fetch
-  (`GET /api/profiles/:id/provider-rules`) — discarded rules aren't in
-  `generated_cache`. `GET /api/profiles/:id/proxies` surfaces provider+custom
-  proxy/group names from the last generated output for editor autocomplete.
+- The converter **replaces** provider `rules` and `proxy-groups` (proxies are
+  still appended), so the UI imports the provider's own rules/groups via separate
+  live fetches — `GET /api/profiles/:id/provider-rules` (seeds the rule editor)
+  and `POST /api/profiles/:id/import-provider-groups` (inserts provider groups as
+  editable `custom_groups`; `parse_provider_group` maps name/type/proxies→members
+  and the rest→options, skipping existing names / unsupported types). Discarded
+  provider rules/groups aren't in `generated_cache`. Both freeze on import: a
+  provider update never changes rules/groups unless re-imported.
+  `GET /api/profiles/:id/proxies` surfaces provider proxies + custom group names
+  from the last generated output for editor autocomplete.
 - Node/group ordering: `profiles.node_order` / `group_order` (JSON name arrays,
   `NULL`=default) drive a unified manual order of all proxies / proxy-groups.
   `converter::reorder_by_name` reorders the assembled `proxies` / `proxy-groups`

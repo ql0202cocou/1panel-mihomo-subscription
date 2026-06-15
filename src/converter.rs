@@ -63,7 +63,6 @@ pub fn convert(input: ConvertInput) -> Result<String, ConvertError> {
         yaml::parse_mapping(input.provider_yaml).map_err(|_| ConvertError::ProviderParse)?;
 
     let provider_proxies = names_in(root.get("proxies"));
-    let provider_groups = names_in(root.get("proxy-groups"));
 
     // Parse custom node content up front; collect parse failures as validation
     // errors rather than aborting.
@@ -85,7 +84,6 @@ pub fn convert(input: ConvertInput) -> Result<String, ConvertError> {
     validate(
         &input,
         &provider_proxies,
-        &provider_groups,
         &custom_node_names,
         &custom_group_names,
         &mut errors,
@@ -110,12 +108,15 @@ pub fn convert(input: ConvertInput) -> Result<String, ConvertError> {
     );
     root.insert(Value::from("proxies"), Value::Sequence(proxies));
 
-    // proxy-groups: provider entries + enabled custom groups, then apply the
-    // manual ordering (no-op when `group_order` is empty).
-    let mut groups = sequence_of(root.get("proxy-groups"));
-    for group in input.groups {
-        groups.push(Value::Mapping(build_group(group)));
-    }
+    // proxy-groups: fully replaced with the user's custom groups (like `rules`).
+    // Provider groups are NOT passed through — the admin imports them as editable
+    // custom groups via `import-provider-groups`, so a provider update never
+    // changes groups unless re-imported. Apply the manual ordering after.
+    let mut groups: Vec<Value> = input
+        .groups
+        .into_iter()
+        .map(|group| Value::Mapping(build_group(group)))
+        .collect();
     reorder_by_name(
         &mut groups,
         |item| item.get("name").and_then(Value::as_str),
@@ -140,21 +141,13 @@ pub fn convert(input: ConvertInput) -> Result<String, ConvertError> {
 fn validate(
     input: &ConvertInput,
     provider_proxies: &[String],
-    provider_groups: &[String],
     custom_node_names: &[String],
     custom_group_names: &[String],
     errors: &mut Vec<String>,
 ) {
-    // Custom group names must not collide with provider group names; custom
-    // node names must not collide with provider proxy names (append-only MVP).
-    for group in &input.groups {
-        if provider_groups.contains(&group.name) {
-            errors.push(format!(
-                "custom group `{}` conflicts with a provider group name",
-                group.name
-            ));
-        }
-    }
+    // Custom node names must not collide with provider proxy names (proxies are
+    // still passed through + appended). Provider groups are no longer in the
+    // output (replaced by custom groups), so there is no group-name collision.
     for name in custom_node_names {
         if provider_proxies.contains(name) {
             errors.push(format!(
@@ -163,10 +156,11 @@ fn validate(
         }
     }
 
-    // Known reference targets: every proxy, every group, and built-in policies.
+    // Known reference targets: provider proxies (passed through), custom nodes
+    // (appended), custom groups (the only groups in the output), and built-in
+    // policies. A reference to an un-imported provider group is unknown.
     let known = |name: &str| {
         provider_proxies.iter().any(|n| n == name)
-            || provider_groups.iter().any(|n| n == name)
             || custom_node_names.iter().any(|n| n == name)
             || custom_group_names.iter().any(|n| n == name)
             || BUILTIN_POLICIES.contains(&name)
@@ -336,7 +330,7 @@ rules:
     }
 
     #[test]
-    fn appends_nodes_and_groups_replaces_rules() {
+    fn appends_nodes_replaces_groups_and_rules() {
         let nodes = vec![CustomNode {
             name: "my-ss".into(),
             content: "{ name: my-ss, type: ss, server: 9.9.9.9, port: 1080 }".into(),
@@ -348,17 +342,19 @@ rules:
             options: None,
         }];
         let root = out(input(
-            "DOMAIN-SUFFIX,example.com,MyGroup\nMATCH,Proxy",
+            "DOMAIN-SUFFIX,example.com,MyGroup\nMATCH,DIRECT",
             nodes,
             groups,
         ));
 
+        // Proxies: provider entries + appended custom nodes.
         let proxies = root.get("proxies").unwrap().as_sequence().unwrap();
         assert_eq!(names_in(root.get("proxies")), vec!["hk-1", "my-ss"]);
         assert_eq!(proxies.len(), 2);
 
-        let groups = root.get("proxy-groups").unwrap().as_sequence().unwrap();
-        assert_eq!(groups.len(), 2);
+        // proxy-groups: replaced with custom groups only — the provider's `Proxy`
+        // group is dropped (not passed through).
+        assert_eq!(names_in(root.get("proxy-groups")), vec!["MyGroup"]);
 
         let rules = root.get("rules").unwrap().as_sequence().unwrap();
         assert_eq!(rules.len(), 2);
@@ -384,22 +380,18 @@ rules:
     }
 
     #[test]
-    fn group_name_collision_is_rejected() {
+    fn custom_group_may_reuse_a_provider_group_name() {
+        // Provider groups are replaced, so a custom group named `Proxy` (the
+        // provider's group name) is allowed — this is exactly what importing a
+        // provider group produces.
         let groups = vec![CustomGroup {
-            name: "Proxy".into(), // collides with provider group
+            name: "Proxy".into(),
             group_type: "select".into(),
-            members: vec!["DIRECT".into()],
+            members: vec!["hk-1".into(), "DIRECT".into()],
             options: None,
         }];
-        let err = convert(input("MATCH,DIRECT", vec![], groups)).unwrap_err();
-        match err {
-            ConvertError::Validation(errs) => {
-                assert!(errs
-                    .iter()
-                    .any(|e| e.contains("conflicts with a provider group")));
-            }
-            _ => panic!("expected validation error"),
-        }
+        let root = out(input("MATCH,Proxy", vec![], groups));
+        assert_eq!(names_in(root.get("proxy-groups")), vec!["Proxy"]);
     }
 
     #[test]
@@ -438,11 +430,24 @@ rules:
     fn rules_can_target_provider_proxies_and_builtins() {
         // hk-1 is a provider proxy; DIRECT is a builtin — both valid targets.
         let root = out(input(
-            "DOMAIN,a.com,hk-1\nIP-CIDR,1.2.3.4/32,DIRECT,no-resolve\nMATCH,Proxy",
+            "DOMAIN,a.com,hk-1\nIP-CIDR,1.2.3.4/32,DIRECT,no-resolve\nMATCH,hk-1",
             vec![],
             vec![],
         ));
         assert_eq!(root.get("rules").unwrap().as_sequence().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn rule_targeting_unimported_provider_group_is_rejected() {
+        // `Proxy` is a provider group; since provider groups are no longer in the
+        // output, referencing one that wasn't imported is an unknown target.
+        let err = convert(input("MATCH,Proxy", vec![], vec![])).unwrap_err();
+        match err {
+            ConvertError::Validation(errs) => {
+                assert!(errs.iter().any(|e| e.contains("Proxy")));
+            }
+            _ => panic!("expected validation error"),
+        }
     }
 
     #[test]
@@ -499,15 +504,12 @@ rules:
                 options: None,
             },
         ];
-        // Default groups would be [Proxy, G1, G2]. Ask for [G2, Proxy]; `G1` is
-        // unlisted and must fall to the end.
+        // Default custom groups are [G1, G2] (provider groups are not output).
+        // Ask for [G2]; `G1` is unlisted and must fall to the end.
         let mut inp = input("MATCH,DIRECT", vec![], groups);
-        inp.group_order = vec!["G2".into(), "Proxy".into()];
+        inp.group_order = vec!["G2".into()];
         let root = out(inp);
-        assert_eq!(
-            names_in(root.get("proxy-groups")),
-            vec!["G2", "Proxy", "G1"]
-        );
+        assert_eq!(names_in(root.get("proxy-groups")), vec!["G2", "G1"]);
     }
 
     #[test]

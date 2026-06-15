@@ -119,6 +119,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             get(profiles::list_groups).post(profiles::create_group),
         )
         .route(
+            "/profiles/:id/import-provider-groups",
+            post(profiles::import_provider_groups),
+        )
+        .route(
             "/profiles/:id/groups/:group_id",
             put(profiles::update_group).delete(profiles::delete_group),
         )
