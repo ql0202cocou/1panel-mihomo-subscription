@@ -317,9 +317,14 @@ Suggested behavior:
 
 ```text
 GET /<public-path>/api/sub/<token>
-  -> if fresh generated cache exists, return it
-  -> if cache is missing or stale, refresh and return generated YAML
+  -> every pull re-fetches the provider and regenerates (latest nodes)
+  -> serve the previous cache only if the provider fetch fails
 ```
+
+The public endpoint re-fetches the provider on **every** pull so clients always
+get the latest nodes; per-IP rate limiting plus the per-profile single-flight
+(below) bound the resulting load. `CACHE_TTL_MINUTES` now governs only the admin
+`preview`, not the public endpoint.
 
 Single-flight refresh (required): coalesce concurrent refreshes of the same
 profile behind a per-profile lock so a stale-cache stampede cannot fan out

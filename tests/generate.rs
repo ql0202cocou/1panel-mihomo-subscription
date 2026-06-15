@@ -140,7 +140,8 @@ async fn generate_populates_cache_and_public_link_serves_it() {
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(fetcher.calls.load(Ordering::SeqCst), 1);
 
-    // Public download: served from fresh cache, no extra fetch, with headers.
+    // Public download: every pull re-fetches the provider for the latest nodes,
+    // so this triggers another fetch. Headers still come through.
     let resp = app
         .clone()
         .oneshot(Request::get(&sub).body(Body::empty()).unwrap())
@@ -154,8 +155,8 @@ async fn generate_populates_cache_and_public_link_serves_it() {
     assert_eq!(resp.headers().get("profile-update-interval").unwrap(), "24");
     assert_eq!(
         fetcher.calls.load(Ordering::SeqCst),
-        1,
-        "fresh cache, no refetch"
+        2,
+        "public pull re-fetches the provider"
     );
 
     // Provider proxies are preserved; provider groups and rules are replaced
@@ -409,7 +410,7 @@ async fn node_order_reorders_preview_and_survives_regeneration() {
 }
 
 #[tokio::test]
-async fn reorder_applies_to_served_subscription_without_regenerate() {
+async fn reorder_applies_to_the_cache_immediately_without_a_fetch() {
     let temp = TempDb::new();
     let fetcher = Arc::new(FakeFetcher::default());
     let app = build_router(test_state_with_fetcher(&temp, fetcher.clone()).await);
@@ -417,9 +418,8 @@ async fn reorder_applies_to_served_subscription_without_regenerate() {
 
     let profile = create_profile(&app, &cookie).await;
     let id = profile["id"].as_str().unwrap();
-    let sub = sub_path(profile["subscription_url"].as_str().unwrap());
 
-    // Custom node + generate: served order is provider-first [hk-1, mine].
+    // Custom node + generate: cached order is provider-first [hk-1, mine].
     let node = r#"{"name":"mine","node_type":"ss","content":"{ name: mine, type: ss, server: 9.9.9.9, port: 1080 }"}"#;
     app.clone()
         .oneshot(authed(
@@ -441,19 +441,27 @@ async fn reorder_applies_to_served_subscription_without_regenerate() {
         .unwrap();
     assert_eq!(fetcher.calls.load(Ordering::SeqCst), 1);
 
-    let served = |app: Router, sub: String| async move {
+    let proxy_names = |app: Router, cookie: String| async move {
         let resp = app
-            .oneshot(Request::get(&sub).body(Body::empty()).unwrap())
+            .oneshot(authed(
+                "GET",
+                &format!("/api/profiles/{id}/proxies"),
+                &cookie,
+                "",
+            ))
             .await
             .unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        text(resp).await
+        json(resp).await["proxies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["name"].as_str().unwrap().to_string())
+            .collect::<Vec<_>>()
     };
 
-    let body = served(app.clone(), sub.clone()).await;
-    assert!(
-        body.find("hk-1").unwrap() < body.find("mine").unwrap(),
-        "default served order is provider-first"
+    assert_eq!(
+        proxy_names(app.clone(), cookie.clone()).await,
+        vec!["hk-1", "mine"]
     );
 
     // Put the custom block first WITHOUT regenerating.
@@ -469,17 +477,56 @@ async fn reorder_applies_to_served_subscription_without_regenerate() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    // The public subscription link reflects the new order immediately, and the
-    // reorder did not trigger another provider fetch.
-    let body = served(app.clone(), sub.clone()).await;
-    assert!(
-        body.find("mine").unwrap() < body.find("hk-1").unwrap(),
-        "served subscription honors the new block order without a regenerate"
+    // The cached output (admin preview) reflects the new order immediately via
+    // resync_cache — no provider re-fetch.
+    assert_eq!(
+        proxy_names(app.clone(), cookie.clone()).await,
+        vec!["mine", "hk-1"]
     );
     assert_eq!(
         fetcher.calls.load(Ordering::SeqCst),
         1,
-        "reorder must not re-fetch the provider"
+        "an order edit re-stitches the cache without re-fetching the provider"
+    );
+}
+
+#[tokio::test]
+async fn public_pull_always_fetches_latest_provider() {
+    let temp = TempDb::new();
+    let body = Arc::new(std::sync::Mutex::new(
+        "proxies:\n  - { name: hk-1, type: ss, server: 1.1.1.1, port: 8388 }\nrules:\n  - MATCH,DIRECT\n"
+            .to_string(),
+    ));
+    let fetcher = Arc::new(SwapFetcher { body: body.clone() });
+    let app = build_router(test_state_with_fetcher(&temp, fetcher.clone()).await);
+    let cookie = login(&app).await;
+
+    let profile = create_profile(&app, &cookie).await;
+    let sub = sub_path(profile["subscription_url"].as_str().unwrap());
+
+    let served = |app: Router, sub: String| async move {
+        let resp = app
+            .oneshot(Request::get(&sub).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        text(resp).await
+    };
+
+    // First pull fetches the provider and serves hk-1 only.
+    let first = served(app.clone(), sub.clone()).await;
+    assert!(first.contains("hk-1"));
+    assert!(!first.contains("hk-2"));
+
+    // Provider adds hk-2; a later pull serves the new node — which it could only
+    // do by re-fetching the (now-changed) provider on this pull.
+    *body.lock().unwrap() =
+        "proxies:\n  - { name: hk-1, type: ss, server: 1.1.1.1, port: 8388 }\n  - { name: hk-2, type: ss, server: 2.2.2.2, port: 8388 }\nrules:\n  - MATCH,DIRECT\n"
+            .to_string();
+    let second = served(app.clone(), sub.clone()).await;
+    assert!(
+        second.contains("hk-2"),
+        "pull reflects the latest provider nodes"
     );
 }
 

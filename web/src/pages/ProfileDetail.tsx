@@ -25,15 +25,6 @@ import RulesCard from "./detail/RulesCard";
 
 const SOURCE_TYPES: SourceType[] = ["mihomo", "clash", "surge", "loon"];
 
-/// The latest modification time across the profile and its sub-resources.
-function latestModification(d: Detail): string {
-  const times = [d.updated_at];
-  if (d.rules) times.push(d.rules.updated_at);
-  d.nodes.forEach((n) => times.push(n.updated_at));
-  d.groups.forEach((g) => times.push(g.updated_at));
-  return times.reduce((a, b) => (a > b ? a : b));
-}
-
 export default function ProfileDetail() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
@@ -71,8 +62,6 @@ export default function ProfileDetail() {
     }
   }
 
-  const gen = detail.last_generated_at;
-  const dirty = !gen || Date.parse(latestModification(detail)) > Date.parse(gen);
   const nonRuleErrors = genErrors.filter((e) => !/rules line/.test(e));
 
   return (
@@ -84,7 +73,7 @@ export default function ProfileDetail() {
         <Link to="/">{t("detail.back")}</Link>
       </Space>
 
-      <HostedLink detail={detail} dirty={dirty} onReset={reload} />
+      <HostedLink detail={detail} onReset={reload} />
 
       <BasicInfo detail={detail} onSaved={reload} />
       <SourceInfo detail={detail} onRefresh={generate} onSaved={reload} refreshing={generating} />
@@ -127,23 +116,11 @@ export default function ProfileDetail() {
           }
         />
       )}
-
-      <Button type="primary" size="large" block loading={generating} onClick={generate}>
-        {generating ? t("detail.generating") : t("detail.generate")}
-      </Button>
     </Space>
   );
 }
 
-function HostedLink({
-  detail,
-  dirty,
-  onReset,
-}: {
-  detail: Detail;
-  dirty: boolean;
-  onReset: () => void;
-}) {
+function HostedLink({ detail, onReset }: { detail: Detail; onReset: () => void }) {
   const { t } = useTranslation();
 
   async function resetToken() {
@@ -155,13 +132,9 @@ function HostedLink({
   return (
     <Card title={t("detail.hostedLink")}>
       <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-        {dirty && (
-          <Alert
-            type="warning"
-            showIcon
-            message={detail.last_generated_at ? t("detail.notGenerated") : t("detail.neverGenerated")}
-          />
-        )}
+        <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
+          {t("detail.alwaysLive")}
+        </Typography.Paragraph>
         <Typography.Text copyable code>
           {detail.subscription_url}
         </Typography.Text>

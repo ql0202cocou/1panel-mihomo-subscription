@@ -65,7 +65,7 @@ package already exposes.
 | `FETCH_TIMEOUT_SECONDS` | Install form | `15` | Yes | Provider fetch total timeout |
 | `FETCH_USER_AGENT` | Env (optional) | `clash.meta/1.0` | No | `User-Agent` for provider fetches. Many airport panels gate the subscription on a Clash-family UA and return `403`/`401` to unknown clients; the default matches the common `/clash/i` check and signals Meta support. Override only for panels that require a specific client UA (e.g. Shadowrocket/Stash) |
 | `MAX_SUBSCRIPTION_SIZE_MB` | Install form | `8` | Yes | Provider response size limit |
-| `CACHE_TTL_MINUTES` | Install form | `15` | Yes | Generated YAML cache TTL (see `security-design.md`) |
+| `CACHE_TTL_MINUTES` | Install form | `15` | Yes | Admin **preview** cache TTL only; the public subscription endpoint always re-fetches the provider per pull (see `api-design.md` / `security-design.md`) |
 | `TRUSTED_PROXY_HOPS` | Install form | `1` | Yes | Reverse proxy hops to trust when deriving the client IP (see `security-design.md`) |
 | `SECURE_COOKIES` | Install form (optional) | `auto` (infer from `https://` `PUBLIC_BASE_URL`) | Yes | Force the `Secure` session-cookie attribute. The install form offers `auto`/`true`/`false`; `auto` (and any unrecognized value) falls back to inference. Set `true` when serving over HTTPS through a TLS-terminating reverse proxy (where the app itself speaks plain HTTP); the service logs a warning when cookies end up without `Secure` |
 | `PORT` | Compose (fixed) | `8080` | Yes | Container listen port |

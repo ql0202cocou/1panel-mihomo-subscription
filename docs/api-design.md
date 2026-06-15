@@ -447,17 +447,31 @@ profile-update-interval: 24
 
 行为 / Behavior:
 
-- 命中新鲜缓存直接返回;缓存缺失或过期时重新拉取并生成(见
-  `security-design.md` 缓存策略)。
+- **每次拉取都实时重拉机场并重新生成**,使客户端永远拿到机场最新节点;不再有
+  「缓存新鲜就直接返回」的 TTL 短路。并发拉取由 per-profile single-flight 合并为
+  一次机场拉取(后到的请求若发现缓存已在本批刷新过,直接复用)。`generated_cache`
+  现仅作**机场拉取失败时的兜底**(返回上一份缓存,无则 `503`);`CACHE_TTL_MINUTES`
+  现只影响管理端 `preview`,不影响本端点。
+- 「生成配置」按钮已移除——公共链接始终实时,无需手动生成;管理端预览里的机场节点
+  通过「原始订阅源 → 刷新」(`POST /generate`)更新。
 - 响应和错误中绝不包含原始机场 URL。
-- 按 token 和来源 IP 限流。
+- 按 token 和来源 IP 限流(配合 single-flight 合并,约束机场侧负载)。
 
 &nbsp;
 
-- Serves fresh cache when available; refreshes on miss or staleness (see the
-  cache strategy in `security-design.md`).
+- **Every pull re-fetches the provider and regenerates**, so the client always
+  gets the latest provider nodes; there is no "serve fresh cache within TTL"
+  short-circuit. Concurrent pulls are coalesced into one provider fetch by the
+  per-profile single-flight (a later request reuses the cache if it was already
+  refreshed in this batch). `generated_cache` is now only a **fallback when the
+  provider fetch fails** (serve the previous cache, else `503`);
+  `CACHE_TTL_MINUTES` now affects only the admin `preview`, not this endpoint.
+- The "generate" button is gone — the public link is always live, no manual
+  generate needed; provider nodes in the admin preview are refreshed via
+  "source → refresh" (`POST /generate`).
 - Responses and errors never contain the original provider URL.
-- Rate limited by token and source IP.
+- Rate limited by token and source IP (with single-flight coalescing, this bounds
+  the load on the provider).
 
 ## 兼容性说明 / Compatibility Notes
 
