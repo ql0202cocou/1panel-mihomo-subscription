@@ -495,7 +495,7 @@ pub async fn list_proxies(
 
     // The output is trusted (we produced it), but parse through the bounded
     // parser anyway and degrade gracefully to an empty list on any surprise.
-    let (proxies, groups) = yaml::parse_limited(&output_yaml)
+    let (mut proxies, mut groups) = yaml::parse_limited(&output_yaml)
         .ok()
         .map(|v| {
             (
@@ -504,6 +504,13 @@ pub async fn list_proxies(
             )
         })
         .unwrap_or_default();
+
+    // Reflect a saved manual order even before the profile is regenerated (the
+    // cached YAML may still carry the pre-reorder sequence).
+    let node_order = load_order(&state, &id, OrderKind::Node).await?;
+    let group_order = load_order(&state, &id, OrderKind::Group).await?;
+    crate::converter::reorder_by_name(&mut proxies, |p| Some(p.name.as_str()), &node_order);
+    crate::converter::reorder_by_name(&mut groups, |g| Some(g.name.as_str()), &group_order);
 
     Ok(Json(ProxiesResponse {
         generated: true,
@@ -531,6 +538,104 @@ fn extract_previews(root: &serde_yaml::Value, key: &str) -> Vec<ProxyPreview> {
             .collect(),
         _ => Vec::new(),
     }
+}
+
+/// Which manual-ordering column a request targets. Maps to a fixed column name
+/// so the SQL is never built from caller input.
+#[derive(Clone, Copy)]
+enum OrderKind {
+    Node,
+    Group,
+}
+
+/// Read a profile's persisted manual order (proxy or proxy-group names).
+/// Missing/NULL or malformed JSON yields an empty list (= default order).
+async fn load_order(state: &AppState, profile_id: &str, kind: OrderKind) -> ApiResult<Vec<String>> {
+    let sql = match kind {
+        OrderKind::Node => "SELECT node_order FROM profiles WHERE id = ?",
+        OrderKind::Group => "SELECT group_order FROM profiles WHERE id = ?",
+    };
+    Ok(sqlx::query_scalar::<_, Option<String>>(sql)
+        .bind(profile_id)
+        .fetch_optional(&state.db)
+        .await?
+        .flatten()
+        .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+        .unwrap_or_default())
+}
+
+#[derive(Deserialize)]
+pub struct OrderBody {
+    /// Ordered names (provider + custom). Names not present in the profile are
+    /// ignored at generation; an empty array clears the manual order.
+    order: Vec<String>,
+}
+
+/// Bounds to keep a single profile's persisted order small and the request
+/// cheap to validate. A profile realistically has well under this many entries.
+const MAX_ORDER_ENTRIES: usize = 5_000;
+const MAX_ORDER_NAME_LEN: usize = 256;
+
+/// Validate and persist a manual ordering for the given column. Drives both the
+/// generated output (applied on next generate) and the preview list.
+async fn set_order(
+    state: &AppState,
+    id: &str,
+    kind: OrderKind,
+    body: OrderBody,
+) -> ApiResult<StatusCode> {
+    let _ = load_profile_row(state, id).await?;
+
+    if body.order.len() > MAX_ORDER_ENTRIES {
+        return Err(ApiError::BadRequest(format!(
+            "order must have at most {MAX_ORDER_ENTRIES} entries"
+        )));
+    }
+    if body.order.iter().any(|n| n.len() > MAX_ORDER_NAME_LEN) {
+        return Err(ApiError::BadRequest(format!(
+            "names must be at most {MAX_ORDER_NAME_LEN} bytes"
+        )));
+    }
+
+    // Empty list clears the manual order (back to default); store NULL.
+    let stored = if body.order.is_empty() {
+        None
+    } else {
+        Some(
+            serde_json::to_string(&body.order)
+                .map_err(|_| ApiError::BadRequest("order could not be serialized".into()))?,
+        )
+    };
+
+    let sql = match kind {
+        OrderKind::Node => "UPDATE profiles SET node_order = ?, updated_at = ? WHERE id = ?",
+        OrderKind::Group => "UPDATE profiles SET group_order = ?, updated_at = ? WHERE id = ?",
+    };
+    sqlx::query(sql)
+        .bind(&stored)
+        .bind(now())
+        .bind(id)
+        .execute(&state.db)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `PUT /api/profiles/:id/node-order` — persist a manual proxy ordering.
+pub async fn set_node_order(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<OrderBody>,
+) -> ApiResult<impl IntoResponse> {
+    set_order(&state, &id, OrderKind::Node, body).await
+}
+
+/// `PUT /api/profiles/:id/group-order` — persist a manual proxy-group ordering.
+pub async fn set_group_order(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<OrderBody>,
+) -> ApiResult<impl IntoResponse> {
+    set_order(&state, &id, OrderKind::Group, body).await
 }
 
 fn validate_node(body: &NodeBody) -> ApiResult<()> {

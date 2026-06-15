@@ -118,6 +118,8 @@ endpoint require a valid session and otherwise return `401`.
 | PUT | `/api/profiles/:id/rules` | 是/Yes | 替换自定义规则 / Replace custom rules |
 | GET | `/api/profiles/:id/provider-rules` | 是/Yes | 拉取机场原始 `rules`(用于规则预览预填,实时拉取,不缓存) / Fetch the provider's `rules` (seeds the rule preview; live fetch, not cached) |
 | GET | `/api/profiles/:id/proxies` | 是/Yes | 节点/分组预览:生成输出中的全部代理与分组(name+type,机场+自定义,只读) / Node/group preview: all proxies and groups (name+type) in the generated output (provider + custom, read-only) |
+| PUT | `/api/profiles/:id/node-order` | 是/Yes | 保存手动节点排序(节点名数组),决定生成 `proxies` 与预览的顺序 / Save manual node ordering (array of names) driving generated `proxies` and preview order |
+| PUT | `/api/profiles/:id/group-order` | 是/Yes | 保存手动分组排序(分组名数组),决定生成 `proxy-groups` 与预览的顺序 / Save manual group ordering (array of names) driving generated `proxy-groups` and preview order |
 | GET / POST | `/api/profiles/:id/nodes` | 是/Yes | 自定义节点 / Custom nodes |
 | PUT / DELETE | `/api/profiles/:id/nodes/:node_id` | 是/Yes | 单个节点 / Single node |
 | GET / POST | `/api/profiles/:id/groups` | 是/Yes | 自定义分组 / Custom groups |
@@ -235,9 +237,63 @@ GET /api/profiles/:id/proxies
 
 - 只读。`proxies` 与 `groups` 均为 `name`/`type` 对,解析自
   `generated_cache.output_yaml`,因此同时包含机场与已并入的自定义条目;未生成过时
-  返回 `generated: false` 与空数组。前端据自定义名集合区分可编辑(自定义)与只读
-  (机场)条目:节点预览与分组预览采用同一套交互,`proxies`/`groups` 也作为自定义
-  分组成员选择的候选。
+  返回 `generated: false` 与空数组。`proxies`/`groups` 会分别按已保存的
+  `node_order`/`group_order`(见下)重排后返回,使节点/分组预览在保存排序后、重新
+  生成前即可反映新顺序。前端据自定义名集合区分可编辑(自定义)与只读(机场)条目:
+  节点预览与分组预览采用同一套交互,`proxies`/`groups` 也作为自定义分组成员选择的
+  候选。
+
+```text
+PUT /api/profiles/:id/node-order
+{ "order": ["my-ss", "hk-1"] }   // 节点名数组;空数组清除手动排序(回到默认)
+-> 204 No Content
+
+PUT /api/profiles/:id/group-order
+{ "order": ["MyGroup", "Proxy"] } // 分组名数组;语义与 node-order 完全一致
+-> 204 No Content
+```
+
+- 节点预览与分组预览均支持拖拽排序:前端把统一列表(机场 + 自定义)拖动后,提交
+  完整的名字顺序。后端分别存入 `profiles.node_order` / `group_order`(见
+  `data-model.md`)。`order` 中存在于输出的名字优先按此顺序排列,未列出的条目
+  (新增机场/自定义节点或分组)回退到末尾默认位置;名字超长或数组过大返回 `400`。
+  该顺序同时决定**下一次生成**的 `proxies` / `proxy-groups` 顺序与预览展示顺序;
+  清空缓存的旧顺序需重新生成。两个端点的鉴权、同源校验与其他管理接口一致。
+  此外,**每次生成都会把输出的节点/分组实际顺序快照回写到 `node_order`/`group_order`**
+  (见 `data-model.md`):因此后续更新订阅时,已存在的节点/分组按名字保留原位置
+  (信息按名从新机场 YAML 刷新),新增的则排到末尾。
+  Additionally, **every generation snapshots the output's node/group order back
+  into `node_order`/`group_order`** (see `data-model.md`): so on a later
+  subscription refresh, existing nodes/groups keep their position by name (their
+  info refreshed by name from the new provider YAML) and new ones land at the end.
+- Read-only. Both `proxies` and `groups` are `name`/`type` pairs parsed from
+  `generated_cache.output_yaml`, so they contain provider and merged custom
+  entries; before the first generation it returns `generated: false` and empty
+  arrays. `proxies`/`groups` are returned reordered by the saved
+  `node_order`/`group_order` (below) so the node/group preview reflects a saved
+  order even before regeneration. The frontend distinguishes editable (custom)
+  from read-only (provider) entries via the custom name set — the node preview
+  and group preview share one interaction — and `proxies`/`groups` also seed the
+  custom-group member suggestions.
+- Both the node preview and the group preview support drag-and-drop sorting: the
+  frontend drags the unified list (provider + custom) and submits the full
+  ordered name list, which the backend stores in `profiles.node_order` /
+  `group_order` (see `data-model.md`). Names in `order` that exist in the output
+  are emitted first in that order; entries not listed (newly added provider/
+  custom nodes or groups) fall back to the default position at the end;
+  over-long names or an over-large array return `400`. This order drives both
+  the **next** generation's `proxies` / `proxy-groups` order and the preview
+  display order; clearing the already-cached old order requires regenerating.
+  Both endpoints' auth and same-origin checks match the other management
+  endpoints.
+- 规则预览同样支持拖拽排序,但规则顺序本身具有语义(自上而下命中即止),且
+  `rulesets.content` 本就是有序文本,因此无需新增列:前端拖动后直接把重排后的规则
+  行经 `PUT /api/profiles/:id/rules` 整体保存,排序于下一次生成时随规则一并生效。
+- The rule preview supports drag-and-drop sorting too, but rule order is itself
+  semantic (top-down, first match wins) and `rulesets.content` is already an
+  ordered text, so no new column is needed: the frontend reorders the rule lines
+  and saves the whole content via `PUT /api/profiles/:id/rules`; the order takes
+  effect with the rules on the next generation.
 - Read-only. Both `proxies` and `groups` are `name`/`type` pairs parsed from
   `generated_cache.output_yaml`, so they contain provider and merged custom
   entries; before the first generation it returns `generated: false` and empty
@@ -302,8 +358,8 @@ explicitly (implemented in `src/converter.rs`):
 
 | 键 / Key | 处理 / Handling |
 |-----|----------|
-| `proxies` | 保留机场条目,追加启用的自定义节点 / Provider entries preserved; enabled custom nodes appended |
-| `proxy-groups` | 保留机场条目,追加启用的自定义分组 / Provider entries preserved; enabled custom groups appended |
+| `proxies` | 保留机场条目,追加启用的自定义节点,再按 `node_order` 重排 / Provider entries preserved, enabled custom nodes appended, then reordered by `node_order` |
+| `proxy-groups` | 保留机场条目,追加启用的自定义分组,再按 `group_order` 重排 / Provider entries preserved, enabled custom groups appended, then reordered by `group_order` |
 | `rules` | 整体替换为用户规则 / Replaced entirely with the user-defined rules |
 | `rule-providers` | 原样透传(用户规则可引用机场的 `RULE-SET`)/ Passed through unchanged (user rules may reference provider `RULE-SET`s) |
 | `proxy-providers` | **MVP 阶段剥离**:远程节点提供者会让客户端拉取绕过本服务 SSRF 防护与缓存的 URL,并可能暴露机场 URL / **Stripped in the MVP**: remote node providers would make the client fetch URLs that bypass this service's SSRF protection and caching, and may expose provider URLs |

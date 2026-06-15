@@ -40,6 +40,13 @@ pub struct ConvertInput<'a> {
     pub nodes: Vec<CustomNode>,
     /// Enabled custom groups only.
     pub groups: Vec<CustomGroup>,
+    /// Manual proxy ordering (proxy names, provider + custom). Empty means
+    /// default order. Names present here are emitted first in this order; any
+    /// proxy not listed keeps its default relative position at the end.
+    pub node_order: Vec<String>,
+    /// Manual proxy-group ordering (group names, provider + custom). Same
+    /// semantics as `node_order`, applied to `proxy-groups`.
+    pub group_order: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -90,18 +97,30 @@ pub fn convert(input: ConvertInput) -> Result<String, ConvertError> {
 
     // ── Build the output config ──────────────────────────────────────────────
 
-    // proxies: provider entries + enabled custom nodes.
+    // proxies: provider entries + enabled custom nodes, then apply the manual
+    // ordering (no-op when `node_order` is empty).
     let mut proxies = sequence_of(root.get("proxies"));
     for (_, node) in parsed_nodes {
         proxies.push(Value::Mapping(node));
     }
+    reorder_by_name(
+        &mut proxies,
+        |item| item.get("name").and_then(Value::as_str),
+        &input.node_order,
+    );
     root.insert(Value::from("proxies"), Value::Sequence(proxies));
 
-    // proxy-groups: provider entries + enabled custom groups.
+    // proxy-groups: provider entries + enabled custom groups, then apply the
+    // manual ordering (no-op when `group_order` is empty).
     let mut groups = sequence_of(root.get("proxy-groups"));
     for group in input.groups {
         groups.push(Value::Mapping(build_group(group)));
     }
+    reorder_by_name(
+        &mut groups,
+        |item| item.get("name").and_then(Value::as_str),
+        &input.group_order,
+    );
     root.insert(Value::from("proxy-groups"), Value::Sequence(groups));
 
     // rules: fully replaced with the user's rules.
@@ -187,6 +206,35 @@ fn names_in(value: Option<&Value>) -> Vec<String> {
             .collect(),
         _ => Vec::new(),
     }
+}
+
+/// Stable reorder of named items by a desired name order.
+///
+/// Items whose name appears in `order` are moved to the front in `order`'s
+/// sequence; all others keep their original relative order and follow. Items
+/// with no resolvable name, and `order` entries not present in `items`, are
+/// ignored. When `order` is empty this is a no-op. Shared by the converter
+/// (proxy mappings) and the preview endpoint (`ProxyPreview`s).
+pub fn reorder_by_name<T, F>(items: &mut Vec<T>, name_of: F, order: &[String])
+where
+    F: Fn(&T) -> Option<&str>,
+{
+    if order.is_empty() || items.len() < 2 {
+        return;
+    }
+    let rank: std::collections::HashMap<&str, usize> = order
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.as_str(), i))
+        .collect();
+    // Stable by (rank, original index); unranked items sort after ranked ones
+    // while preserving their default order.
+    let mut indexed: Vec<(usize, T)> = std::mem::take(items).into_iter().enumerate().collect();
+    indexed.sort_by_key(|(idx, item)| {
+        let r = name_of(item).and_then(|n| rank.get(n)).copied();
+        (r.unwrap_or(usize::MAX), *idx)
+    });
+    *items = indexed.into_iter().map(|(_, item)| item).collect();
 }
 
 /// Clone a value's sequence, or an empty one if absent/not a sequence.
@@ -277,6 +325,8 @@ rules:
             rules,
             nodes,
             groups,
+            node_order: Vec::new(),
+            group_order: Vec::new(),
         }
     }
 
@@ -427,7 +477,66 @@ rules:
             rules: "MATCH,DIRECT",
             nodes: vec![],
             groups: vec![],
+            node_order: Vec::new(),
+            group_order: Vec::new(),
         };
         assert!(matches!(convert(bad), Err(ConvertError::ProviderParse)));
+    }
+
+    #[test]
+    fn group_order_reorders_groups_and_appends_unlisted() {
+        let groups = vec![
+            CustomGroup {
+                name: "G1".into(),
+                group_type: "select".into(),
+                members: vec!["hk-1".into()],
+                options: None,
+            },
+            CustomGroup {
+                name: "G2".into(),
+                group_type: "select".into(),
+                members: vec!["hk-1".into()],
+                options: None,
+            },
+        ];
+        // Default groups would be [Proxy, G1, G2]. Ask for [G2, Proxy]; `G1` is
+        // unlisted and must fall to the end.
+        let mut inp = input("MATCH,DIRECT", vec![], groups);
+        inp.group_order = vec!["G2".into(), "Proxy".into()];
+        let root = out(inp);
+        assert_eq!(
+            names_in(root.get("proxy-groups")),
+            vec!["G2", "Proxy", "G1"]
+        );
+    }
+
+    #[test]
+    fn node_order_reorders_proxies_and_appends_unlisted() {
+        let nodes = vec![
+            CustomNode {
+                name: "a".into(),
+                content: "{ name: a, type: ss, server: 9.9.9.9, port: 1080 }".into(),
+            },
+            CustomNode {
+                name: "b".into(),
+                content: "{ name: b, type: ss, server: 9.9.9.8, port: 1080 }".into(),
+            },
+        ];
+        // Default proxies would be [hk-1, a, b]. Ask for [b, hk-1]; `a` is
+        // unlisted and must fall to the end in its default position.
+        let mut inp = input("MATCH,DIRECT", nodes, vec![]);
+        inp.node_order = vec!["b".into(), "hk-1".into()];
+        let root = out(inp);
+        assert_eq!(names_in(root.get("proxies")), vec!["b", "hk-1", "a"]);
+    }
+
+    #[test]
+    fn empty_node_order_keeps_default_order() {
+        let nodes = vec![CustomNode {
+            name: "z".into(),
+            content: "{ name: z, type: ss, server: 9.9.9.9, port: 1080 }".into(),
+        }];
+        let root = out(input("MATCH,DIRECT", nodes, vec![]));
+        assert_eq!(names_in(root.get("proxies")), vec!["hk-1", "z"]);
     }
 }
