@@ -466,7 +466,13 @@ struct ProxiesResponse {
     /// Whether a generated cache exists yet (provider nodes are parsed from it).
     generated: bool,
     generated_at: Option<String>,
+    /// All output proxies in order (provider block + custom block per
+    /// `node_section_order`). The frontend splits provider vs custom by the
+    /// custom-node name set.
     proxies: Vec<ProxyPreview>,
+    /// Order of the two node blocks (`["provider","custom"]` by default), so the
+    /// node preview renders the block order even before the first generate.
+    node_section_order: Vec<String>,
     /// Proxy-groups in the generated output (name + type), for the group
     /// preview and for member suggestions.
     groups: Vec<ProxyPreview>,
@@ -488,18 +494,22 @@ pub async fn list_proxies(
     .fetch_optional(&state.db)
     .await?;
 
+    let section_order = section_order(&state, &id).await?;
+
     let Some((output_yaml, generated_at)) = cache else {
         return Ok(Json(ProxiesResponse {
             generated: false,
             generated_at: None,
             proxies: Vec::new(),
+            node_section_order: section_order,
             groups: Vec::new(),
         }));
     };
 
-    // The output is trusted (we produced it), but parse through the bounded
-    // parser anyway and degrade gracefully to an empty list on any surprise.
-    let (mut proxies, mut groups) = yaml::parse_limited(&output_yaml)
+    // The output is trusted (we produced it) and already grouped/ordered (any
+    // order edit re-stitches the cache via `resync_cache`), so return it as-is.
+    // Parse through the bounded parser anyway; degrade gracefully on any surprise.
+    let (proxies, groups) = yaml::parse_limited(&output_yaml)
         .ok()
         .map(|v| {
             (
@@ -509,17 +519,11 @@ pub async fn list_proxies(
         })
         .unwrap_or_default();
 
-    // Reflect a saved manual order even before the profile is regenerated (the
-    // cached YAML may still carry the pre-reorder sequence).
-    let node_order = load_order(&state, &id, OrderKind::Node).await?;
-    let group_order = load_order(&state, &id, OrderKind::Group).await?;
-    crate::converter::reorder_by_name(&mut proxies, |p| Some(p.name.as_str()), &node_order);
-    crate::converter::reorder_by_name(&mut groups, |g| Some(g.name.as_str()), &group_order);
-
     Ok(Json(ProxiesResponse {
         generated: true,
         generated_at: Some(generated_at),
         proxies,
+        node_section_order: section_order,
         groups,
     }))
 }
@@ -550,6 +554,8 @@ fn extract_previews(root: &serde_yaml::Value, key: &str) -> Vec<ProxyPreview> {
 enum OrderKind {
     Node,
     Group,
+    /// The two node blocks' order (`node_section_order`): provider / custom.
+    Section,
 }
 
 /// Read a profile's persisted manual order (proxy or proxy-group names).
@@ -558,6 +564,7 @@ async fn load_order(state: &AppState, profile_id: &str, kind: OrderKind) -> ApiR
     let sql = match kind {
         OrderKind::Node => "SELECT node_order FROM profiles WHERE id = ?",
         OrderKind::Group => "SELECT group_order FROM profiles WHERE id = ?",
+        OrderKind::Section => "SELECT node_section_order FROM profiles WHERE id = ?",
     };
     Ok(sqlx::query_scalar::<_, Option<String>>(sql)
         .bind(profile_id)
@@ -566,6 +573,16 @@ async fn load_order(state: &AppState, profile_id: &str, kind: OrderKind) -> ApiR
         .flatten()
         .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
         .unwrap_or_default())
+}
+
+/// The saved node-section order, or the default `["provider","custom"]`.
+async fn section_order(state: &AppState, profile_id: &str) -> ApiResult<Vec<String>> {
+    let saved = load_order(state, profile_id, OrderKind::Section).await?;
+    Ok(if saved.is_empty() {
+        vec!["provider".to_string(), "custom".to_string()]
+    } else {
+        saved
+    })
 }
 
 #[derive(Deserialize)]
@@ -614,6 +631,9 @@ async fn set_order(
     let sql = match kind {
         OrderKind::Node => "UPDATE profiles SET node_order = ?, updated_at = ? WHERE id = ?",
         OrderKind::Group => "UPDATE profiles SET group_order = ?, updated_at = ? WHERE id = ?",
+        OrderKind::Section => {
+            "UPDATE profiles SET node_section_order = ?, updated_at = ? WHERE id = ?"
+        }
     };
     sqlx::query(sql)
         .bind(&stored)
@@ -653,6 +673,24 @@ pub async fn set_group_order(
     Json(body): Json<OrderBody>,
 ) -> ApiResult<impl IntoResponse> {
     set_order(&state, &id, OrderKind::Group, body).await
+}
+
+/// `PUT /api/profiles/:id/node-section-order` — persist the order of the two node
+/// blocks. The body must be exactly a permutation of `["provider","custom"]`.
+pub async fn set_node_section_order(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<OrderBody>,
+) -> ApiResult<impl IntoResponse> {
+    let valid = body.order.len() == 2
+        && body.order.contains(&"provider".to_string())
+        && body.order.contains(&"custom".to_string());
+    if !valid {
+        return Err(ApiError::BadRequest(
+            "order must be a permutation of [\"provider\",\"custom\"]".into(),
+        ));
+    }
+    set_order(&state, &id, OrderKind::Section, body).await
 }
 
 fn validate_node(body: &NodeBody) -> ApiResult<()> {

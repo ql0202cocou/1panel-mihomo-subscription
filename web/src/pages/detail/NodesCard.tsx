@@ -1,16 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Button,
-  Card,
-  Empty,
-  List,
-  Modal,
-  Popconfirm,
-  Space,
-  Tag,
-  Typography,
-  message,
-} from "antd";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Button, Card, Empty, List, Modal, Popconfirm, Space, Tag, Typography, message } from "antd";
 import {
   DndContext,
   PointerSensor,
@@ -33,6 +22,8 @@ import NodeForm, { contentToModel, modelToContent, type NodeModel } from "./Node
 
 interface Props {
   profileId: string;
+  /** Provider (airport) name — used as the provider group's title. */
+  profileName: string;
   nodes: CustomNode[];
   /** Changes when the profile is (re)generated; triggers a provider-node refetch. */
   generatedAt: string | null;
@@ -40,56 +31,41 @@ interface Props {
 }
 
 const EMPTY_MODEL: NodeModel = { name: "", type: "", fields: {} };
+const DEFAULT_SECTIONS = ["provider", "custom"];
 
-/** One row in the unified, sortable node list. */
-interface NodeRow {
-  /** Stable dnd/React id — proxy names are unique within a profile. */
-  name: string;
-  type: string;
-  /** The editable custom node, or null for a read-only provider node. */
-  custom: CustomNode | null;
-}
-
-/**
- * Merge the generated proxy list (provider + custom, already in saved order)
- * with the custom-node list into one ordered row list. When nothing has been
- * generated yet, falls back to the custom nodes alone. Disabled custom nodes
- * (absent from the generated output) are appended so they stay editable.
- */
-function buildRows(providers: ProxyPreview[], nodes: CustomNode[], generated: boolean): NodeRow[] {
-  const customByName = new Map(nodes.map((n) => [n.name, n]));
-  if (!generated || providers.length === 0) {
-    return nodes.map((n) => ({ name: n.name, type: n.node_type, custom: n }));
+/** Order custom nodes by the generated output's custom subset, then append any
+ * not yet in the output (disabled / newly added) so they stay visible. */
+function buildCustomOrder(providers: ProxyPreview[], nodes: CustomNode[]): CustomNode[] {
+  const customNames = new Set(nodes.map((n) => n.name));
+  const byName = new Map(nodes.map((n) => [n.name, n]));
+  const seen = new Set<string>();
+  const out: CustomNode[] = [];
+  for (const p of providers) {
+    if (customNames.has(p.name) && !seen.has(p.name)) {
+      out.push(byName.get(p.name)!);
+      seen.add(p.name);
+    }
   }
-  const rows: NodeRow[] = providers.map((p) => ({
-    name: p.name,
-    type: p.type,
-    custom: customByName.get(p.name) ?? null,
-  }));
-  const seen = new Set(providers.map((p) => p.name));
   for (const n of nodes) {
-    if (!seen.has(n.name)) rows.push({ name: n.name, type: n.node_type, custom: n });
+    if (!seen.has(n.name)) {
+      out.push(n);
+      seen.add(n.name);
+    }
   }
-  return rows;
+  return out;
 }
 
-/**
- * Merge freshly derived rows into the current on-screen order: keep the existing
- * order (with refreshed data) for rows that still exist, append genuinely new
- * ones, drop removed ones. This preserves an optimistic drag order even when the
- * re-derived server list can't yet reflect it (e.g. a not-yet-generated profile,
- * or a custom node added but not regenerated) — the saved order is already
- * persisted, so this only fixes the visual snap-back.
- */
-function reconcileRows(prev: NodeRow[], derived: NodeRow[]): NodeRow[] {
+/** Preserve the current on-screen order for surviving nodes (avoids a reload
+ * clobbering an optimistic drag); append new, drop removed. */
+function reconcileNodes(prev: CustomNode[], derived: CustomNode[]): CustomNode[] {
   if (prev.length === 0) return derived;
-  const byName = new Map(derived.map((r) => [r.name, r]));
-  const result: NodeRow[] = [];
-  for (const r of prev) {
-    const d = byName.get(r.name);
+  const byName = new Map(derived.map((n) => [n.name, n]));
+  const result: CustomNode[] = [];
+  for (const n of prev) {
+    const d = byName.get(n.name);
     if (d) {
       result.push(d);
-      byName.delete(r.name);
+      byName.delete(n.name);
     }
   }
   for (const d of derived) {
@@ -101,11 +77,13 @@ function reconcileRows(prev: NodeRow[], derived: NodeRow[]): NodeRow[] {
   return result;
 }
 
-export default function NodesCard({ profileId, nodes, generatedAt, onChange }: Props) {
+export default function NodesCard({ profileId, profileName, nodes, generatedAt, onChange }: Props) {
   const { t } = useTranslation();
   const [providers, setProviders] = useState<ProxyPreview[]>([]);
   const [generated, setGenerated] = useState(true);
-  const [rows, setRows] = useState<NodeRow[]>([]);
+  const [sectionOrder, setSectionOrder] = useState<string[]>(DEFAULT_SECTIONS);
+  const [customRows, setCustomRows] = useState<CustomNode[]>([]);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(["custom"]));
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<CustomNode | null>(null);
@@ -119,6 +97,7 @@ export default function NodesCard({ profileId, nodes, generatedAt, onChange }: P
       const res = await api<ProxiesResponse>(`/api/profiles/${profileId}/proxies`);
       setProviders(res.proxies);
       setGenerated(res.generated);
+      setSectionOrder(res.node_section_order.length === 2 ? res.node_section_order : DEFAULT_SECTIONS);
     } catch {
       // Non-fatal: the card still works for custom nodes without the preview.
     }
@@ -128,16 +107,25 @@ export default function NodesCard({ profileId, nodes, generatedAt, onChange }: P
     void loadProviders();
   }, [loadProviders, generatedAt]);
 
-  // Keep the sortable rows in sync with the latest server/props state, but
-  // preserve the current order for surviving rows so an optimistic drag isn't
-  // clobbered by a reload that can't yet reflect it (see reconcileRows).
-  const derived = useMemo(
-    () => buildRows(providers, nodes, generated),
-    [providers, nodes, generated],
+  const customNames = useMemo(() => new Set(nodes.map((n) => n.name)), [nodes]);
+  // Provider nodes = output proxies that aren't custom, in upstream order.
+  const providerNodes = useMemo(
+    () => providers.filter((p) => !customNames.has(p.name)),
+    [providers, customNames],
   );
+  const derivedCustom = useMemo(() => buildCustomOrder(providers, nodes), [providers, nodes]);
   useEffect(() => {
-    setRows((prev) => reconcileRows(prev, derived));
-  }, [derived]);
+    setCustomRows((prev) => reconcileNodes(prev, derivedCustom));
+  }, [derivedCustom]);
+
+  function toggle(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   function startAdd() {
     setEditing(null);
@@ -182,62 +170,129 @@ export default function NodesCard({ profileId, nodes, generatedAt, onChange }: P
     onChange();
   }
 
-  async function onDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = rows.findIndex((r) => r.name === active.id);
-    const newIndex = rows.findIndex((r) => r.name === over.id);
-    if (oldIndex < 0 || newIndex < 0) return;
-    const next = arrayMove(rows, oldIndex, newIndex);
-    setRows(next); // optimistic
+  async function persist(path: string, order: string[], onError: () => void) {
     try {
-      await api(`/api/profiles/${profileId}/node-order`, {
+      await api(`/api/profiles/${profileId}/${path}`, {
         method: "PUT",
-        body: JSON.stringify({ order: next.map((r) => r.name) }),
+        body: JSON.stringify({ order }),
       });
       message.success(t("nodes.orderSaved"));
     } catch (e) {
+      onError();
       message.error((e as ApiError).message ?? t("nodes.orderSaveFailed"));
     } finally {
-      // Reconcile with the server (confirms on success, reverts on failure).
       void loadProviders();
     }
   }
 
-  const total = rows.length;
+  // Reorder the two blocks.
+  async function onGroupDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const next = arrayMove(
+      sectionOrder,
+      sectionOrder.indexOf(String(active.id)),
+      sectionOrder.indexOf(String(over.id)),
+    );
+    setSectionOrder(next);
+    await persist("node-section-order", next, () => setSectionOrder(sectionOrder));
+  }
+
+  // Reorder custom nodes within the custom block.
+  async function onCustomDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = customRows.findIndex((n) => n.name === active.id);
+    const newIndex = customRows.findIndex((n) => n.name === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const next = arrayMove(customRows, oldIndex, newIndex);
+    setCustomRows(next);
+    await persist("node-order", next.map((n) => n.name), () => setCustomRows(customRows));
+  }
+
+  const total = providerNodes.length + customRows.length;
 
   return (
-    <Card
-      title={`${t("nodes.title")} (${total})`}
-      extra={<Button onClick={startAdd}>{t("nodes.add")}</Button>}
-    >
-      {!generated && (
-        <Typography.Paragraph type="secondary">{t("nodes.notGenerated")}</Typography.Paragraph>
-      )}
-      {total === 0 ? (
-        <Empty description={t("nodes.empty")} />
-      ) : (
-        <>
-          <Typography.Paragraph type="secondary">{t("nodes.dragHint")}</Typography.Paragraph>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <SortableContext
-              items={rows.map((r) => r.name)}
-              strategy={verticalListSortingStrategy}
-            >
-              <List>
-                {rows.map((row) => (
-                  <SortableNodeRow
-                    key={row.name}
-                    row={row}
-                    onEdit={startEdit}
-                    onRemove={remove}
-                  />
-                ))}
-              </List>
-            </SortableContext>
-          </DndContext>
-        </>
-      )}
+    <Card title={`${t("nodes.title")} (${total})`}>
+      <Typography.Paragraph type="secondary">{t("nodes.dragHint")}</Typography.Paragraph>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onGroupDragEnd}>
+        <SortableContext items={sectionOrder} strategy={verticalListSortingStrategy}>
+          {sectionOrder.map((key) =>
+            key === "provider" ? (
+              <GroupPanel
+                key="provider"
+                id="provider"
+                title={profileName}
+                count={providerNodes.length}
+                open={expanded.has("provider")}
+                onToggle={() => toggle("provider")}
+              >
+                {providerNodes.length === 0 ? (
+                  <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
+                    {generated ? t("nodes.providerEmpty") : t("nodes.providerNotGenerated")}
+                  </Typography.Paragraph>
+                ) : (
+                  <>
+                    <List size="small">
+                      {providerNodes.map((p) => (
+                        <List.Item key={p.name}>
+                          <Space>
+                            <span>{p.name}</span>
+                            {p.type && <Tag>{p.type}</Tag>}
+                          </Space>
+                        </List.Item>
+                      ))}
+                    </List>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {t("nodes.providerReadonly")}
+                    </Typography.Text>
+                  </>
+                )}
+              </GroupPanel>
+            ) : (
+              <GroupPanel
+                key="custom"
+                id="custom"
+                title={t("nodes.customGroup")}
+                count={customRows.length}
+                open={expanded.has("custom")}
+                onToggle={() => toggle("custom")}
+                extra={
+                  <Button size="small" onClick={startAdd}>
+                    {t("nodes.add")}
+                  </Button>
+                }
+              >
+                {customRows.length === 0 ? (
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("nodes.customEmpty")} />
+                ) : (
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={onCustomDragEnd}
+                  >
+                    <SortableContext
+                      items={customRows.map((n) => n.name)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <List size="small">
+                        {customRows.map((node) => (
+                          <SortableNodeRow
+                            key={node.name}
+                            node={node}
+                            onEdit={startEdit}
+                            onRemove={remove}
+                          />
+                        ))}
+                      </List>
+                    </SortableContext>
+                  </DndContext>
+                )}
+              </GroupPanel>
+            ),
+          )}
+        </SortableContext>
+      </DndContext>
 
       <Modal
         title={editing ? t("nodes.edit") : t("nodes.add")}
@@ -253,41 +308,85 @@ export default function NodesCard({ profileId, nodes, generatedAt, onChange }: P
   );
 }
 
+interface GroupPanelProps {
+  id: string;
+  title: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  extra?: ReactNode;
+  children: ReactNode;
+}
+
+/** A draggable, collapsible group panel. The header carries the drag handle and
+ * a clickable title that toggles the body. */
+function GroupPanel({ id, title, count, open, onToggle, extra, children }: GroupPanelProps) {
+  const { t } = useTranslation();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    border: "1px solid #f0f0f0",
+    borderRadius: 8,
+    marginBottom: 8,
+    background: isDragging ? "rgba(0,0,0,0.02)" : "#fff",
+  };
+  return (
+    <div ref={setNodeRef} style={style}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px" }}>
+        <span
+          {...attributes}
+          {...listeners}
+          style={{ cursor: "grab", color: "#999", userSelect: "none", touchAction: "none" }}
+          aria-label="drag handle"
+        >
+          ⋮⋮
+        </span>
+        <a onClick={onToggle} style={{ flex: 1, color: "inherit" }}>
+          <Space>
+            <span style={{ color: "#999" }}>{open ? "▾" : "▸"}</span>
+            <strong>{title}</strong>
+            <span style={{ color: "#999", fontWeight: "normal" }}>
+              {t("nodes.groupCount", { count })}
+            </span>
+          </Space>
+        </a>
+        {extra}
+      </div>
+      {open && <div style={{ padding: "0 12px 8px 32px" }}>{children}</div>}
+    </div>
+  );
+}
+
 interface RowProps {
-  row: NodeRow;
+  node: CustomNode;
   onEdit: (node: CustomNode) => void;
   onRemove: (node: CustomNode) => void;
 }
 
-function SortableNodeRow({ row, onEdit, onRemove }: RowProps) {
+function SortableNodeRow({ node, onEdit, onRemove }: RowProps) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: row.name,
+    id: node.name,
   });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     background: isDragging ? "rgba(0,0,0,0.04)" : undefined,
   };
-
-  const { custom } = row;
-  const actions = custom
-    ? [
-        <a key="edit" onClick={() => onEdit(custom)}>
+  return (
+    <List.Item
+      ref={setNodeRef}
+      style={style}
+      actions={[
+        <a key="edit" onClick={() => onEdit(node)}>
           {t("basic.edit")}
         </a>,
-        <Popconfirm
-          key="del"
-          title={t("nodes.deleteConfirm")}
-          onConfirm={() => onRemove(custom)}
-        >
+        <Popconfirm key="del" title={t("nodes.deleteConfirm")} onConfirm={() => onRemove(node)}>
           <a>{t("nodes.delete")}</a>
         </Popconfirm>,
-      ]
-    : undefined;
-
-  return (
-    <List.Item ref={setNodeRef} style={style} actions={actions}>
+      ]}
+    >
       <Space>
         <span
           {...attributes}
@@ -297,16 +396,9 @@ function SortableNodeRow({ row, onEdit, onRemove }: RowProps) {
         >
           ⋮⋮
         </span>
-        <span>{row.name}</span>
-        {row.type && <Tag>{row.type}</Tag>}
-        {custom ? (
-          <>
-            <Tag color="blue">{t("nodes.customTag")}</Tag>
-            {!custom.enabled && <Tag>{t("profiles.disabled")}</Tag>}
-          </>
-        ) : (
-          <Tag>{t("nodes.providerTag")}</Tag>
-        )}
+        <span>{node.name}</span>
+        {node.node_type && <Tag>{node.node_type}</Tag>}
+        {!node.enabled && <Tag>{t("profiles.disabled")}</Tag>}
       </Space>
     </List.Item>
   );

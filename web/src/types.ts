@@ -51,6 +51,8 @@ export interface ProxiesResponse {
   generated: boolean;
   generated_at: string | null;
   proxies: ProxyPreview[];
+  /** Order of the two node blocks, e.g. ["provider","custom"]. */
+  node_section_order: string[];
   /** Provider proxy-groups (name + type) from the latest generated output. */
   groups: ProxyPreview[];
 }

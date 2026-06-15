@@ -90,6 +90,7 @@ export default function ProfileDetail() {
       <SourceInfo detail={detail} onRefresh={generate} onSaved={reload} refreshing={generating} />
       <NodesCard
         profileId={detail.id}
+        profileName={detail.name}
         nodes={detail.nodes}
         generatedAt={detail.last_generated_at}
         onChange={reload}

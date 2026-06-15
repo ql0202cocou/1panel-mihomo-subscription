@@ -335,59 +335,51 @@ async fn node_order_reorders_preview_and_survives_regeneration() {
             .collect::<Vec<_>>()
     };
 
+    // Default: provider block [hk-1] then custom block [a, b].
     assert_eq!(
         proxy_names(app.clone(), cookie.clone()).await,
         vec!["hk-1", "a", "b"],
-        "default order is provider-first"
+        "default: provider block then custom block"
     );
 
-    // Reorder to [b, hk-1]; `a` is unlisted and must fall to the end.
+    // Reorder the custom block to [b, a] (node-order is custom-only; `a` unlisted
+    // falls to the end). Provider block is untouched.
     let resp = app
         .clone()
         .oneshot(authed(
             "PUT",
             &format!("/api/profiles/{id}/node-order"),
             &cookie,
-            r#"{"order":["b","hk-1"]}"#,
+            r#"{"order":["b"]}"#,
         ))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
-
-    // Preview reflects the saved order immediately (before regeneration).
     assert_eq!(
         proxy_names(app.clone(), cookie.clone()).await,
-        vec!["b", "hk-1", "a"],
-        "preview honors saved order pre-regenerate"
+        vec!["hk-1", "b", "a"],
+        "custom block reordered immediately, provider block fixed"
     );
 
-    // Regenerate: the generated `proxies` output carries the same order.
-    app.clone()
-        .oneshot(authed(
-            "POST",
-            &format!("/api/profiles/{id}/generate"),
-            &cookie,
-            "",
-        ))
-        .await
-        .unwrap();
-    assert_eq!(
-        proxy_names(app.clone(), cookie.clone()).await,
-        vec!["b", "hk-1", "a"],
-        "order persists through regeneration"
-    );
-
-    // Empty order clears the manual order; after regenerating, the output
-    // (and preview) return to the provider-first default.
-    app.clone()
+    // Put the custom block first via node-section-order.
+    let resp = app
+        .clone()
         .oneshot(authed(
             "PUT",
-            &format!("/api/profiles/{id}/node-order"),
+            &format!("/api/profiles/{id}/node-section-order"),
             &cookie,
-            r#"{"order":[]}"#,
+            r#"{"order":["custom","provider"]}"#,
         ))
         .await
         .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        proxy_names(app.clone(), cookie.clone()).await,
+        vec!["b", "a", "hk-1"],
+        "custom block first, then provider block"
+    );
+
+    // Both orders persist through a regeneration.
     app.clone()
         .oneshot(authed(
             "POST",
@@ -399,9 +391,21 @@ async fn node_order_reorders_preview_and_survives_regeneration() {
         .unwrap();
     assert_eq!(
         proxy_names(app.clone(), cookie.clone()).await,
-        vec!["hk-1", "a", "b"],
-        "empty order restores default after regenerate"
+        vec!["b", "a", "hk-1"],
+        "orders persist through regeneration"
     );
+
+    // An invalid section order is rejected.
+    let resp = app
+        .oneshot(authed(
+            "PUT",
+            &format!("/api/profiles/{id}/node-section-order"),
+            &cookie,
+            r#"{"order":["custom","custom"]}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -452,14 +456,14 @@ async fn reorder_applies_to_served_subscription_without_regenerate() {
         "default served order is provider-first"
     );
 
-    // Reorder to [mine, hk-1] WITHOUT regenerating.
+    // Put the custom block first WITHOUT regenerating.
     let resp = app
         .clone()
         .oneshot(authed(
             "PUT",
-            &format!("/api/profiles/{id}/node-order"),
+            &format!("/api/profiles/{id}/node-section-order"),
             &cookie,
-            r#"{"order":["mine","hk-1"]}"#,
+            r#"{"order":["custom","provider"]}"#,
         ))
         .await
         .unwrap();
@@ -470,7 +474,7 @@ async fn reorder_applies_to_served_subscription_without_regenerate() {
     let body = served(app.clone(), sub.clone()).await;
     assert!(
         body.find("mine").unwrap() < body.find("hk-1").unwrap(),
-        "served subscription honors the new order without a regenerate"
+        "served subscription honors the new block order without a regenerate"
     );
     assert_eq!(
         fetcher.calls.load(Ordering::SeqCst),
@@ -653,13 +657,13 @@ async fn refresh_keeps_known_node_order_and_appends_new_nodes() {
         vec!["hk-1", "mine"]
     );
 
-    // User manually reorders to [mine, hk-1].
+    // Put the custom block first (so `mine` leads).
     app.clone()
         .oneshot(authed(
             "PUT",
-            &format!("/api/profiles/{id}/node-order"),
+            &format!("/api/profiles/{id}/node-section-order"),
             &cookie,
-            r#"{"order":["mine","hk-1"]}"#,
+            r#"{"order":["custom","provider"]}"#,
         ))
         .await
         .unwrap();
@@ -669,7 +673,8 @@ async fn refresh_keeps_known_node_order_and_appends_new_nodes() {
         "proxies:\n  - { name: hk-1, type: ss, server: 8.8.8.8, port: 8388 }\n  - { name: hk-2, type: ss, server: 2.2.2.2, port: 8388 }\nrules:\n  - MATCH,DIRECT\n"
             .to_string();
 
-    // Refresh: known nodes keep the manual order, the new node lands at the end.
+    // Refresh: the custom block (mine) stays first/ordered; the new provider node
+    // joins the provider block (upstream order) without disturbing the custom one.
     app.clone()
         .oneshot(authed(
             "POST",
@@ -682,7 +687,7 @@ async fn refresh_keeps_known_node_order_and_appends_new_nodes() {
     assert_eq!(
         proxy_names(app.clone(), cookie.clone()).await,
         vec!["mine", "hk-1", "hk-2"],
-        "manual order preserved by name; new provider node appended at the end"
+        "custom block fixed; new provider node lands in the provider block"
     );
 
     // The generated output also carries hk-1's refreshed server (updated by name).
