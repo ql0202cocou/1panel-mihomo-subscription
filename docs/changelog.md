@@ -50,6 +50,8 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-06-15
+
 ### Added
 
 - 节点 / 分组 / 规则预览支持拖拽排序:在三张预览卡片均可直接拖动列表调整顺序,
