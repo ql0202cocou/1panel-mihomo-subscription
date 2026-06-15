@@ -240,9 +240,9 @@ GET /api/profiles/:id/proxies
   `generated_cache.output_yaml`,因此同时包含机场与已并入的自定义条目;未生成过时
   返回 `generated: false` 与空数组。`proxies`/`groups` 会分别按已保存的
   `node_order`/`group_order`(见下)重排后返回,使节点/分组预览在保存排序后、重新
-  生成前即可反映新顺序。前端据自定义名集合区分可编辑(自定义)与只读(机场)条目:
-  节点预览与分组预览采用同一套交互,`proxies`/`groups` 也作为自定义分组成员选择的
-  候选。
+  生成前即可反映新顺序。`proxies` 含机场(只读)与自定义(可编辑)条目,前端据自定义
+  名集合区分;`groups` 全部为自定义分组(机场分组已被替换),节点/分组预览采用同一套
+  交互且分组项全部可编辑。`proxies`/`groups` 也作为自定义分组成员选择的候选。
 
 ```text
 PUT /api/profiles/:id/node-order
@@ -305,11 +305,12 @@ PUT /api/profiles/:id/group-order
   are provider-independent and can be rebuilt alone), so reordering — and any
   add/edit/delete — **takes effect immediately**, with no provider re-fetch.
 - Read-only. Both `proxies` and `groups` are `name`/`type` pairs parsed from
-  `generated_cache.output_yaml`, so they contain provider and merged custom
-  entries; before the first generation it returns `generated: false` and empty
-  arrays. The frontend distinguishes editable (custom) from read-only (provider)
-  entries via the custom name set — the node preview and group preview share one
-  interaction — and `proxies`/`groups` also seed the custom-group member
+  `generated_cache.output_yaml`; before the first generation it returns
+  `generated: false` and empty arrays. `proxies` contain provider (read-only) and
+  custom (editable) entries, which the frontend distinguishes via the custom name
+  set; `groups` are all custom groups (provider groups are replaced), so every
+  group in the preview is editable. The node and group previews share one
+  interaction, and `proxies`/`groups` also seed the custom-group member
   suggestions.
 - 编辑自定义节点与自定义分组均通过结构化表单完成:节点给出常用字段 + 高级键值;
   分组按类型给出选项(`url`/`interval`/`tolerance`/`lazy`/`strategy`)+ 高级键值,

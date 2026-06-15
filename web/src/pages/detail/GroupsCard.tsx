@@ -32,7 +32,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../../api";
-import type { CustomGroup, CustomNode, GroupType, ProxiesResponse, ProxyPreview } from "../../types";
+import type { CustomGroup, CustomNode, GroupType, ProxiesResponse } from "../../types";
 import { AdvancedFields, FieldInput, splitAdvanced } from "./fields";
 import {
   BUILTIN_POLICIES,
@@ -52,40 +52,39 @@ interface Props {
 
 type Options = Record<string, unknown>;
 
-/** One row in the unified, sortable group list. */
+/** One row in the sortable group list. Every group is an editable custom group
+ * (provider groups are imported as custom groups, never passed through). */
 interface GroupRow {
   /** Stable dnd/React id — group names are unique within a profile. */
   name: string;
-  type: string;
-  /** The editable custom group, or null for a read-only provider group. */
-  custom: CustomGroup | null;
+  group: CustomGroup;
 }
 
 /**
- * Merge the generated proxy-group list (provider + custom, already in saved
- * order) with the custom-group list into one ordered row list. Falls back to
- * the custom groups alone before anything is generated; disabled custom groups
- * (absent from the output) are appended so they stay editable.
+ * Build the ordered, all-editable row list. Order follows the generated output
+ * (`orderNames`, already reordered by `group_order`), keeping only names that
+ * are real custom groups — any stale name from an older cached output is
+ * dropped. Custom groups not yet in the output (e.g. just imported/added,
+ * pre-regenerate) are appended so they stay visible and editable.
  */
-function buildRows(
-  providerGroups: ProxyPreview[],
-  groups: CustomGroup[],
-  generated: boolean,
-): GroupRow[] {
-  const customByName = new Map(groups.map((g) => [g.name, g]));
-  if (!generated || providerGroups.length === 0) {
-    return groups.map((g) => ({ name: g.name, type: g.group_type, custom: g }));
+function buildRows(orderNames: string[], groups: CustomGroup[]): GroupRow[] {
+  const byName = new Map(groups.map((g) => [g.name, g]));
+  const seen = new Set<string>();
+  const result: GroupRow[] = [];
+  for (const name of orderNames) {
+    const g = byName.get(name);
+    if (g && !seen.has(name)) {
+      result.push({ name, group: g });
+      seen.add(name);
+    }
   }
-  const rows: GroupRow[] = providerGroups.map((g) => ({
-    name: g.name,
-    type: g.type,
-    custom: customByName.get(g.name) ?? null,
-  }));
-  const seen = new Set(providerGroups.map((g) => g.name));
   for (const g of groups) {
-    if (!seen.has(g.name)) rows.push({ name: g.name, type: g.group_type, custom: g });
+    if (!seen.has(g.name)) {
+      result.push({ name: g.name, group: g });
+      seen.add(g.name);
+    }
   }
-  return rows;
+  return result;
 }
 
 /**
@@ -123,11 +122,10 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
   const [members, setMembers] = useState<string[]>([]);
   const [options, setOptions] = useState<Options>({});
 
-  // Provider proxies/groups from the latest generated output, for the read-only
-  // preview and for member suggestions.
+  // From the latest generated output: provider proxy names (for member
+  // suggestions) and the group order (group names in output order).
   const [providerProxies, setProviderProxies] = useState<string[]>([]);
-  const [providerGroups, setProviderGroups] = useState<ProxyPreview[]>([]);
-  const [generated, setGenerated] = useState(true);
+  const [orderNames, setOrderNames] = useState<string[]>([]);
   const [rows, setRows] = useState<GroupRow[]>([]);
   const [importing, setImporting] = useState(false);
 
@@ -137,8 +135,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
     try {
       const res = await api<ProxiesResponse>(`/api/profiles/${profileId}/proxies`);
       setProviderProxies(res.proxies.map((p) => p.name));
-      setProviderGroups(res.groups);
-      setGenerated(res.generated);
+      setOrderNames(res.groups.map((g) => g.name));
     } catch {
       // Non-fatal: members can still be typed in by hand.
     }
@@ -151,10 +148,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
   // Keep the sortable rows in sync with the latest server/props state, but
   // preserve the current order for surviving rows so an optimistic drag isn't
   // clobbered by a reload that can't yet reflect it (see reconcileRows).
-  const derived = useMemo(
-    () => buildRows(providerGroups, groups, generated),
-    [providerGroups, groups, generated],
-  );
+  const derived = useMemo(() => buildRows(orderNames, groups), [orderNames, groups]);
   useEffect(() => {
     setRows((prev) => reconcileRows(prev, derived));
   }, [derived]);
@@ -276,7 +270,6 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
   // being edited, which cannot reference itself) and built-in policies.
   const memberOptions = dedupe([
     ...providerProxies,
-    ...providerGroups.map((g) => g.name),
     ...nodes.map((n) => n.name),
     ...groups.filter((g) => g.id !== editing?.id).map((g) => g.name),
     ...BUILTIN_POLICIES,
@@ -299,9 +292,6 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
         </Space>
       }
     >
-      {!generated && (
-        <Typography.Paragraph type="secondary">{t("groups.notGenerated")}</Typography.Paragraph>
-      )}
       {total === 0 ? (
         <Empty description={t("groups.empty")} />
       ) : (
@@ -399,21 +389,15 @@ function SortableGroupRow({ row, onEdit, onRemove }: RowProps) {
     background: isDragging ? "rgba(0,0,0,0.04)" : undefined,
   };
 
-  const { custom } = row;
-  const actions = custom
-    ? [
-        <a key="edit" onClick={() => onEdit(custom)}>
-          {t("basic.edit")}
-        </a>,
-        <Popconfirm
-          key="del"
-          title={t("groups.deleteConfirm")}
-          onConfirm={() => onRemove(custom)}
-        >
-          <a>{t("groups.delete")}</a>
-        </Popconfirm>,
-      ]
-    : undefined;
+  const { group } = row;
+  const actions = [
+    <a key="edit" onClick={() => onEdit(group)}>
+      {t("basic.edit")}
+    </a>,
+    <Popconfirm key="del" title={t("groups.deleteConfirm")} onConfirm={() => onRemove(group)}>
+      <a>{t("groups.delete")}</a>
+    </Popconfirm>,
+  ];
 
   return (
     <List.Item ref={setNodeRef} style={style} actions={actions}>
@@ -427,18 +411,11 @@ function SortableGroupRow({ row, onEdit, onRemove }: RowProps) {
           ⋮⋮
         </span>
         <span>{row.name}</span>
-        {row.type && <Tag>{row.type}</Tag>}
-        {custom ? (
-          <>
-            <Tag color="blue">{t("groups.customTag")}</Tag>
-            <span style={{ color: "#999" }}>
-              {t("groups.membersCount", { count: custom.members.length })}
-            </span>
-            {!custom.enabled && <Tag>{t("profiles.disabled")}</Tag>}
-          </>
-        ) : (
-          <Tag>{t("groups.providerTag")}</Tag>
-        )}
+        <Tag>{group.group_type}</Tag>
+        <span style={{ color: "#999" }}>
+          {t("groups.membersCount", { count: group.members.length })}
+        </span>
+        {!group.enabled && <Tag>{t("profiles.disabled")}</Tag>}
       </Space>
     </List.Item>
   );
