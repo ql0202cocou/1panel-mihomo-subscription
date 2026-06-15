@@ -158,11 +158,12 @@ async fn generate_populates_cache_and_public_link_serves_it() {
         "fresh cache, no refetch"
     );
 
-    // Provider proxies/groups are preserved; provider rules are replaced by the
-    // profile's (empty) ruleset, so MATCH,DIRECT does not survive.
+    // Provider proxies are preserved; provider groups and rules are replaced
+    // (groups need importing, the ruleset is empty), so neither `Proxy` nor
+    // `MATCH,DIRECT` survives.
     let body = text(resp).await;
     assert!(body.contains("hk-1"), "provider proxy preserved");
-    assert!(body.contains("Proxy"), "provider group preserved");
+    assert!(!body.contains("Proxy"), "provider group not passed through");
 }
 
 #[tokio::test]
@@ -200,6 +201,20 @@ async fn proxies_endpoint_reflects_generated_cache() {
             &format!("/api/profiles/{id}/nodes"),
             &cookie,
             node,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    // Add a custom group (provider groups are replaced, so groups only come from
+    // custom ones), then generate.
+    let group = r#"{"name":"MyG","group_type":"select","members":["hk-1"]}"#;
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/groups"),
+            &cookie,
+            group,
         ))
         .await
         .unwrap();
@@ -243,14 +258,18 @@ async fn proxies_endpoint_reflects_generated_cache() {
         .iter()
         .map(|g| g["name"].as_str().unwrap())
         .collect();
-    assert!(groups.contains(&"Proxy"), "provider group listed");
-    let proxy_group = body["groups"]
+    assert!(groups.contains(&"MyG"), "custom group listed");
+    assert!(
+        !groups.contains(&"Proxy"),
+        "provider group not passed through"
+    );
+    let my_group = body["groups"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|g| g["name"] == "Proxy")
+        .find(|g| g["name"] == "MyG")
         .unwrap();
-    assert_eq!(proxy_group["type"], "select");
+    assert_eq!(my_group["type"], "select");
     let hk = body["proxies"]
         .as_array()
         .unwrap()
@@ -470,7 +489,8 @@ async fn group_order_reorders_preview_and_survives_regeneration() {
     let profile = create_profile(&app, &cookie).await;
     let id = profile["id"].as_str().unwrap();
 
-    // Two custom groups; default order is provider-first: [Proxy, G1, G2].
+    // Two custom groups; provider groups are replaced, so the output groups are
+    // just the custom ones in creation order: [G1, G2].
     for name in ["G1", "G2"] {
         let group = format!(r#"{{"name":"{name}","group_type":"select","members":["hk-1"]}}"#);
         let resp = app
@@ -516,18 +536,18 @@ async fn group_order_reorders_preview_and_survives_regeneration() {
 
     assert_eq!(
         group_names(app.clone(), cookie.clone()).await,
-        vec!["Proxy", "G1", "G2"],
-        "default order is provider-first"
+        vec!["G1", "G2"],
+        "default order is creation order"
     );
 
-    // Reorder to [G2, Proxy]; `G1` is unlisted and must fall to the end.
+    // Reorder to [G2]; `G1` is unlisted and must fall to the end.
     let resp = app
         .clone()
         .oneshot(authed(
             "PUT",
             &format!("/api/profiles/{id}/group-order"),
             &cookie,
-            r#"{"order":["G2","Proxy"]}"#,
+            r#"{"order":["G2"]}"#,
         ))
         .await
         .unwrap();
@@ -536,7 +556,7 @@ async fn group_order_reorders_preview_and_survives_regeneration() {
     // Preview reflects the saved order immediately (before regeneration).
     assert_eq!(
         group_names(app.clone(), cookie.clone()).await,
-        vec!["G2", "Proxy", "G1"],
+        vec!["G2", "G1"],
         "preview honors saved order pre-regenerate"
     );
 
@@ -552,7 +572,7 @@ async fn group_order_reorders_preview_and_survives_regeneration() {
         .unwrap();
     assert_eq!(
         group_names(app.clone(), cookie.clone()).await,
-        vec!["G2", "Proxy", "G1"],
+        vec!["G2", "G1"],
         "order persists through regeneration"
     );
 }
@@ -680,6 +700,114 @@ async fn refresh_keeps_known_node_order_and_appends_new_nodes() {
     assert!(
         yaml.contains("8.8.8.8"),
         "hk-1 info refreshed from provider"
+    );
+}
+
+#[tokio::test]
+async fn import_provider_groups_makes_them_editable_custom_groups() {
+    let temp = TempDb::new();
+    let fetcher = Arc::new(FakeFetcher::default());
+    let app = build_router(test_state_with_fetcher(&temp, fetcher).await);
+    let cookie = login(&app).await;
+
+    let profile = create_profile(&app, &cookie).await;
+    let id = profile["id"].as_str().unwrap();
+
+    // Generate first: the provider's `Proxy` group is NOT passed through.
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/generate"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/api/profiles/{id}/preview"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    assert!(
+        !text(resp).await.contains("Proxy"),
+        "provider group absent before import"
+    );
+
+    // Import provider groups → the `Proxy` group becomes an editable custom group.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/import-provider-groups"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = json(resp).await;
+    assert_eq!(body["imported"], 1);
+    assert_eq!(body["skipped"], 0);
+
+    // It now appears as a custom group (editable, with id/type/members).
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/api/profiles/{id}/groups"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    let groups = json(resp).await;
+    let g = &groups.as_array().unwrap()[0];
+    assert_eq!(g["name"], "Proxy");
+    assert_eq!(g["group_type"], "select");
+    assert_eq!(g["members"][0], "hk-1");
+
+    // Re-importing skips the now-existing group.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/import-provider-groups"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    let body = json(resp).await;
+    assert_eq!(body["imported"], 0);
+    assert_eq!(body["skipped"], 1);
+
+    // After regenerating, the imported group is in the output.
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/generate"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    let resp = app
+        .oneshot(authed(
+            "GET",
+            &format!("/api/profiles/{id}/preview"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    assert!(
+        text(resp).await.contains("Proxy"),
+        "imported group present after regenerate"
     );
 }
 

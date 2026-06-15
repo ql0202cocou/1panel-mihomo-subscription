@@ -200,13 +200,21 @@ CREATE TABLE custom_groups (
 CREATE INDEX idx_custom_groups_profile ON custom_groups (profile_id);
 ```
 
-- `members`:有序 JSON 数组,如 `["my-ss", "DIRECT", "ProviderGroup"]`,可引用
-  机场节点/分组和自定义节点/分组;引用有效性在生成时校验(见
-  `api-design.md`),不靠数据库约束。
-- `members`: an ordered JSON array, e.g. `["my-ss", "DIRECT",
-  "ProviderGroup"]`, referencing provider or custom nodes/groups; reference
-  validity is checked at generation time (see `api-design.md`), not by the
-  database.
+- `custom_groups` 是输出 `proxy-groups` 的**唯一来源**:转换器整体替换机场分组(同
+  `rules`),机场原生分组不透传。机场分组经 `POST .../import-provider-groups` 落为
+  自定义分组后才可编辑并进入输出;不导入则机场更新分组不生效(见 `api-design.md`)。
+- `custom_groups` is the **sole source** of the output `proxy-groups`: the
+  converter replaces provider groups entirely (like `rules`), so provider groups
+  are not passed through. They become editable and enter the output only after
+  `POST .../import-provider-groups` writes them as custom groups; without
+  importing, provider group updates have no effect (see `api-design.md`).
+- `members`:有序 JSON 数组,如 `["my-ss", "DIRECT", "MyGroup"]`,可引用机场节点
+  (仍透传)与自定义节点/分组;引用有效性在生成时校验(见 `api-design.md`),不靠
+  数据库约束。
+- `members`: an ordered JSON array, e.g. `["my-ss", "DIRECT", "MyGroup"]`,
+  referencing provider proxies (still passed through) or custom nodes/groups;
+  reference validity is checked at generation time (see `api-design.md`), not by
+  the database.
 - `options`:分组类型特有选项的 JSON 对象,如 `{"url": "...", "interval": 300}`。
 - `options`: JSON object of group-type-specific options, e.g.
   `{"url": "...", "interval": 300}`.

@@ -837,6 +837,114 @@ pub async fn create_group(
     Ok((StatusCode::CREATED, Json(group_response(row))))
 }
 
+#[derive(Serialize)]
+pub struct ImportGroupsResponse {
+    imported: usize,
+    /// Skipped because the name already exists or the type is unsupported.
+    skipped: usize,
+}
+
+/// `POST /api/profiles/:id/import-provider-groups` — fetch the provider
+/// subscription and import its `proxy-groups` as editable custom groups (the
+/// converter otherwise replaces provider groups, like rules). Skips groups whose
+/// name already exists or whose type is unsupported. Live, SSRF-protected fetch
+/// (same as `provider-rules`); not cached. Takes effect after the next generate.
+pub async fn import_provider_groups(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<impl IntoResponse> {
+    let profile = load_profile_row(&state, &id).await?;
+    let fetched = state
+        .fetcher
+        .fetch(&profile.source_url)
+        .await
+        .map_err(|e| ApiError::Upstream(e.status_label()))?;
+    let root = yaml::parse_limited(&fetched.body)
+        .map_err(|_| ApiError::Upstream("provider_parse".to_string()))?;
+    let provider_groups = match root.get("proxy-groups") {
+        Some(serde_yaml::Value::Sequence(items)) => items.clone(),
+        _ => Vec::new(),
+    };
+
+    let mut existing: std::collections::HashSet<String> =
+        sqlx::query_scalar::<_, String>("SELECT name FROM custom_groups WHERE profile_id = ?")
+            .bind(&id)
+            .fetch_all(&state.db)
+            .await?
+            .into_iter()
+            .collect();
+
+    let mut imported = 0usize;
+    let mut skipped = 0usize;
+    for item in &provider_groups {
+        let Some((name, group_type, members, options)) = parse_provider_group(item) else {
+            skipped += 1;
+            continue;
+        };
+        if !existing.insert(name.clone()) {
+            skipped += 1; // name already present
+            continue;
+        }
+        let ts = now();
+        sqlx::query(
+            "INSERT INTO custom_groups (id, profile_id, name, group_type, members, options, enabled, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(&id)
+        .bind(&name)
+        .bind(&group_type)
+        .bind(serde_json::to_string(&members).unwrap_or_else(|_| "[]".into()))
+        .bind(options.as_ref().map(|o| o.to_string()))
+        .bind(true)
+        .bind(&ts)
+        .bind(&ts)
+        .execute(&state.db)
+        .await?;
+        imported += 1;
+    }
+
+    Ok(Json(ImportGroupsResponse { imported, skipped }))
+}
+
+/// Parse a provider `proxy-groups` entry into a custom group `(name, type,
+/// members, options)`. Returns `None` for entries missing a name/type or with an
+/// unsupported type. `options` collects every key except name/type/proxies.
+fn parse_provider_group(
+    item: &serde_yaml::Value,
+) -> Option<(String, String, Vec<String>, Option<JsonValue>)> {
+    let m = item.as_mapping()?;
+    let name = m.get("name")?.as_str()?.trim().to_string();
+    if name.is_empty() {
+        return None;
+    }
+    let group_type = m.get("type")?.as_str()?.to_string();
+    if !GROUP_TYPES.contains(&group_type.as_str()) {
+        return None;
+    }
+    let members = m
+        .get("proxies")
+        .and_then(|v| v.as_sequence())
+        .map(|s| {
+            s.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut opts = serde_json::Map::new();
+    for (k, v) in m {
+        let Some(ks) = k.as_str() else { continue };
+        if matches!(ks, "name" | "type" | "proxies") {
+            continue;
+        }
+        if let Ok(jv) = serde_json::to_value(v) {
+            opts.insert(ks.to_string(), jv);
+        }
+    }
+    let options = (!opts.is_empty()).then_some(JsonValue::Object(opts));
+    Some((name, group_type, members, options))
+}
+
 pub async fn update_group(
     State(state): State<Arc<AppState>>,
     Path((id, group_id)): Path<(String, String)>,

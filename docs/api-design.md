@@ -124,6 +124,7 @@ endpoint require a valid session and otherwise return `401`.
 | PUT / DELETE | `/api/profiles/:id/nodes/:node_id` | 是/Yes | 单个节点 / Single node |
 | GET / POST | `/api/profiles/:id/groups` | 是/Yes | 自定义分组 / Custom groups |
 | PUT / DELETE | `/api/profiles/:id/groups/:group_id` | 是/Yes | 单个分组 / Single group |
+| POST | `/api/profiles/:id/import-provider-groups` | 是/Yes | 导入机场 `proxy-groups` 为可编辑自定义分组(实时拉取,跳过同名/不支持类型)/ Import the provider's `proxy-groups` as editable custom groups (live fetch; skips existing names / unsupported types) |
 | GET | `/api/profiles/:id/preview` | 是/Yes | 预览生成的 YAML / Preview generated YAML |
 | POST | `/api/profiles/:id/generate` | 是/Yes | 校验并生成托管链接 / Validate & generate hosted link |
 | POST | `/api/profiles/:id/reset-token` | 是/Yes | 重置该配置 token / Reset profile token |
@@ -343,19 +344,22 @@ returns fresh cache when available, otherwise fetches and generates live; it
 
 校验规则 / Validation rules:
 
-- 规则引用的分组必须存在于原始订阅分组或已启用的自定义分组中。
-- 自定义分组名称不得与原始订阅分组重名(MVP 采用追加策略,不覆盖)。
-- 自定义分组成员必须引用存在的机场节点、机场分组或已启用的自定义节点/分组。
+- 规则引用的分组必须存在于已启用的自定义分组中(机场分组不在输出里,除非已导入为
+  自定义分组)。
+- 自定义分组名称可与机场分组重名(机场分组被整体替换,「导入机场分组」正是这样生成
+  同名自定义分组)。
+- 自定义分组成员必须引用存在的机场节点(仍透传)、已启用的自定义节点,或已启用的
+  自定义分组。
 - 输出必须是合法的 Mihomo YAML。
 
 &nbsp;
 
-- Every group referenced by the rules must exist among provider groups or
-  enabled custom groups.
-- Custom group names must not collide with provider group names (MVP uses an
-  append-only strategy, no overrides).
-- Custom group members must reference existing provider nodes/groups or
-  enabled custom nodes/groups.
+- Every group referenced by the rules must exist among enabled custom groups
+  (provider groups are not in the output unless imported as custom groups).
+- A custom group name may reuse a provider group name (provider groups are
+  replaced; importing provider groups produces exactly such same-named customs).
+- Custom group members must reference existing provider proxies (still passed
+  through), enabled custom nodes, or enabled custom groups.
 - The output must be valid Mihomo YAML.
 
 顶层键处理 / Top-Level Key Handling:
@@ -368,7 +372,7 @@ explicitly (implemented in `src/converter.rs`):
 | 键 / Key | 处理 / Handling |
 |-----|----------|
 | `proxies` | 保留机场条目,追加启用的自定义节点,再按 `node_order` 重排 / Provider entries preserved, enabled custom nodes appended, then reordered by `node_order` |
-| `proxy-groups` | 保留机场条目,追加启用的自定义分组,再按 `group_order` 重排 / Provider entries preserved, enabled custom groups appended, then reordered by `group_order` |
+| `proxy-groups` | 整体替换为启用的自定义分组(机场分组不透传,需「导入机场分组」),再按 `group_order` 重排 / Replaced entirely with enabled custom groups (provider groups are not passed through; import them), then reordered by `group_order` |
 | `rules` | 整体替换为用户规则 / Replaced entirely with the user-defined rules |
 | `rule-providers` | 原样透传(用户规则可引用机场的 `RULE-SET`)/ Passed through unchanged (user rules may reference provider `RULE-SET`s) |
 | `proxy-providers` | **MVP 阶段剥离**:远程节点提供者会让客户端拉取绕过本服务 SSRF 防护与缓存的 URL,并可能暴露机场 URL / **Stripped in the MVP**: remote node providers would make the client fetch URLs that bypass this service's SSRF protection and caching, and may expose provider URLs |
@@ -378,6 +382,22 @@ explicitly (implemented in `src/converter.rs`):
 
 Unknown keys are passed through rather than dropped, so newer Mihomo options
 keep working without converter updates.
+
+`proxy-groups` 与 `rules` 同为「替换」模型:机场原生分组不再进入输出,机场更新分组
+也不会自动生效。`POST /api/profiles/:id/import-provider-groups` 实时拉取机场订阅,把
+其 `proxy-groups` 解析为**可编辑的自定义分组**写入(`name`/`type`/`proxies`→成员,其余
+键→`options`;跳过同名与不支持类型),返回 `{ imported, skipped }`。导入只改
+`custom_groups`,与新增自定义分组一样需重新「生成」才进入输出。鉴权与 SSRF 防护同
+`provider-rules`。
+
+Like `rules`, `proxy-groups` is a "replace" model: the provider's own groups no
+longer enter the output, and provider group updates never apply automatically.
+`POST /api/profiles/:id/import-provider-groups` live-fetches the provider and
+imports its `proxy-groups` as **editable custom groups** (`name`/`type`/`proxies`
+→ members, the rest → `options`; skipping existing names and unsupported types),
+returning `{ imported, skipped }`. Import only writes `custom_groups`, so — like
+adding a custom group — it reaches the output on the next generate. Auth and SSRF
+protection match `provider-rules`.
 
 成功响应 / Success response:
 

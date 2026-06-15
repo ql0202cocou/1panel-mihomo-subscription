@@ -50,6 +50,35 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+### Changed
+
+- **(破坏性)机场分组改为「导入才生效」模型(同规则):** 转换器不再透传机场原生
+  `proxy-groups`,而是整体替换为自定义分组——机场更新分组不会自动进入输出。**升级
+  提示:** 已依赖机场原生分组的配置,需在「分组预览」点击「导入机场分组」后重新
+  「生成」,否则下次生成的输出将不含这些分组(不做自动迁移)。
+  **(Breaking) Provider groups are now import-to-apply (like rules):** the
+  converter no longer passes provider `proxy-groups` through; it replaces them
+  with custom groups, so provider group updates never enter the output
+  automatically. **Upgrade note:** profiles relying on provider groups must click
+  "import provider groups" in the group preview and re-generate, or the next
+  output won't contain them (no auto-migration).
+
+### Added
+
+- **导入机场分组 + 机场分组可编辑:** 「分组预览」新增「导入机场分组」按钮,经新端点
+  `POST /api/profiles/:id/import-provider-groups`(SSRF 保护的实时拉取,同
+  `provider-rules`)把机场 `proxy-groups` 解析为**可编辑的自定义分组**(name/type/
+  proxies→成员,其余键→options;跳过同名与不支持类型),返回 `{ imported, skipped }`;
+  导入后即可像普通自定义分组一样编辑/排序/删除,重新生成后进入订阅。
+  **Import provider groups + editable provider groups:** the group preview gains
+  an "import provider groups" button backed by a new
+  `POST /api/profiles/:id/import-provider-groups` (SSRF-protected live fetch, like
+  `provider-rules`) that imports the provider's `proxy-groups` as **editable
+  custom groups** (name/type/proxies → members, the rest → options; skipping
+  existing names / unsupported types), returning `{ imported, skipped }`. Imported
+  groups are then editable/sortable/deletable like any custom group and reach the
+  subscription on the next generate.
+
 ## [0.1.11] - 2026-06-15
 
 ### Fixed

@@ -160,7 +160,11 @@ require a login session.
 ## SSRF Protection
 
 User-provided provider subscription URLs are dangerous because the backend fetches
-them. Protect every outbound fetch.
+them. Protect every outbound fetch. All provider fetches go through the single
+SSRF-protected fetcher — not just `generate`/`preview`/the public endpoint, but
+also the admin-triggered live fetches `GET /api/profiles/:id/provider-rules` and
+`POST /api/profiles/:id/import-provider-groups` (import the provider's rules/
+groups for editing).
 
 Required URL rules:
 

@@ -129,6 +129,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
   const [providerGroups, setProviderGroups] = useState<ProxyPreview[]>([]);
   const [generated, setGenerated] = useState(true);
   const [rows, setRows] = useState<GroupRow[]>([]);
+  const [importing, setImporting] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -177,6 +178,28 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
     } finally {
       // Reconcile with the server (confirms on success, reverts on failure).
       void loadProviders();
+    }
+  }
+
+  // Import the airport's own proxy-groups as editable custom groups (the
+  // converter otherwise replaces provider groups). Appends, skipping existing.
+  async function importProviderGroups() {
+    setImporting(true);
+    try {
+      const res = await api<{ imported: number; skipped: number }>(
+        `/api/profiles/${profileId}/import-provider-groups`,
+        { method: "POST" },
+      );
+      if (res.imported === 0) {
+        message.info(t("groups.importNone"));
+      } else {
+        message.success(t("groups.imported", { count: res.imported }));
+      }
+      onChange();
+    } catch (e) {
+      message.error((e as ApiError).message ?? t("groups.importFailed"));
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -267,7 +290,14 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
   return (
     <Card
       title={`${t("groups.title")} (${total})`}
-      extra={<Button onClick={startAdd}>{t("groups.add")}</Button>}
+      extra={
+        <Space>
+          <Popconfirm title={t("groups.importConfirm")} onConfirm={importProviderGroups}>
+            <Button loading={importing}>{t("groups.importProvider")}</Button>
+          </Popconfirm>
+          <Button onClick={startAdd}>{t("groups.add")}</Button>
+        </Space>
+      }
     >
       {!generated && (
         <Typography.Paragraph type="secondary">{t("groups.notGenerated")}</Typography.Paragraph>
