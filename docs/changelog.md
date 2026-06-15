@@ -50,6 +50,16 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+### Changed
+
+- 分组预览不再区分「机场/自定义」:机场分组已被替换(需导入为自定义分组),因此预览
+  里的所有分组现在一律可编辑/排序/删除,去掉了只读的「机场」分组行与「自定义/机场」
+  标签;排序顺序仍取自上次生成的输出。
+  The group preview no longer distinguishes "provider" vs "custom": since provider
+  groups are replaced (import them as custom groups), every group in the preview
+  is now editable/sortable/deletable — the read-only "provider" rows and the
+  custom/provider tags are gone; ordering still follows the last generated output.
+
 ## [0.1.12] - 2026-06-15
 
 ### Changed
