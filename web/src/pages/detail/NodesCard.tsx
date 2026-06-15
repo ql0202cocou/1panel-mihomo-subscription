@@ -73,6 +73,34 @@ function buildRows(providers: ProxyPreview[], nodes: CustomNode[], generated: bo
   return rows;
 }
 
+/**
+ * Merge freshly derived rows into the current on-screen order: keep the existing
+ * order (with refreshed data) for rows that still exist, append genuinely new
+ * ones, drop removed ones. This preserves an optimistic drag order even when the
+ * re-derived server list can't yet reflect it (e.g. a not-yet-generated profile,
+ * or a custom node added but not regenerated) — the saved order is already
+ * persisted, so this only fixes the visual snap-back.
+ */
+function reconcileRows(prev: NodeRow[], derived: NodeRow[]): NodeRow[] {
+  if (prev.length === 0) return derived;
+  const byName = new Map(derived.map((r) => [r.name, r]));
+  const result: NodeRow[] = [];
+  for (const r of prev) {
+    const d = byName.get(r.name);
+    if (d) {
+      result.push(d);
+      byName.delete(r.name);
+    }
+  }
+  for (const d of derived) {
+    if (byName.has(d.name)) {
+      result.push(d);
+      byName.delete(d.name);
+    }
+  }
+  return result;
+}
+
 export default function NodesCard({ profileId, nodes, generatedAt, onChange }: Props) {
   const { t } = useTranslation();
   const [providers, setProviders] = useState<ProxyPreview[]>([]);
@@ -100,14 +128,15 @@ export default function NodesCard({ profileId, nodes, generatedAt, onChange }: P
     void loadProviders();
   }, [loadProviders, generatedAt]);
 
-  // Keep the sortable rows in sync with the latest server/props state. After a
-  // reorder the backend returns the same order, so this stays consistent.
+  // Keep the sortable rows in sync with the latest server/props state, but
+  // preserve the current order for surviving rows so an optimistic drag isn't
+  // clobbered by a reload that can't yet reflect it (see reconcileRows).
   const derived = useMemo(
     () => buildRows(providers, nodes, generated),
     [providers, nodes, generated],
   );
   useEffect(() => {
-    setRows(derived);
+    setRows((prev) => reconcileRows(prev, derived));
   }, [derived]);
 
   function startAdd() {

@@ -88,6 +88,32 @@ function buildRows(
   return rows;
 }
 
+/**
+ * Merge freshly derived rows into the current on-screen order: keep the existing
+ * order (with refreshed data) for rows that still exist, append new ones, drop
+ * removed ones. Preserves an optimistic drag order even when the re-derived
+ * server list can't yet reflect it (the saved order is already persisted).
+ */
+function reconcileRows(prev: GroupRow[], derived: GroupRow[]): GroupRow[] {
+  if (prev.length === 0) return derived;
+  const byName = new Map(derived.map((r) => [r.name, r]));
+  const result: GroupRow[] = [];
+  for (const r of prev) {
+    const d = byName.get(r.name);
+    if (d) {
+      result.push(d);
+      byName.delete(r.name);
+    }
+  }
+  for (const d of derived) {
+    if (byName.has(d.name)) {
+      result.push(d);
+      byName.delete(d.name);
+    }
+  }
+  return result;
+}
+
 export default function GroupsCard({ profileId, groups, nodes, generatedAt, onChange }: Props) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState<CustomGroup | null>(null);
@@ -121,14 +147,15 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
     void loadProviders();
   }, [loadProviders, generatedAt]);
 
-  // Keep the sortable rows in sync with the latest server/props state. After a
-  // reorder the backend returns the same order, so this stays consistent.
+  // Keep the sortable rows in sync with the latest server/props state, but
+  // preserve the current order for surviving rows so an optimistic drag isn't
+  // clobbered by a reload that can't yet reflect it (see reconcileRows).
   const derived = useMemo(
     () => buildRows(providerGroups, groups, generated),
     [providerGroups, groups, generated],
   );
   useEffect(() => {
-    setRows(derived);
+    setRows((prev) => reconcileRows(prev, derived));
   }, [derived]);
 
   async function onDragEnd(event: DragEndEvent) {
