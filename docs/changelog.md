@@ -50,6 +50,32 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+### Changed
+
+- **节点预览重构为「可展开式分组」:** 节点预览不再是机场+自定义混排的扁平列表,而是
+  两个**可折叠、可拖动先后**的分组——「机场」分组(名称为机场名,机场节点**只读**上游
+  顺序)与「自定义」分组(组内节点可拖动排序)。点击分组名展开/折叠;拖动分组改两块
+  先后,拖动自定义节点改组内顺序。**分组先后 × 自定义组内顺序决定生成订阅 `proxies`
+  的实际顺序**,且即时生效(就地重写缓存,无需重拉机场)。这样机场更新只在机场块内
+  变化,不再打乱用户的自定义顺序。
+  - 数据/接口:`node_order` 语义改为**仅自定义块**顺序;新增 `profiles.node_section_order`
+    (迁移 `0004_node_section_order.sql`)与 `PUT /api/profiles/:id/node-section-order`;
+    `GET /proxies` 新增 `node_section_order` 字段并直接返回缓存(排序改动已就地重写缓存);
+    生成时仅快照自定义节点顺序(机场块始终上游序、不快照)。
+  The node preview is redesigned into **collapsible groups**: instead of one flat
+  provider+custom list, there are two collapsible, drag-orderable groups — a
+  "provider" group (titled with the provider name; provider nodes are **read-only**
+  upstream order) and a "custom" group (its nodes are sortable). Click a group name
+  to expand/collapse; drag groups to set block order, drag custom nodes to order
+  the custom block. **Block order × custom order drives the generated `proxies`
+  order** and takes effect immediately (cache re-stitched, no provider re-fetch).
+  Provider updates now only change the provider block and never scatter the user's
+  custom order. Data/API: `node_order` now means the **custom block** order only;
+  adds `profiles.node_section_order` (migration `0004_node_section_order.sql`) and
+  `PUT /api/profiles/:id/node-section-order`; `GET /proxies` adds a
+  `node_section_order` field and returns the cache as-is; generation snapshots only
+  the custom-node order (the provider block stays upstream and is not snapshotted).
+
 ## [0.1.13] - 2026-06-15
 
 ### Changed

@@ -102,29 +102,33 @@ and `docs/data-model.md`):
   provider update never changes rules/groups unless re-imported.
   `GET /api/profiles/:id/proxies` surfaces provider proxies + custom group names
   from the last generated output for editor autocomplete.
-- Node/group ordering: `profiles.node_order` / `group_order` (JSON name arrays,
-  `NULL`=default) drive a unified manual order of all proxies / proxy-groups.
-  `converter::reorder_by_name` reorders the assembled `proxies` / `proxy-groups`
-  by them (unlisted/new entries fall to the end); both `generate` and
-  `list_proxies` apply them (so the preview reflects a saved order before
-  regeneration). `PUT /api/profiles/:id/node-order` and `.../group-order` persist
-  them (shared `set_order`/`load_order` over an `OrderKind` column allowlist);
-  the `NodesCard`/`GroupsCard` previews drag via `@dnd-kit` and submit the full
-  name list. Every generation snapshots the output's proxy/group name order back
-  into `node_order`/`group_order` (`persist_cache` → `snapshot_orders`), so a
-  provider refresh keeps existing entries in place by name (info refreshed by
-  name) and appends new ones at the end; a manual drag overwrites the column. The
-  `RulesCard` preview is also `@dnd-kit`-sortable, but rule order is already
-  semantic ordered text, so it reorders the lines and saves via the existing
-  `PUT /api/profiles/:id/rules` — no `*_order` column.
+- Node ordering is **two blocks**: the output `proxies` = provider block
+  (provider proxies, upstream order, *not* user-orderable) + custom block (custom
+  nodes) concatenated by `profiles.node_section_order` (a `["provider","custom"]`
+  permutation, `NULL`=default provider-first). `profiles.node_order` is the
+  **custom block** order only (provider names are never stored there). The
+  converter builds the two blocks separately (`reorder_by_name` on the custom
+  block, then `converter::concat_sections`); `resync_cache` rebuilds the same by
+  splitting cached proxies on the custom-node name set. The `NodesCard` renders
+  two draggable collapsible groups (provider read-only; custom sortable) via
+  nested `@dnd-kit` contexts. This keeps provider nodes as one cohesive block so a
+  subscription refresh never scatters the user's custom order — new provider nodes
+  just join the provider block (upstream). Proxy-**groups** still use `group_order`
+  (all groups are custom). Persistence: shared `set_order`/`load_order` over an
+  `OrderKind` allowlist (`Node`/`Section`/`Group`); endpoints `node-order`,
+  `node-section-order`, `group-order`. `snapshot_orders` writes `node_order`
+  **filtered to custom node names** + `group_order`; provider order isn't
+  snapshotted. The `RulesCard` is also `@dnd-kit`-sortable but rule order is
+  already semantic text, saved via `PUT .../rules` — no `*_order` column.
 - Order/rule edits apply to the served subscription **immediately**, without a
-  provider re-fetch: the `node-order`/`group-order`/`rules` write handlers call
-  `generate::resync_cache`, which re-stitches the existing
-  `generated_cache.output_yaml` in place (reorder `proxies`/`proxy-groups` by the
-  saved orders; rebuild the `rules` block from the ruleset) and keeps
-  `generated_at` so the refetch cadence is unchanged. Best-effort — a failure
-  just defers the change to the next full generate. (Adding a *new* node/group
-  still needs a generate, since it isn't in the cached output yet.)
+  provider re-fetch: the `node-order`/`node-section-order`/`group-order`/`rules`
+  write handlers call `generate::resync_cache`, which re-stitches the existing
+  `generated_cache.output_yaml` in place (regroup `proxies` by custom-name +
+  `node_order` + `node_section_order`; reorder `proxy-groups` by `group_order`;
+  rebuild `rules` from the ruleset) and keeps `generated_at` so the refetch
+  cadence is unchanged. `list_proxies` therefore just returns the cache as-is
+  (plus `node_section_order`). Best-effort — a failure defers to the next full
+  generate. (Adding a *new* node/group still needs a generate.)
 - Outbound fetches send `FETCH_USER_AGENT` (default `clash.meta/1.0`); many
   airport panels 403 a non-clash UA, so don't blank it.
 - Keep `/health` minimal (no version). Admin creds from

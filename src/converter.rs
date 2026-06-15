@@ -40,12 +40,16 @@ pub struct ConvertInput<'a> {
     pub nodes: Vec<CustomNode>,
     /// Enabled custom groups only.
     pub groups: Vec<CustomGroup>,
-    /// Manual proxy ordering (proxy names, provider + custom). Empty means
-    /// default order. Names present here are emitted first in this order; any
-    /// proxy not listed keeps its default relative position at the end.
+    /// Manual ordering of the **custom** nodes within the custom block (custom
+    /// node names). Names present here are emitted first in this order; any not
+    /// listed (newly added) keep their default relative position at the end. The
+    /// provider block's internal order is always upstream (not user-orderable).
     pub node_order: Vec<String>,
-    /// Manual proxy-group ordering (group names, provider + custom). Same
-    /// semantics as `node_order`, applied to `proxy-groups`.
+    /// Order of the two node blocks in the output `proxies`: a permutation of
+    /// `"provider"` / `"custom"`. Empty means the default `["provider","custom"]`.
+    pub node_section_order: Vec<String>,
+    /// Manual proxy-group ordering (group names). Names present here are emitted
+    /// first in this order; any not listed keep their default position at the end.
     pub group_order: Vec<String>,
 }
 
@@ -95,17 +99,20 @@ pub fn convert(input: ConvertInput) -> Result<String, ConvertError> {
 
     // ── Build the output config ──────────────────────────────────────────────
 
-    // proxies: provider entries + enabled custom nodes, then apply the manual
-    // ordering (no-op when `node_order` is empty).
-    let mut proxies = sequence_of(root.get("proxies"));
-    for (_, node) in parsed_nodes {
-        proxies.push(Value::Mapping(node));
-    }
+    // proxies: two blocks concatenated by `node_section_order`. The provider
+    // block keeps upstream order (not user-orderable); the custom block is the
+    // enabled custom nodes reordered by `node_order` (new ones fall to the end).
+    let provider_block = sequence_of(root.get("proxies"));
+    let mut custom_block: Vec<Value> = parsed_nodes
+        .into_iter()
+        .map(|(_, node)| Value::Mapping(node))
+        .collect();
     reorder_by_name(
-        &mut proxies,
+        &mut custom_block,
         |item| item.get("name").and_then(Value::as_str),
         &input.node_order,
     );
+    let proxies = concat_sections(provider_block, custom_block, &input.node_section_order);
     root.insert(Value::from("proxies"), Value::Sequence(proxies));
 
     // proxy-groups: fully replaced with the user's custom groups (like `rules`).
@@ -231,6 +238,25 @@ where
     *items = indexed.into_iter().map(|(_, item)| item).collect();
 }
 
+/// Concatenate the provider and custom node blocks per `section_order` (a
+/// permutation of `"provider"`/`"custom"`). Defaults to provider-first when the
+/// order is empty or doesn't name `"custom"` before `"provider"`.
+pub fn concat_sections(
+    provider: Vec<Value>,
+    custom: Vec<Value>,
+    section_order: &[String],
+) -> Vec<Value> {
+    if section_order.first().map(String::as_str) == Some("custom") {
+        let mut out = custom;
+        out.extend(provider);
+        out
+    } else {
+        let mut out = provider;
+        out.extend(custom);
+        out
+    }
+}
+
 /// Clone a value's sequence, or an empty one if absent/not a sequence.
 fn sequence_of(value: Option<&Value>) -> Vec<Value> {
     match value {
@@ -320,6 +346,7 @@ rules:
             nodes,
             groups,
             node_order: Vec::new(),
+            node_section_order: Vec::new(),
             group_order: Vec::new(),
         }
     }
@@ -483,6 +510,7 @@ rules:
             nodes: vec![],
             groups: vec![],
             node_order: Vec::new(),
+            node_section_order: Vec::new(),
             group_order: Vec::new(),
         };
         assert!(matches!(convert(bad), Err(ConvertError::ProviderParse)));
@@ -512,33 +540,35 @@ rules:
         assert_eq!(names_in(root.get("proxy-groups")), vec!["G2", "G1"]);
     }
 
-    #[test]
-    fn node_order_reorders_proxies_and_appends_unlisted() {
-        let nodes = vec![
-            CustomNode {
-                name: "a".into(),
-                content: "{ name: a, type: ss, server: 9.9.9.9, port: 1080 }".into(),
-            },
-            CustomNode {
-                name: "b".into(),
-                content: "{ name: b, type: ss, server: 9.9.9.8, port: 1080 }".into(),
-            },
-        ];
-        // Default proxies would be [hk-1, a, b]. Ask for [b, hk-1]; `a` is
-        // unlisted and must fall to the end in its default position.
-        let mut inp = input("MATCH,DIRECT", nodes, vec![]);
-        inp.node_order = vec!["b".into(), "hk-1".into()];
-        let root = out(inp);
-        assert_eq!(names_in(root.get("proxies")), vec!["b", "hk-1", "a"]);
+    fn node(name: &str) -> CustomNode {
+        CustomNode {
+            name: name.into(),
+            content: format!("{{ name: {name}, type: ss, server: 9.9.9.9, port: 1080 }}"),
+        }
     }
 
     #[test]
-    fn empty_node_order_keeps_default_order() {
-        let nodes = vec![CustomNode {
-            name: "z".into(),
-            content: "{ name: z, type: ss, server: 9.9.9.9, port: 1080 }".into(),
-        }];
-        let root = out(input("MATCH,DIRECT", nodes, vec![]));
+    fn node_order_reorders_only_the_custom_block() {
+        // Provider block [hk-1] stays upstream; custom block [a, b] is reordered
+        // by `node_order` (b first, a unlisted -> end). Default section order is
+        // provider-first, so output = [hk-1] ++ [b, a].
+        let mut inp = input("MATCH,DIRECT", vec![node("a"), node("b")], vec![]);
+        inp.node_order = vec!["b".into()];
+        let root = out(inp);
+        assert_eq!(names_in(root.get("proxies")), vec!["hk-1", "b", "a"]);
+    }
+
+    #[test]
+    fn node_section_order_puts_custom_block_first() {
+        let mut inp = input("MATCH,DIRECT", vec![node("a"), node("b")], vec![]);
+        inp.node_section_order = vec!["custom".into(), "provider".into()];
+        let root = out(inp);
+        assert_eq!(names_in(root.get("proxies")), vec!["a", "b", "hk-1"]);
+    }
+
+    #[test]
+    fn empty_orders_keep_provider_first_then_custom() {
+        let root = out(input("MATCH,DIRECT", vec![node("z")], vec![]));
         assert_eq!(names_in(root.get("proxies")), vec!["hk-1", "z"]);
     }
 }

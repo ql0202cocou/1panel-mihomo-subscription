@@ -105,6 +105,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/profiles/:id/rules", put(profiles::put_rules))
         .route("/profiles/:id/proxies", get(profiles::list_proxies))
         .route("/profiles/:id/node-order", put(profiles::set_node_order))
+        .route(
+            "/profiles/:id/node-section-order",
+            put(profiles::set_node_section_order),
+        )
         .route("/profiles/:id/group-order", put(profiles::set_group_order))
         .route(
             "/profiles/:id/nodes",

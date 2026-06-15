@@ -79,6 +79,7 @@ CREATE TABLE profiles (
     last_fetch_at     TEXT,
     last_fetch_status TEXT,
     node_order  TEXT,
+    node_section_order TEXT,
     group_order TEXT,
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
@@ -104,24 +105,28 @@ CREATE INDEX idx_profiles_enabled      ON profiles (enabled);
 - `last_fetch_at` / `last_fetch_status`: observability fields for the latest
   provider fetch; status values such as `success`, `http_error:502`,
   `ssrf_rejected`, `timeout`, `too_large`, displayed on the source card.
-- `node_order`:节点排序,存为节点名(机场 + 自定义)的 JSON 字符串数组。
-  `NULL` 表示默认顺序(机场原序,自定义节点按 `created_at` 追加)。列表中的
-  名字按此顺序优先排在前面;任何未列出的节点(新增的机场/自定义节点)回退到
-  末尾。**每次生成都会把输出 `proxies` 的实际顺序快照回写到本列**,因此后续
-  更新订阅时:已存在的节点按名字保留原位置(其信息由新机场 YAML 按名刷新),
-  新增节点排到末尾;管理员拖拽排序通过 `PUT .../node-order` 覆盖本列。同时决定
-  生成订阅 `proxies` 的顺序与节点预览的展示顺序(见 `api-design.md`)。迁移
-  `0002_node_order.sql` 通过 `ALTER TABLE` 增列。
-- `node_order`: node ordering, stored as a JSON string array of proxy names
-  (provider + custom). `NULL` means default order (provider order, then custom
-  nodes by `created_at`). Listed names are emitted first in that order; any node
-  not listed (a newly added provider/custom node) falls back to the end. **Every
-  generation snapshots the output `proxies` order back into this column**, so on
-  a later subscription refresh an existing node keeps its position by name (its
-  info refreshed from the new provider YAML) while newly added nodes land at the
-  end; an admin drag overwrites this column via `PUT .../node-order`. Drives both
-  the generated `proxies` output and the node-preview display order (see
-  `api-design.md`). Added by migration `0002_node_order.sql` via `ALTER TABLE`.
+- 输出 `proxies` 由**两个块**拼接:**机场块**(机场代理,上游顺序,用户不可排序)和
+  **自定义块**(自定义节点)。节点预览把这两块渲染为可折叠、可拖动先后的分组。
+- `node_order`:**仅自定义块**内的节点顺序,存为自定义节点名 JSON 数组。`NULL`=默认
+  (按 `created_at`)。列出的名字优先按序排列,未列出的(新增自定义节点)落末尾。
+  生成时把输出里的自定义节点顺序快照回写本列(故新自定义节点持久化到末尾);管理员
+  在自定义分组内拖拽通过 `PUT .../node-order` 覆盖本列。机场块顺序始终上游序,**不**入
+  本列。迁移 `0002_node_order.sql`。
+- `node_order`: order of nodes **within the custom block only**, a JSON array of
+  custom node names. `NULL` = default (`created_at`). Listed names go first; any
+  not listed (newly added custom node) fall to the end. Generation snapshots the
+  output's custom-node order back into this column (so new customs persist at the
+  end); an admin's drag inside the custom group overwrites it via
+  `PUT .../node-order`. The provider block's order is always upstream and is
+  **not** stored here. Migration `0002_node_order.sql`.
+- `node_section_order`:两个节点块的先后,JSON 两元数组(`"provider"`/`"custom"` 的
+  排列),`NULL`=默认 `["provider","custom"]`(机场块在前)。由 `PUT .../node-section-order`
+  写入。决定生成 `proxies` 里两块的拼接顺序。迁移 `0004_node_section_order.sql`。
+- `node_section_order`: order of the two node blocks, a 2-element JSON array (a
+  permutation of `"provider"`/`"custom"`); `NULL` = default `["provider","custom"]`
+  (provider block first). Written by `PUT .../node-section-order`; drives how the
+  two blocks are concatenated in the output `proxies`. Migration
+  `0004_node_section_order.sql`.
 - `group_order`:与 `node_order` 同义(含每次生成的快照回写与刷新语义),但作用于
   `proxy-groups`(分组名,机场 + 自定义)。决定生成 `proxy-groups` 的顺序与分组
   预览展示顺序。迁移 `0003_group_order.sql`。

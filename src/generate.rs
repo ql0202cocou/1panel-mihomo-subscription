@@ -304,15 +304,17 @@ async fn convert(
     })
     .collect();
 
-    // Manual proxy / proxy-group ordering (NULL/garbage -> empty -> default).
-    let (node_order, group_order) = sqlx::query_as::<_, (Option<String>, Option<String>)>(
-        "SELECT node_order, group_order FROM profiles WHERE id = ?",
-    )
-    .bind(profile_id)
-    .fetch_optional(&state.db)
-    .await?
-    .map(|(n, g)| (parse_order(n), parse_order(g)))
-    .unwrap_or_default();
+    // Manual ordering (NULL/garbage -> empty -> default): custom-node order,
+    // node-section order (provider/custom blocks), proxy-group order.
+    let (node_order, node_section_order, group_order) =
+        sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>)>(
+            "SELECT node_order, node_section_order, group_order FROM profiles WHERE id = ?",
+        )
+        .bind(profile_id)
+        .fetch_optional(&state.db)
+        .await?
+        .map(|(n, s, g)| (parse_order(n), parse_order(s), parse_order(g)))
+        .unwrap_or_default();
 
     Ok(converter::convert(ConvertInput {
         provider_yaml,
@@ -320,6 +322,7 @@ async fn convert(
         nodes,
         groups,
         node_order,
+        node_section_order,
         group_order,
     }))
 }
@@ -400,14 +403,17 @@ async fn persist_cache(state: &AppState, profile_id: &str, built: &Built) -> Api
     Ok(())
 }
 
-/// Persist the output's `proxies`/`proxy-groups` name order into
-/// `profiles.node_order`/`group_order`. Empty sequences store NULL.
+/// Persist the output's ordering back into `profiles`: `node_order` is the
+/// **custom** block order (output proxy names that are custom nodes, so newly
+/// added customs persist at the end — the provider block's order is upstream and
+/// never stored), and `group_order` is the proxy-group order. Empty → NULL.
 async fn snapshot_orders(state: &AppState, profile_id: &str, yaml: &str) -> ApiResult<()> {
     let Ok(root) = crate::yaml::parse_limited(yaml) else {
         return Ok(());
     };
-    let node_order = order_json(&root, "proxies");
-    let group_order = order_json(&root, "proxy-groups");
+    let custom = custom_node_names(state, profile_id).await?;
+    let node_order = order_json(&root, "proxies", |name| custom.contains(name));
+    let group_order = order_json(&root, "proxy-groups", |_| true);
     sqlx::query("UPDATE profiles SET node_order = ?, group_order = ? WHERE id = ?")
         .bind(&node_order)
         .bind(&group_order)
@@ -417,14 +423,29 @@ async fn snapshot_orders(state: &AppState, profile_id: &str, yaml: &str) -> ApiR
     Ok(())
 }
 
-/// Extract the ordered `name` values of a top-level sequence (`proxies` or
-/// `proxy-groups`) and serialize them as a JSON array, or `None` (→ SQL NULL)
-/// when there are none.
-fn order_json(root: &serde_yaml::Value, key: &str) -> Option<String> {
+/// The set of custom node names for a profile (all of them, enabled or not).
+async fn custom_node_names(
+    state: &AppState,
+    profile_id: &str,
+) -> ApiResult<std::collections::HashSet<String>> {
+    Ok(
+        sqlx::query_scalar::<_, String>("SELECT name FROM custom_nodes WHERE profile_id = ?")
+            .bind(profile_id)
+            .fetch_all(&state.db)
+            .await?
+            .into_iter()
+            .collect(),
+    )
+}
+
+/// Extract the ordered `name` values of a top-level sequence, keeping only those
+/// matching `keep`, serialized as a JSON array, or `None` (→ SQL NULL) when none.
+fn order_json(root: &serde_yaml::Value, key: &str, keep: impl Fn(&str) -> bool) -> Option<String> {
     let names: Vec<&str> = match root.get(key) {
         Some(serde_yaml::Value::Sequence(items)) => items
             .iter()
             .filter_map(|item| item.get("name").and_then(|v| v.as_str()))
+            .filter(|n| keep(n))
             .collect(),
         _ => Vec::new(),
     };
@@ -461,10 +482,29 @@ pub async fn resync_cache(state: &AppState, profile_id: &str) -> ApiResult<()> {
         return Ok(());
     };
 
-    // Reorder proxies / proxy-groups by the saved manual orders.
+    // proxies: rebuild the two blocks from the cached output — split by custom
+    // node name, reorder the custom block by `node_order`, concatenate per
+    // `node_section_order` (provider block keeps its cached/upstream order).
     let node_order = load_order_col(state, profile_id, "node_order").await?;
+    let node_section_order = load_order_col(state, profile_id, "node_section_order").await?;
+    let custom = custom_node_names(state, profile_id).await?;
+    if let Some(serde_yaml::Value::Sequence(proxies)) = root.get_mut("proxies") {
+        let (mut custom_block, provider_block): (Vec<_>, Vec<_>) =
+            std::mem::take(proxies).into_iter().partition(|item| {
+                item.get("name")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|n| custom.contains(n))
+            });
+        converter::reorder_by_name(
+            &mut custom_block,
+            |item| item.get("name").and_then(|v| v.as_str()),
+            &node_order,
+        );
+        *proxies = converter::concat_sections(provider_block, custom_block, &node_section_order);
+    }
+
+    // proxy-groups: reorder by the saved group order.
     let group_order = load_order_col(state, profile_id, "group_order").await?;
-    reorder_seq(&mut root, "proxies", &node_order);
     reorder_seq(&mut root, "proxy-groups", &group_order);
 
     // Replace the rules block with the current ruleset (order is significant);
@@ -521,6 +561,7 @@ async fn load_order_col(
 ) -> ApiResult<Vec<String>> {
     let sql = match column {
         "node_order" => "SELECT node_order FROM profiles WHERE id = ?",
+        "node_section_order" => "SELECT node_section_order FROM profiles WHERE id = ?",
         _ => "SELECT group_order FROM profiles WHERE id = ?",
     };
     Ok(sqlx::query_scalar::<_, Option<String>>(sql)
