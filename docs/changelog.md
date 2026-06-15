@@ -50,6 +50,8 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-06-15
+
 ### Changed
 
 - 分组预览不再区分「机场/自定义」:机场分组已被替换(需导入为自定义分组),因此预览
