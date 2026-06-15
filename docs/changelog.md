@@ -50,6 +50,8 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-06-15
+
 ### Changed
 
 - 拖拽排序与规则编辑**立即生效**:此前调整节点/分组顺序或编辑规则需重新「生成配置」
