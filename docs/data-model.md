@@ -242,11 +242,13 @@ CREATE TABLE generated_cache (
   provider response, stored with the cache and passed through on the public
   endpoint (see `api-design.md`); NULL when the provider does not send it.
 
-- 每个 profile 仅保留最新一份生成结果;TTL 由 `CACHE_TTL_MINUTES` 配置
-  (默认 15 分钟),在应用层根据 `generated_at` 判断,过期即重新拉取生成。
-- Only the latest generated output is kept per profile; the TTL is configured
-  by `CACHE_TTL_MINUTES` (default 15 minutes) and enforced in the application
-  layer from `generated_at` — stale entries trigger a refresh.
+- 每个 profile 仅保留最新一份生成结果。**公共订阅端点每次拉取都重拉机场并重新生成**,
+  本缓存仅作机场拉取失败时的兜底;`CACHE_TTL_MINUTES`(默认 15 分钟,按 `generated_at`
+  判断)现仅用于管理端 `preview` 的新鲜度。
+- Only the latest generated output is kept per profile. **The public subscription
+  endpoint re-fetches the provider and regenerates on every pull**, so this cache
+  is only a fallback when that fetch fails; `CACHE_TTL_MINUTES` (default 15 min,
+  evaluated from `generated_at`) now governs only the admin `preview` freshness.
 - `content_hash`:对“配置输入 + 原始订阅内容”的哈希,用于跳过无变化的重复生成。
 - `content_hash`: hash of "profile inputs + provider subscription content",
   used to skip regeneration when nothing changed.

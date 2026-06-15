@@ -50,6 +50,26 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+### Changed
+
+- **公共订阅每次拉取都实时拉机场,客户端永远用最新节点:** 公共订阅端点
+  (`GET /<prefix>/api/sub/<token>`)不再「缓存新鲜就返回」,而是每次拉取都重拉机场并
+  重新生成;`generated_cache` 仅作机场拉取失败时的兜底。并发拉取仍由 per-profile
+  single-flight 合并为一次机场拉取(`serve_or_refresh` + `generated_since`)。
+  `CACHE_TTL_MINUTES` 现仅影响管理端 `preview`。
+  The public subscription endpoint now re-fetches the provider on every pull
+  (clients always get the latest nodes) instead of serving a fresh cache within a
+  TTL; `generated_cache` is only a fallback when the provider fetch fails.
+  Concurrent pulls are still coalesced into one fetch by the per-profile
+  single-flight. `CACHE_TTL_MINUTES` now affects only the admin `preview`.
+- **移除「生成配置」按钮:** 既然公共链接始终实时,手动「生成」已多余,移除详情页底部
+  的「生成配置」按钮及「未生成的修改」告警;管理端预览里的机场节点改由「原始订阅源 →
+  刷新」更新(自定义节点/分组/规则编辑仍即时反映)。
+  Removed the "generate config" button (and the "unsaved changes / not generated"
+  warning): the public link is always live, so the manual generate step is
+  unnecessary. Provider nodes in the admin preview are refreshed via the source
+  card's "refresh"; custom node/group/rule edits still reflect immediately.
+
 ## [0.1.14] - 2026-06-16
 
 ### Changed

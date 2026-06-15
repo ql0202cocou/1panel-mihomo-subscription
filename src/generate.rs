@@ -180,20 +180,20 @@ struct Served {
 }
 
 async fn serve_or_refresh(state: &AppState, profile: &ProfileCore) -> Option<Served> {
-    if let Ok(Some(cache)) = load_cache(state, &profile.id).await {
-        if is_fresh(&cache.generated_at, state.cache_ttl) {
-            return Some(cache.into());
-        }
-    }
+    // Every pull re-fetches the provider so the client always gets the latest
+    // nodes; the cache is only a fallback when the provider fetch fails.
+    let arrived = now();
 
-    // Coalesce concurrent refreshes of this profile.
+    // Coalesce concurrent pulls of this profile into one provider fetch.
     let lock = state.single_flight.lock_for(&profile.id);
     let _guard = lock.lock().await;
 
-    // Re-check: another request may have refreshed while we waited.
+    // If another request in this batch already refreshed while we waited for the
+    // lock (cache regenerated at/after we arrived), serve that instead of
+    // re-fetching — this is what bounds bursts to a single upstream fetch.
     let stale = load_cache(state, &profile.id).await.ok().flatten();
     if let Some(cache) = &stale {
-        if is_fresh(&cache.generated_at, state.cache_ttl) {
+        if generated_since(&cache.generated_at, &arrived) {
             return Some(cache.clone().into());
         }
     }
@@ -581,6 +581,19 @@ fn is_fresh(generated_at: &str, ttl: Duration) -> bool {
     };
     let age = chrono::Utc::now().signed_duration_since(generated.with_timezone(&chrono::Utc));
     age.to_std().map(|a| a < ttl).unwrap_or(false)
+}
+
+/// Whether `generated_at` is at or after `arrived` — i.e. the cache was
+/// (re)generated since this request started waiting, so another concurrent pull
+/// already refreshed it. Unparseable timestamps count as "not since" (re-fetch).
+fn generated_since(generated_at: &str, arrived: &str) -> bool {
+    match (
+        chrono::DateTime::parse_from_rfc3339(generated_at),
+        chrono::DateTime::parse_from_rfc3339(arrived),
+    ) {
+        (Ok(generated), Ok(arrived)) => generated >= arrived,
+        _ => false,
+    }
 }
 
 fn hash_inputs(provider_body: &str, output_yaml: &str) -> String {

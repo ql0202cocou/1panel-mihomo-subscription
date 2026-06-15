@@ -81,7 +81,13 @@ and `docs/data-model.md`):
 
 - SSRF check pins the validated IP at connect time (DNS-rebinding safe) and
   unwraps IPv4-embedded IPv6 (IPv4-mapped, NAT64, 6to4).
-- Refresh provider subscriptions behind a per-profile single-flight lock.
+- The public subscription endpoint re-fetches the provider on **every** pull
+  (always-latest); `serve_or_refresh` coalesces concurrent pulls via the
+  per-profile single-flight (serve the cache only if it was regenerated since the
+  request arrived — `generated_since`) and falls back to the previous cache when
+  the fetch fails. There is no "生成配置" button (the link is always live; the
+  admin refreshes the preview via the source card's `POST /generate`).
+  `CACHE_TTL_MINUTES`/`is_fresh` now govern only the admin `preview`.
 - Apply `foreign_keys`/`busy_timeout`/`journal_mode` to every pooled SQLite
   connection via an after-connect hook, not once.
 - Derive the client IP from a trusted reverse-proxy hop (`TRUSTED_PROXY_HOPS`),
