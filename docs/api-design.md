@@ -257,8 +257,10 @@ PUT /api/profiles/:id/group-order
   完整的名字顺序。后端分别存入 `profiles.node_order` / `group_order`(见
   `data-model.md`)。`order` 中存在于输出的名字优先按此顺序排列,未列出的条目
   (新增机场/自定义节点或分组)回退到末尾默认位置;名字超长或数组过大返回 `400`。
-  该顺序同时决定**下一次生成**的 `proxies` / `proxy-groups` 顺序与预览展示顺序;
-  清空缓存的旧顺序需重新生成。两个端点的鉴权、同源校验与其他管理接口一致。
+  保存后后端会**就地重排已生成缓存(`generated_cache.output_yaml`)中的对应序列、
+  无需重新拉取机场**,因此新顺序**立即生效**——节点/分组预览与公共订阅链接随即返回
+  新顺序;无缓存(从未生成)时则在首次生成时生效。两个端点的鉴权、同源校验与其他
+  管理接口一致。
   此外,**每次生成都会把输出的节点/分组实际顺序快照回写到 `node_order`/`group_order`**
   (见 `data-model.md`):因此后续更新订阅时,已存在的节点/分组按名字保留原位置
   (信息按名从新机场 YAML 刷新),新增的则排到末尾。
@@ -281,19 +283,26 @@ PUT /api/profiles/:id/group-order
   `group_order` (see `data-model.md`). Names in `order` that exist in the output
   are emitted first in that order; entries not listed (newly added provider/
   custom nodes or groups) fall back to the default position at the end;
-  over-long names or an over-large array return `400`. This order drives both
-  the **next** generation's `proxies` / `proxy-groups` order and the preview
-  display order; clearing the already-cached old order requires regenerating.
-  Both endpoints' auth and same-origin checks match the other management
+  over-long names or an over-large array return `400`. On save the backend
+  **re-stitches the matching sequence in the generated cache
+  (`generated_cache.output_yaml`) in place, without re-fetching the provider**,
+  so the new order **takes effect immediately** — both the node/group preview and
+  the public subscription link return it right away; with no cache yet (never
+  generated) it applies on the first generate. Both endpoints' auth and
+  same-origin checks match the other management
   endpoints.
 - 规则预览同样支持拖拽排序,但规则顺序本身具有语义(自上而下命中即止),且
   `rulesets.content` 本就是有序文本,因此无需新增列:前端拖动后直接把重排后的规则
-  行经 `PUT /api/profiles/:id/rules` 整体保存,排序于下一次生成时随规则一并生效。
+  行经 `PUT /api/profiles/:id/rules` 整体保存。该端点保存后同样会就地重写已生成缓存
+  的 `rules` 块(规则与机场无关,可独立重建),因此排序(以及增删改)**立即生效**,
+  无需重新拉取机场。
 - The rule preview supports drag-and-drop sorting too, but rule order is itself
   semantic (top-down, first match wins) and `rulesets.content` is already an
   ordered text, so no new column is needed: the frontend reorders the rule lines
-  and saves the whole content via `PUT /api/profiles/:id/rules`; the order takes
-  effect with the rules on the next generation.
+  and saves the whole content via `PUT /api/profiles/:id/rules`. On save that
+  endpoint also rewrites the `rules` block of the generated cache in place (rules
+  are provider-independent and can be rebuilt alone), so reordering — and any
+  add/edit/delete — **takes effect immediately**, with no provider re-fetch.
 - Read-only. Both `proxies` and `groups` are `name`/`type` pairs parsed from
   `generated_cache.output_yaml`, so they contain provider and merged custom
   entries; before the first generation it returns `generated: false` and empty

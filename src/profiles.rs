@@ -434,6 +434,10 @@ pub async fn put_rules(
         .bind(&id)
         .execute(&state.db)
         .await?;
+
+    // Rules are fully user-defined (provider-independent), so reflect the edit in
+    // the served subscription immediately by re-stitching the cached output.
+    resync_served_cache(&state, &id).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -617,7 +621,20 @@ async fn set_order(
         .bind(id)
         .execute(&state.db)
         .await?;
+
+    // Apply the new order to the served subscription immediately by re-stitching
+    // the cached output (no provider re-fetch); best-effort.
+    resync_served_cache(state, id).await;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Re-stitch the generated cache so an order/rule change is served right away.
+/// Best-effort: a failure leaves the saved change to take effect on next
+/// generate, so it must not fail the originating request.
+async fn resync_served_cache(state: &AppState, id: &str) {
+    if crate::generate::resync_cache(state, id).await.is_err() {
+        tracing::warn!(profile = %id, "failed to resync served cache after edit");
+    }
 }
 
 /// `PUT /api/profiles/:id/node-order` — persist a manual proxy ordering.

@@ -445,6 +445,93 @@ async fn update_last_fetch(state: &AppState, profile_id: &str, status: &str) -> 
     Ok(())
 }
 
+/// Re-stitch the cached output to reflect the current saved node/group order and
+/// ruleset, **without** re-fetching the provider — so a drag-reorder (or rule
+/// edit) is served by the public link immediately, not only after the next full
+/// generate. Reordering only permutes entries already in the cached output, and
+/// the rules block is fully user-defined (provider-independent), so this is
+/// equivalent to a regenerate for these operations. No-op when nothing has been
+/// generated yet (the order then applies on the first generate).
+pub async fn resync_cache(state: &AppState, profile_id: &str) -> ApiResult<()> {
+    let Some(cache) = load_cache(state, profile_id).await? else {
+        return Ok(());
+    };
+    let Ok(serde_yaml::Value::Mapping(mut root)) = crate::yaml::parse_limited(&cache.output_yaml)
+    else {
+        return Ok(());
+    };
+
+    // Reorder proxies / proxy-groups by the saved manual orders.
+    let node_order = load_order_col(state, profile_id, "node_order").await?;
+    let group_order = load_order_col(state, profile_id, "group_order").await?;
+    reorder_seq(&mut root, "proxies", &node_order);
+    reorder_seq(&mut root, "proxy-groups", &group_order);
+
+    // Replace the rules block with the current ruleset (order is significant);
+    // mirrors the converter (skip blank/comment lines, keep order).
+    let rules =
+        sqlx::query_scalar::<_, String>("SELECT content FROM rulesets WHERE profile_id = ?")
+            .bind(profile_id)
+            .fetch_optional(&state.db)
+            .await?
+            .unwrap_or_default();
+    let rule_values: Vec<serde_yaml::Value> = rules
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(serde_yaml::Value::from)
+        .collect();
+    root.insert(
+        serde_yaml::Value::from("rules"),
+        serde_yaml::Value::Sequence(rule_values),
+    );
+
+    let Ok(new_yaml) = serde_yaml::to_string(&serde_yaml::Value::Mapping(root)) else {
+        return Ok(());
+    };
+    if new_yaml == cache.output_yaml {
+        return Ok(());
+    }
+
+    // Patch the cached output in place; keep `generated_at` so the provider
+    // refetch cadence is unchanged (content is still the last fetch, reordered).
+    sqlx::query(
+        "UPDATE generated_cache SET output_yaml = ?, content_hash = ? WHERE profile_id = ?",
+    )
+    .bind(&new_yaml)
+    .bind(hash_inputs("", &new_yaml))
+    .bind(profile_id)
+    .execute(&state.db)
+    .await?;
+    Ok(())
+}
+
+/// Reorder a top-level `proxies`/`proxy-groups` sequence in place by name.
+fn reorder_seq(root: &mut serde_yaml::Mapping, key: &str, order: &[String]) {
+    if let Some(serde_yaml::Value::Sequence(seq)) = root.get_mut(key) {
+        converter::reorder_by_name(seq, |item| item.get("name").and_then(|v| v.as_str()), order);
+    }
+}
+
+/// Read a profile's `node_order`/`group_order` JSON array (NULL/garbage → empty).
+async fn load_order_col(
+    state: &AppState,
+    profile_id: &str,
+    column: &str,
+) -> ApiResult<Vec<String>> {
+    let sql = match column {
+        "node_order" => "SELECT node_order FROM profiles WHERE id = ?",
+        _ => "SELECT group_order FROM profiles WHERE id = ?",
+    };
+    Ok(sqlx::query_scalar::<_, Option<String>>(sql)
+        .bind(profile_id)
+        .fetch_optional(&state.db)
+        .await?
+        .flatten()
+        .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+        .unwrap_or_default())
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 fn is_fresh(generated_at: &str, ttl: Duration) -> bool {

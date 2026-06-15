@@ -386,6 +386,81 @@ async fn node_order_reorders_preview_and_survives_regeneration() {
 }
 
 #[tokio::test]
+async fn reorder_applies_to_served_subscription_without_regenerate() {
+    let temp = TempDb::new();
+    let fetcher = Arc::new(FakeFetcher::default());
+    let app = build_router(test_state_with_fetcher(&temp, fetcher.clone()).await);
+    let cookie = login(&app).await;
+
+    let profile = create_profile(&app, &cookie).await;
+    let id = profile["id"].as_str().unwrap();
+    let sub = sub_path(profile["subscription_url"].as_str().unwrap());
+
+    // Custom node + generate: served order is provider-first [hk-1, mine].
+    let node = r#"{"name":"mine","node_type":"ss","content":"{ name: mine, type: ss, server: 9.9.9.9, port: 1080 }"}"#;
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/nodes"),
+            &cookie,
+            node,
+        ))
+        .await
+        .unwrap();
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/generate"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(fetcher.calls.load(Ordering::SeqCst), 1);
+
+    let served = |app: Router, sub: String| async move {
+        let resp = app
+            .oneshot(Request::get(&sub).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        text(resp).await
+    };
+
+    let body = served(app.clone(), sub.clone()).await;
+    assert!(
+        body.find("hk-1").unwrap() < body.find("mine").unwrap(),
+        "default served order is provider-first"
+    );
+
+    // Reorder to [mine, hk-1] WITHOUT regenerating.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/api/profiles/{id}/node-order"),
+            &cookie,
+            r#"{"order":["mine","hk-1"]}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    // The public subscription link reflects the new order immediately, and the
+    // reorder did not trigger another provider fetch.
+    let body = served(app.clone(), sub.clone()).await;
+    assert!(
+        body.find("mine").unwrap() < body.find("hk-1").unwrap(),
+        "served subscription honors the new order without a regenerate"
+    );
+    assert_eq!(
+        fetcher.calls.load(Ordering::SeqCst),
+        1,
+        "reorder must not re-fetch the provider"
+    );
+}
+
+#[tokio::test]
 async fn group_order_reorders_preview_and_survives_regeneration() {
     let temp = TempDb::new();
     let fetcher = Arc::new(FakeFetcher::default());
