@@ -50,6 +50,24 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+### Changed
+
+- 拖拽排序与规则编辑**立即生效**:此前调整节点/分组顺序或编辑规则需重新「生成配置」
+  才会应用到公共订阅链接,现在保存后后端会就地重写已生成缓存
+  (`generated_cache.output_yaml`)对应的 `proxies`/`proxy-groups`/`rules`、**无需
+  重新拉取机场**,节点/分组/规则预览与公共订阅链接随即返回新内容。
+  `node-order`/`group-order`/`rules` 端点保存后调用 `generate::resync_cache`
+  (best-effort,保留 `generated_at` 不影响刷新节奏);从未生成过的配置仍在首次生成
+  时生效,新增节点/分组仍需生成。前端三张卡片的提示文案同步改为「立即生效」。
+  Drag-reordering and rule edits now take effect **immediately**: previously a
+  node/group reorder or rule edit only reached the public subscription link after
+  a re-generate; now the write handlers re-stitch the existing
+  `generated_cache.output_yaml` (`proxies`/`proxy-groups`/`rules`) in place
+  **without re-fetching the provider** (`generate::resync_cache`, best-effort,
+  preserving `generated_at`), so the previews and the public link return the new
+  content right away. Never-generated profiles still apply on first generate, and
+  adding a new node/group still needs a generate. UI hints updated accordingly.
+
 ## [0.1.9] - 2026-06-15
 
 ### Added

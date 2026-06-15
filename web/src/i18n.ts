@@ -73,8 +73,8 @@ const zh = {
       notGenerated: "机场节点需先点击底部“生成配置”后才会在此预览。",
       customTag: "自定义",
       providerTag: "机场",
-      dragHint: "拖动左侧手柄可调整节点顺序，重新生成后应用到订阅。",
-      orderSaved: "节点顺序已保存，重新生成后生效。",
+      dragHint: "拖动左侧手柄可调整节点顺序，松手即保存并立即生效。",
+      orderSaved: "节点顺序已保存并已应用到订阅。",
       orderSaveFailed: "保存节点顺序失败。",
     },
     fields: {
@@ -134,8 +134,8 @@ const zh = {
       delete: "删除",
       deleteConfirm: "确定删除该分组?",
       membersCount: "{{count}} 成员",
-      dragHint: "拖动左侧手柄可调整分组顺序，重新生成后应用到订阅。",
-      orderSaved: "分组顺序已保存，重新生成后生效。",
+      dragHint: "拖动左侧手柄可调整分组顺序，松手即保存并立即生效。",
+      orderSaved: "分组顺序已保存并已应用到订阅。",
       orderSaveFailed: "保存分组顺序失败。",
     },
     groupFields: {
@@ -164,8 +164,8 @@ const zh = {
       invalid: "上次生成时检测到规则错误:",
       delete: "删除",
       deleteConfirm: "确定删除该规则?",
-      dragHint: "规则按顺序匹配(命中即止);拖动左侧手柄可调整优先级,重新生成后生效。",
-      orderSaved: "规则顺序已保存,重新生成后生效。",
+      dragHint: "规则按顺序匹配(命中即止);拖动左侧手柄可调整优先级,松手即保存并立即生效。",
+      orderSaved: "规则顺序已保存并已应用到订阅。",
     },
     preview: {
       title: "输出预览",

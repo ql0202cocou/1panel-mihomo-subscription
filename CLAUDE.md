@@ -110,6 +110,14 @@ and `docs/data-model.md`):
   `RulesCard` preview is also `@dnd-kit`-sortable, but rule order is already
   semantic ordered text, so it reorders the lines and saves via the existing
   `PUT /api/profiles/:id/rules` — no `*_order` column.
+- Order/rule edits apply to the served subscription **immediately**, without a
+  provider re-fetch: the `node-order`/`group-order`/`rules` write handlers call
+  `generate::resync_cache`, which re-stitches the existing
+  `generated_cache.output_yaml` in place (reorder `proxies`/`proxy-groups` by the
+  saved orders; rebuild the `rules` block from the ruleset) and keeps
+  `generated_at` so the refetch cadence is unchanged. Best-effort — a failure
+  just defers the change to the next full generate. (Adding a *new* node/group
+  still needs a generate, since it isn't in the cached output yet.)
 - Outbound fetches send `FETCH_USER_AGENT` (default `clash.meta/1.0`); many
   airport panels 403 a non-clash UA, so don't blank it.
 - Keep `/health` minimal (no version). Admin creds from
