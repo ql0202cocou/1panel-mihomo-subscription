@@ -135,7 +135,7 @@ const zh = {
       importFailed: "导入机场分组失败",
       delete: "删除",
       deleteConfirm: "确定删除该分组?",
-      membersCount: "{{count}} 成员",
+      membersCount: "{{count}} 个节点",
       dragHint: "拖动左侧手柄可调整分组顺序，松手即保存并立即生效。",
       orderSaved: "分组顺序已保存并已应用到订阅。",
       orderSaveFailed: "保存分组顺序失败。",

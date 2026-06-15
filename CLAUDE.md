@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Guidance for Claude Code (claude.ai/code) working in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Status — Read This First
 
@@ -143,8 +143,9 @@ helpers `error` (API envelope + `sqlx` UNIQUE→409), `mask`, `yaml`, `util`. DB
 with an `index.html` fallback (`WEB_DIR`).
 
 **Frontend editors** (`web/src/pages/detail/`): nodes/groups/rules each render a
-read-only **preview** card (`NodesCard`/`GroupsCard`/`RulesCard`) with
-**schema-driven structured forms** — admins never edit raw YAML.
+**preview** card (`NodesCard`/`GroupsCard`/`RulesCard`) — list rows with
+drag-to-reorder (`@dnd-kit`) and inline edit/delete/import, editing done in a
+modal via **schema-driven structured forms** (admins never edit raw YAML).
 `nodeSchema.ts`/`groupSchema.ts` declare per-type field sets (`showWhen` toggles
 fields like REALITY/ws/grpc by transport/TLS); `fields.tsx` holds `FieldInput`
 plus dotted-path `getPath`/`setPath` that prune empties (so `alpn: []` never
