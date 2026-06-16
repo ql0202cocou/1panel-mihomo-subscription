@@ -6,7 +6,7 @@ import { initReactI18next } from "react-i18next";
 // refactor.
 const zh = {
   translation: {
-    app: { title: "Mihomo 订阅管理" },
+    app: { title: "管理后台" },
     nav: { profiles: "订阅配置", settings: "系统设置", logout: "退出登录" },
     login: {
       title: "管理员登录",
@@ -29,7 +29,7 @@ const zh = {
       open: "管理",
     },
     detail: {
-      hostedLink: "托管订阅链接",
+      hostedLink: "托管订阅",
       copy: "复制链接",
       copied: "已复制",
       qrcode: "二维码",
@@ -48,7 +48,7 @@ const zh = {
       edit: "编辑",
     },
     source: {
-      title: "原始订阅源",
+      title: "原始订阅",
       type: "来源类型",
       url: "订阅 URL(脱敏)",
       newUrl: "更换订阅 URL",
