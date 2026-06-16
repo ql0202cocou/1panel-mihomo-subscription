@@ -5,8 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Status — Read This First
 
 The design under `docs/` is **implemented** (Rust/Axum backend + `web/` SPA);
-docs remain the source of truth. The `0.1.15` 1Panel package is complete
-(`apps/mihomo-subscription/0.1.15/`). Ship a new version via `docs/release.md`
+docs remain the source of truth. The `0.1.16` 1Panel package is complete
+(`apps/mihomo-subscription/0.1.16/`). Ship a new version via `docs/release.md`
 (multi-arch `docker buildx ... --push` to Docker Hub
 `quinlanhoo/mihomo-subscription`, tag `vX.Y.Z`; on-host build is the
 offline/intranet fallback). This file is the authoritative guide for change
@@ -23,7 +23,7 @@ rules, security defaults, and 1Panel packaging.
 - Never delete changelog history, user data, or generated app-package files
   unless asked. On release: roll `[Unreleased]` into a dated version, tag
   `vX.Y.Z`, and keep `Cargo.toml`, `web/package.json`, and the app-package
-  version dir / image tag in sync (current `v0.1.15`).
+  version dir / image tag in sync (current `v0.1.16`).
 
 ## Commands
 
@@ -35,7 +35,7 @@ cargo test
 cargo audit                          # needs `cargo install cargo-audit`; ignores in .cargo/audit.toml
 
 # Local Dockerfile sanity check (not a CI gate):
-docker build -t mihomo-subscription:0.1.15 .
+docker build -t mihomo-subscription:0.1.16 .
 
 # One test / one file:
 cargo test --lib ssrf::tests::url_validation_rules
@@ -48,7 +48,7 @@ npm run build      # tsc --noEmit + vite build -> web/dist (served by Axum)
 
 # Validate 1Panel YAML after editing anything under apps/:
 ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f) }' \
-  apps/mihomo-subscription/data.yml apps/mihomo-subscription/0.1.15/{data,docker-compose}.yml
+  apps/mihomo-subscription/data.yml apps/mihomo-subscription/0.1.16/{data,docker-compose}.yml
 ```
 
 ## Architecture

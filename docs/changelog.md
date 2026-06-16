@@ -50,6 +50,35 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-06-17
+
+### Changed
+
+- 规则编辑器「规则类型」下拉补全更多 Mihomo 规则类型(`IP-SUFFIX`、`SRC-GEOIP`、
+  `SRC-IP-ASN`、`SRC-IP-SUFFIX`、`IN-PORT`、`IN-TYPE`、`IN-USER`、`IN-NAME`、`UID`、
+  `NETWORK`、`DSCP`、`PROCESS-NAME-REGEX`、`PROCESS-PATH-REGEX`、逻辑规则
+  `AND`/`OR`/`NOT`/`SUB-RULE` 等),并把 `no-resolve` 选项扩展到全部基于 IP 的类型
+  (含 `RULE-SET`);选择器仍允许手输任意类型。
+  The rule editor's "rule type" dropdown now suggests the full common Mihomo rule
+  set (`IP-SUFFIX`, `SRC-GEOIP`, `SRC-IP-ASN`, `SRC-IP-SUFFIX`, `IN-PORT`,
+  `IN-TYPE`, `IN-USER`, `IN-NAME`, `UID`, `NETWORK`, `DSCP`, `PROCESS-NAME-REGEX`,
+  `PROCESS-PATH-REGEX`, and logical `AND`/`OR`/`NOT`/`SUB-RULE`), and the
+  `no-resolve` toggle now covers every IP-based type (including `RULE-SET`). The
+  selector still accepts any free-typed type.
+
+### Fixed
+
+- 规则编辑器「匹配内容」现可正确填写含逗号/括号的复杂匹配内容(逻辑/嵌套规则
+  `AND`/`OR`/`NOT`/`SUB-RULE`,如 `AND,((DOMAIN,x.com),(NETWORK,udp)),Proxy`):解析
+  改为从末尾剥离 `no-resolve` 与策略、其余整体作为匹配内容,不再按固定逗号位置切分,
+  编辑/回显不再错位。
+  The rule editor's "match content" field now correctly holds complex payloads
+  containing commas/parentheses (logical/nested rules `AND`/`OR`/`NOT`/`SUB-RULE`,
+  e.g. `AND,((DOMAIN,x.com),(NETWORK,udp)),Proxy`): parsing now peels the optional
+  trailing `no-resolve` and the policy off the end and treats the rest as the
+  payload instead of assuming fixed comma positions, so editing/round-trip no
+  longer mangles it.
+
 ## [0.1.15] - 2026-06-16
 
 ### Changed
