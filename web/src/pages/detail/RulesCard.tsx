@@ -53,27 +53,62 @@ interface Props {
   onSaved: () => void;
 }
 
-// Common Mihomo rule types (free text still allowed in the selector).
+// Common Mihomo rule types (free text still allowed in the selector). Grouped
+// by category for readability; the AutoComplete still accepts any typed value.
 const RULE_TYPES = [
+  // Domain
   "DOMAIN-SUFFIX",
   "DOMAIN",
   "DOMAIN-KEYWORD",
   "DOMAIN-REGEX",
   "GEOSITE",
+  // IP
   "IP-CIDR",
   "IP-CIDR6",
-  "GEOIP",
+  "IP-SUFFIX",
   "IP-ASN",
+  "GEOIP",
+  "SRC-GEOIP",
+  "SRC-IP-ASN",
   "SRC-IP-CIDR",
+  "SRC-IP-SUFFIX",
+  // Port
   "DST-PORT",
   "SRC-PORT",
+  "IN-PORT",
+  // Process
   "PROCESS-NAME",
   "PROCESS-PATH",
+  "PROCESS-NAME-REGEX",
+  "PROCESS-PATH-REGEX",
+  // Inbound / misc
+  "IN-TYPE",
+  "IN-USER",
+  "IN-NAME",
+  "UID",
+  "NETWORK",
+  "DSCP",
   "RULE-SET",
+  // Logical / nested
+  "AND",
+  "OR",
+  "NOT",
+  "SUB-RULE",
   "MATCH",
 ];
 // Types whose match resolves an IP and thus accept the `no-resolve` modifier.
-const IP_TYPES = new Set(["IP-CIDR", "IP-CIDR6", "GEOIP", "IP-ASN", "SRC-IP-CIDR"]);
+const IP_TYPES = new Set([
+  "IP-CIDR",
+  "IP-CIDR6",
+  "IP-SUFFIX",
+  "IP-ASN",
+  "GEOIP",
+  "SRC-GEOIP",
+  "SRC-IP-ASN",
+  "SRC-IP-CIDR",
+  "SRC-IP-SUFFIX",
+  "RULE-SET",
+]);
 
 interface RuleModel {
   type: string;
@@ -90,12 +125,19 @@ function parseRule(line: string): RuleModel {
   if (type.toUpperCase() === "MATCH") {
     return { type, payload: "", policy: parts[1] ?? "", noResolve: false };
   }
-  return {
-    type,
-    payload: parts[1] ?? "",
-    policy: parts[2] ?? "",
-    noResolve: parts.slice(3).some((p) => p === "no-resolve"),
-  };
+  // Everything after the type is [payload..., policy, no-resolve?]. The payload
+  // itself may contain commas (logical/nested rules like AND/OR/NOT), so peel the
+  // optional trailing `no-resolve` and the policy off the end and re-join the
+  // remainder as the payload rather than assuming fixed positions.
+  let rest = parts.slice(1);
+  let noResolve = false;
+  if (rest.length > 0 && rest[rest.length - 1] === "no-resolve") {
+    noResolve = true;
+    rest = rest.slice(0, -1);
+  }
+  const policy = rest.length > 0 ? rest[rest.length - 1] : "";
+  const payload = rest.slice(0, -1).join(",");
+  return { type, payload, policy, noResolve };
 }
 
 function serializeRule(r: RuleModel): string {
