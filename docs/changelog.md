@@ -50,6 +50,8 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-06-16
+
 ### Changed
 
 - **公共订阅每次拉取都实时拉机场,客户端永远用最新节点:** 公共订阅端点
@@ -69,6 +71,11 @@ possible, and grouped by change type.
   warning): the public link is always live, so the manual generate step is
   unnecessary. Provider nodes in the admin preview are refreshed via the source
   card's "refresh"; custom node/group/rule edits still reflect immediately.
+- 界面文案微调:应用标题「Mihomo 订阅管理」改为「管理后台」;「原始订阅源」卡片标题
+  改为「原始订阅」;「托管订阅链接」卡片标题改为「托管订阅」。
+  UI copy tweaks: the app title "Mihomo 订阅管理" is now "管理后台"; the
+  "原始订阅源" card title is now "原始订阅"; the "托管订阅链接" card title is now
+  "托管订阅".
 
 ## [0.1.14] - 2026-06-16
 
