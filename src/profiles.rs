@@ -23,6 +23,8 @@ use crate::yaml;
 
 const SOURCE_TYPES: [&str; 4] = ["mihomo", "clash", "surge", "loon"];
 const GROUP_TYPES: [&str; 5] = ["select", "url-test", "fallback", "load-balance", "relay"];
+const RP_TYPES: [&str; 3] = ["http", "file", "inline"];
+const RP_BEHAVIORS: [&str; 3] = ["domain", "ipcidr", "classical"];
 
 // ─── DB row types ─────────────────────────────────────────────────────────────
 
@@ -66,6 +68,18 @@ struct GroupRow {
 }
 
 #[derive(FromRow)]
+struct RuleProviderRow {
+    id: String,
+    name: String,
+    provider_type: String,
+    behavior: String,
+    options: Option<String>,
+    enabled: bool,
+    created_at: String,
+    updated_at: String,
+}
+
+#[derive(FromRow)]
 struct RulesetRow {
     content: String,
     updated_at: String,
@@ -96,6 +110,7 @@ pub struct ProfileDetail {
     rules: Option<Ruleset>,
     nodes: Vec<NodeResponse>,
     groups: Vec<GroupResponse>,
+    rule_providers: Vec<RuleProviderResponse>,
 }
 
 #[derive(Serialize)]
@@ -150,6 +165,31 @@ fn node_response(row: NodeRow) -> NodeResponse {
         name: row.name,
         node_type: row.node_type,
         content: row.content,
+        enabled: row.enabled,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    }
+}
+
+#[derive(Serialize)]
+struct RuleProviderResponse {
+    id: String,
+    name: String,
+    provider_type: String,
+    behavior: String,
+    options: Option<JsonValue>,
+    enabled: bool,
+    created_at: String,
+    updated_at: String,
+}
+
+fn rule_provider_response(row: RuleProviderRow) -> RuleProviderResponse {
+    RuleProviderResponse {
+        options: row.options.and_then(|o| serde_json::from_str(&o).ok()),
+        id: row.id,
+        name: row.name,
+        provider_type: row.provider_type,
+        behavior: row.behavior,
         enabled: row.enabled,
         created_at: row.created_at,
         updated_at: row.updated_at,
@@ -327,11 +367,23 @@ async fn detail(state: &AppState, row: ProfileRow) -> ApiResult<ProfileDetail> {
     .map(group_response)
     .collect();
 
+    let rule_providers = sqlx::query_as::<_, RuleProviderRow>(
+        "SELECT id, name, provider_type, behavior, options, enabled, created_at, updated_at
+         FROM rule_providers WHERE profile_id = ? ORDER BY created_at ASC",
+    )
+    .bind(&profile_id)
+    .fetch_all(&state.db)
+    .await?
+    .into_iter()
+    .map(rule_provider_response)
+    .collect();
+
     Ok(ProfileDetail {
         summary: summary(state, row),
         rules,
         nodes,
         groups,
+        rule_providers,
     })
 }
 
@@ -1029,6 +1081,143 @@ async fn fetch_group(state: &AppState, profile_id: &str, group_id: &str) -> ApiR
          FROM custom_groups WHERE id = ? AND profile_id = ?",
     )
     .bind(group_id)
+    .bind(profile_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(ApiError::NotFound)
+}
+
+// ─── Rule-providers (规则集) ───────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct RuleProviderBody {
+    name: String,
+    provider_type: String,
+    behavior: String,
+    /// Remaining keys (url, path, payload, format, interval, ...) as a JSON
+    /// object; merged into the emitted mapping by the converter.
+    options: Option<JsonValue>,
+    enabled: Option<bool>,
+}
+
+fn validate_rule_provider(body: &RuleProviderBody) -> ApiResult<()> {
+    if body.name.trim().is_empty() {
+        return Err(ApiError::BadRequest("name is required".into()));
+    }
+    if !RP_TYPES.contains(&body.provider_type.as_str()) {
+        return Err(ApiError::BadRequest(format!(
+            "provider_type must be one of {RP_TYPES:?}"
+        )));
+    }
+    if !RP_BEHAVIORS.contains(&body.behavior.as_str()) {
+        return Err(ApiError::BadRequest(format!(
+            "behavior must be one of {RP_BEHAVIORS:?}"
+        )));
+    }
+    if let Some(options) = &body.options {
+        if !options.is_object() {
+            return Err(ApiError::BadRequest("options must be a JSON object".into()));
+        }
+    }
+    Ok(())
+}
+
+pub async fn list_rule_providers(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<impl IntoResponse> {
+    let _ = load_profile_row(&state, &id).await?;
+    let rows: Vec<RuleProviderResponse> = sqlx::query_as::<_, RuleProviderRow>(
+        "SELECT id, name, provider_type, behavior, options, enabled, created_at, updated_at
+         FROM rule_providers WHERE profile_id = ? ORDER BY created_at ASC",
+    )
+    .bind(&id)
+    .fetch_all(&state.db)
+    .await?
+    .into_iter()
+    .map(rule_provider_response)
+    .collect();
+    Ok(Json(rows))
+}
+
+pub async fn create_rule_provider(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<RuleProviderBody>,
+) -> ApiResult<impl IntoResponse> {
+    let _ = load_profile_row(&state, &id).await?;
+    validate_rule_provider(&body)?;
+    let rp_id = uuid::Uuid::new_v4().to_string();
+    let ts = now();
+    sqlx::query(
+        "INSERT INTO rule_providers (id, profile_id, name, provider_type, behavior, options, enabled, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&rp_id)
+    .bind(&id)
+    .bind(body.name.trim())
+    .bind(&body.provider_type)
+    .bind(&body.behavior)
+    .bind(body.options.as_ref().map(|o| o.to_string()))
+    .bind(body.enabled.unwrap_or(true))
+    .bind(&ts)
+    .bind(&ts)
+    .execute(&state.db)
+    .await?;
+    let row = fetch_rule_provider(&state, &id, &rp_id).await?;
+    Ok((StatusCode::CREATED, Json(rule_provider_response(row))))
+}
+
+pub async fn update_rule_provider(
+    State(state): State<Arc<AppState>>,
+    Path((id, rp_id)): Path<(String, String)>,
+    Json(body): Json<RuleProviderBody>,
+) -> ApiResult<impl IntoResponse> {
+    let _ = fetch_rule_provider(&state, &id, &rp_id).await?;
+    validate_rule_provider(&body)?;
+    sqlx::query(
+        "UPDATE rule_providers SET name = ?, provider_type = ?, behavior = ?, options = ?, enabled = ?, updated_at = ?
+         WHERE id = ? AND profile_id = ?",
+    )
+    .bind(body.name.trim())
+    .bind(&body.provider_type)
+    .bind(&body.behavior)
+    .bind(body.options.as_ref().map(|o| o.to_string()))
+    .bind(body.enabled.unwrap_or(true))
+    .bind(now())
+    .bind(&rp_id)
+    .bind(&id)
+    .execute(&state.db)
+    .await?;
+    let row = fetch_rule_provider(&state, &id, &rp_id).await?;
+    Ok(Json(rule_provider_response(row)))
+}
+
+pub async fn delete_rule_provider(
+    State(state): State<Arc<AppState>>,
+    Path((id, rp_id)): Path<(String, String)>,
+) -> ApiResult<impl IntoResponse> {
+    let result = sqlx::query("DELETE FROM rule_providers WHERE id = ? AND profile_id = ?")
+        .bind(&rp_id)
+        .bind(&id)
+        .execute(&state.db)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn fetch_rule_provider(
+    state: &AppState,
+    profile_id: &str,
+    rp_id: &str,
+) -> ApiResult<RuleProviderRow> {
+    sqlx::query_as::<_, RuleProviderRow>(
+        "SELECT id, name, provider_type, behavior, options, enabled, created_at, updated_at
+         FROM rule_providers WHERE id = ? AND profile_id = ?",
+    )
+    .bind(rp_id)
     .bind(profile_id)
     .fetch_optional(&state.db)
     .await?

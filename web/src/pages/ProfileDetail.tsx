@@ -21,6 +21,7 @@ import { api, type ApiError } from "../api";
 import type { ProfileDetail as Detail, SourceType } from "../types";
 import NodesCard from "./detail/NodesCard";
 import GroupsCard from "./detail/GroupsCard";
+import RuleProvidersCard from "./detail/RuleProvidersCard";
 import RulesCard from "./detail/RulesCard";
 
 const SOURCE_TYPES: SourceType[] = ["mihomo", "clash", "surge", "loon"];
@@ -91,11 +92,17 @@ export default function ProfileDetail() {
         generatedAt={detail.last_generated_at}
         onChange={reload}
       />
+      <RuleProvidersCard
+        profileId={detail.id}
+        ruleProviders={detail.rule_providers}
+        onChange={reload}
+      />
       <RulesCard
         profileId={detail.id}
         initial={detail.rules?.content ?? ""}
         nodes={detail.nodes}
         groups={detail.groups}
+        ruleProviders={detail.rule_providers}
         generatedAt={detail.last_generated_at}
         errors={genErrors}
         onSaved={reload}

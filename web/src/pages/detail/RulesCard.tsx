@@ -5,10 +5,8 @@ import {
   Button,
   Card,
   Empty,
-  Form,
   Input,
   List,
-  Modal,
   Popconfirm,
   Space,
   Switch,
@@ -38,6 +36,7 @@ import type {
   CustomNode,
   ProviderRulesResponse,
   ProxiesResponse,
+  RuleProvider,
 } from "../../types";
 import { BUILTIN_POLICIES } from "./groupSchema";
 
@@ -46,6 +45,7 @@ interface Props {
   initial: string;
   nodes: CustomNode[];
   groups: CustomGroup[];
+  ruleProviders: RuleProvider[];
   /** Changes when the profile is (re)generated; refreshes policy suggestions. */
   generatedAt: string | null;
   /** Validation errors from the last generate attempt (itemized). */
@@ -109,6 +109,39 @@ const IP_TYPES = new Set([
   "SRC-IP-SUFFIX",
   "RULE-SET",
 ]);
+// Per-type payload example, shown as the content-input placeholder (à la Clash
+// Verge). Helps the admin enter the right shape without docs.
+const RULE_EXAMPLES: Record<string, string> = {
+  DOMAIN: "example.com",
+  "DOMAIN-SUFFIX": "example.com",
+  "DOMAIN-KEYWORD": "google",
+  "DOMAIN-REGEX": "^.*\\.example\\.com$",
+  GEOSITE: "youtube",
+  "IP-CIDR": "192.168.0.0/16",
+  "IP-CIDR6": "2620:0:2d0:200::7/32",
+  "IP-SUFFIX": "8.8.8.8/24",
+  "IP-ASN": "13335",
+  GEOIP: "CN",
+  "SRC-GEOIP": "CN",
+  "SRC-IP-ASN": "13335",
+  "SRC-IP-CIDR": "192.168.1.0/24",
+  "SRC-IP-SUFFIX": "192.168.1.0/24",
+  "DST-PORT": "443",
+  "SRC-PORT": "8080",
+  "IN-PORT": "7890",
+  "PROCESS-NAME": "curl",
+  "PROCESS-PATH": "/usr/bin/curl",
+  "PROCESS-NAME-REGEX": ".*curl.*",
+  "PROCESS-PATH-REGEX": ".*/curl",
+  "IN-TYPE": "SOCKS5",
+  "IN-USER": "mihomo",
+  "IN-NAME": "ss1",
+  UID: "1000",
+  DSCP: "0,32",
+  AND: "(DOMAIN,example.com),(NETWORK,tcp)",
+  OR: "(NETWORK,udp),(DST-PORT,443)",
+  NOT: "(DOMAIN,example.com)",
+};
 
 interface RuleModel {
   type: string;
@@ -153,6 +186,7 @@ export default function RulesCard({
   initial,
   nodes,
   groups,
+  ruleProviders,
   generatedAt,
   errors,
   onSaved,
@@ -161,7 +195,8 @@ export default function RulesCard({
   // Source of truth is the raw, non-empty lines so comments and uncommon rules
   // (e.g. logical AND/OR) are preserved verbatim until explicitly edited.
   const [lines, setLines] = useState<string[]>([]);
-  const [open, setOpen] = useState(false);
+  // The inline composer: editingIndex === null means "append a new rule",
+  // otherwise we're rewriting the rule at that list position.
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [model, setModel] = useState<RuleModel>(EMPTY_RULE);
   const [policies, setPolicies] = useState<string[]>([]);
@@ -217,19 +252,19 @@ export default function RulesCard({
     message.success(t("rules.orderSaved"));
   }
 
-  function startAdd() {
+  function resetComposer() {
     setEditingIndex(null);
     setModel(EMPTY_RULE);
-    setOpen(true);
   }
 
   function startEdit(index: number) {
     setEditingIndex(index);
     setModel(parseRule(lines[index]));
-    setOpen(true);
   }
 
-  function save() {
+  // Add (editingIndex === null) or save (rewrite at editingIndex) the composed
+  // rule, then clear the composer back to "append" mode.
+  function submit() {
     const isMatch = model.type.trim().toUpperCase() === "MATCH";
     if (!model.type.trim() || !model.policy.trim() || (!isMatch && !model.payload.trim())) {
       message.error(t("rules.incomplete"));
@@ -240,11 +275,12 @@ export default function RulesCard({
       editingIndex === null
         ? [...lines, line]
         : lines.map((l, i) => (i === editingIndex ? line : l));
-    setOpen(false);
+    resetComposer();
     void persist(next);
   }
 
   function remove(index: number) {
+    if (index === editingIndex) resetComposer();
     void persist(lines.filter((_, i) => i !== index));
   }
 
@@ -282,18 +318,56 @@ export default function RulesCard({
     ),
   ).map((value) => ({ value }));
 
-  const isMatch = model.type.trim().toUpperCase() === "MATCH";
+  const upperType = model.type.trim().toUpperCase();
+  const isMatch = upperType === "MATCH";
+  const showNoResolve = !isMatch && IP_TYPES.has(upperType);
+
+  // The content/payload input adapts to the selected rule type (à la Clash
+  // Verge): RULE-SET picks a defined rule-set name, NETWORK picks tcp/udp,
+  // everything else is a free text field with a per-type example placeholder.
+  function contentInput() {
+    if (upperType === "RULE-SET") {
+      return (
+        <AutoComplete
+          style={{ width: 220 }}
+          options={ruleProviders.map((rp) => ({ value: rp.name }))}
+          value={model.payload}
+          onChange={(payload) => setModel({ ...model, payload })}
+          placeholder={t("rules.ruleSetPayloadHint")}
+          filterOption={(input, opt) =>
+            String(opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
+          }
+        />
+      );
+    }
+    if (upperType === "NETWORK") {
+      return (
+        <AutoComplete
+          style={{ width: 220 }}
+          options={[{ value: "tcp" }, { value: "udp" }]}
+          value={model.payload}
+          onChange={(payload) => setModel({ ...model, payload })}
+          placeholder="tcp / udp"
+        />
+      );
+    }
+    return (
+      <Input
+        style={{ width: 220 }}
+        value={model.payload}
+        onChange={(e) => setModel({ ...model, payload: e.target.value })}
+        placeholder={RULE_EXAMPLES[upperType] ?? t("rules.payload")}
+      />
+    );
+  }
 
   return (
     <Card
       title={`${t("rules.title")} (${lines.length})`}
       extra={
-        <Space>
-          <Popconfirm title={t("rules.importConfirm")} onConfirm={importProviderRules}>
-            <Button loading={importing}>{t("rules.importProvider")}</Button>
-          </Popconfirm>
-          <Button onClick={startAdd}>{t("rules.add")}</Button>
-        </Space>
+        <Popconfirm title={t("rules.importConfirm")} onConfirm={importProviderRules}>
+          <Button loading={importing}>{t("rules.importProvider")}</Button>
+        </Popconfirm>
       }
     >
       <Space direction="vertical" style={{ width: "100%" }} size="small">
@@ -308,6 +382,54 @@ export default function RulesCard({
             ))}
           />
         )}
+
+        {/* Inline composer (Clash Verge style): type · content · no-resolve · policy. */}
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            alignItems: "center",
+            padding: "8px 0",
+          }}
+        >
+          <AutoComplete
+            style={{ width: 200 }}
+            options={RULE_TYPES.map((v) => ({ value: v }))}
+            value={model.type}
+            onChange={(type) => setModel({ ...model, type })}
+            placeholder={t("rules.ruleType")}
+            filterOption={(input, opt) =>
+              (opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
+            }
+          />
+          {!isMatch && contentInput()}
+          {showNoResolve && (
+            <Space size={4}>
+              <Switch
+                size="small"
+                checked={model.noResolve}
+                onChange={(noResolve) => setModel({ ...model, noResolve })}
+              />
+              <Typography.Text type="secondary">no-resolve</Typography.Text>
+            </Space>
+          )}
+          <AutoComplete
+            style={{ width: 200 }}
+            options={policyOptions}
+            value={model.policy}
+            onChange={(policy) => setModel({ ...model, policy })}
+            placeholder={t("rules.policy")}
+            filterOption={(input, opt) =>
+              String(opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
+            }
+          />
+          <Button type="primary" onClick={submit}>
+            {editingIndex === null ? t("rules.add") : t("common.save")}
+          </Button>
+          {editingIndex !== null && <Button onClick={resetComposer}>{t("common.cancel")}</Button>}
+        </div>
+
         {lines.length === 0 ? (
           <Empty description={t("rules.empty")} />
         ) : (
@@ -324,6 +446,7 @@ export default function RulesCard({
                       key={index}
                       id={String(index)}
                       line={line}
+                      active={index === editingIndex}
                       onEdit={() => startEdit(index)}
                       onRemove={() => remove(index)}
                     />
@@ -334,57 +457,6 @@ export default function RulesCard({
           </>
         )}
       </Space>
-
-      <Modal
-        title={editingIndex === null ? t("rules.add") : t("rules.edit")}
-        open={open}
-        onCancel={() => setOpen(false)}
-        onOk={save}
-        width={560}
-        destroyOnClose
-      >
-        <Form layout="vertical">
-          <Form.Item label={t("rules.ruleType")} required>
-            <AutoComplete
-              style={{ width: "100%" }}
-              options={RULE_TYPES.map((v) => ({ value: v }))}
-              value={model.type}
-              onChange={(type) => setModel({ ...model, type })}
-              filterOption={(input, opt) =>
-                (opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
-              }
-            />
-          </Form.Item>
-          {!isMatch && (
-            <Form.Item label={t("rules.payload")} required>
-              <Input
-                value={model.payload}
-                onChange={(e) => setModel({ ...model, payload: e.target.value })}
-                placeholder="example.com / 1.2.3.4/24 / CN"
-              />
-            </Form.Item>
-          )}
-          <Form.Item label={t("rules.policy")} required>
-            <AutoComplete
-              style={{ width: "100%" }}
-              options={policyOptions}
-              value={model.policy}
-              onChange={(policy) => setModel({ ...model, policy })}
-              filterOption={(input, opt) =>
-                String(opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
-              }
-            />
-          </Form.Item>
-          {!isMatch && IP_TYPES.has(model.type.trim().toUpperCase()) && (
-            <Form.Item label={t("rules.noResolve")}>
-              <Switch
-                checked={model.noResolve}
-                onChange={(noResolve) => setModel({ ...model, noResolve })}
-              />
-            </Form.Item>
-          )}
-        </Form>
-      </Modal>
     </Card>
   );
 }
@@ -392,11 +464,12 @@ export default function RulesCard({
 interface RuleItemProps {
   id: string;
   line: string;
+  active: boolean;
   onEdit: () => void;
   onRemove: () => void;
 }
 
-function SortableRuleItem({ id, line, onEdit, onRemove }: RuleItemProps) {
+function SortableRuleItem({ id, line, active, onEdit, onRemove }: RuleItemProps) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -404,7 +477,7 @@ function SortableRuleItem({ id, line, onEdit, onRemove }: RuleItemProps) {
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    background: isDragging ? "rgba(0,0,0,0.04)" : undefined,
+    background: isDragging ? "rgba(0,0,0,0.04)" : active ? "rgba(22,119,255,0.08)" : undefined,
   };
   const comment = isComment(line);
   const r = parseRule(line);

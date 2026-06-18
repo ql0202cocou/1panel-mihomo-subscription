@@ -235,6 +235,101 @@ async fn group_member_and_options_round_trip() {
 }
 
 #[tokio::test]
+async fn rule_provider_crud_round_trip() {
+    let temp = TempDb::new();
+    let app = build_router(test_state(&temp).await);
+    let cookie = login(&app).await;
+    let id = create_profile(&app, &cookie, "p").await["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Create.
+    let body = r#"{"name":"my-block","provider_type":"http","behavior":"domain","options":{"url":"https://example.com/block.yaml","interval":86400}}"#;
+    let resp = send(
+        &app,
+        authed(
+            "POST",
+            &format!("/api/profiles/{id}/rule-providers"),
+            &cookie,
+            body,
+        ),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let rp = json(resp).await;
+    let rp_id = rp["id"].as_str().unwrap().to_string();
+    assert_eq!(rp["provider_type"], "http");
+    assert_eq!(rp["behavior"], "domain");
+    assert_eq!(rp["options"]["interval"], 86400);
+
+    // It appears on the profile detail.
+    let resp = send(
+        &app,
+        authed("GET", &format!("/api/profiles/{id}"), &cookie, ""),
+    )
+    .await;
+    let detail = json(resp).await;
+    assert_eq!(detail["rule_providers"].as_array().unwrap().len(), 1);
+
+    // Update behavior.
+    let body = r#"{"name":"my-block","provider_type":"inline","behavior":"classical","options":{"payload":["DOMAIN,ad.example.com"]}}"#;
+    let resp = send(
+        &app,
+        authed(
+            "PUT",
+            &format!("/api/profiles/{id}/rule-providers/{rp_id}"),
+            &cookie,
+            body,
+        ),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(json(resp).await["provider_type"], "inline");
+
+    // Invalid behavior is rejected.
+    let bad = r#"{"name":"x","provider_type":"http","behavior":"nope"}"#;
+    let resp = send(
+        &app,
+        authed(
+            "POST",
+            &format!("/api/profiles/{id}/rule-providers"),
+            &cookie,
+            bad,
+        ),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+    // Duplicate name conflicts (409).
+    let dup = r#"{"name":"my-block","provider_type":"http","behavior":"domain"}"#;
+    let resp = send(
+        &app,
+        authed(
+            "POST",
+            &format!("/api/profiles/{id}/rule-providers"),
+            &cookie,
+            dup,
+        ),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::CONFLICT);
+
+    // Delete.
+    let resp = send(
+        &app,
+        authed(
+            "DELETE",
+            &format!("/api/profiles/{id}/rule-providers/{rp_id}"),
+            &cookie,
+            "",
+        ),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
 async fn reset_token_changes_the_hosted_link() {
     let temp = TempDb::new();
     let app = build_router(test_state(&temp).await);

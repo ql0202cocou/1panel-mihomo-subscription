@@ -68,10 +68,25 @@ export interface CustomGroup {
   updated_at: string;
 }
 
+export type RuleProviderType = "http" | "file" | "inline";
+export type RuleProviderBehavior = "domain" | "ipcidr" | "classical";
+
+export interface RuleProvider {
+  id: string;
+  name: string;
+  provider_type: RuleProviderType;
+  behavior: RuleProviderBehavior;
+  options: Record<string, unknown> | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ProfileDetail extends ProfileSummary {
   rules: RuleSet | null;
   nodes: CustomNode[];
   groups: CustomGroup[];
+  rule_providers: RuleProvider[];
 }
 
 export interface Settings {

@@ -5,8 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Status — Read This First
 
 The design under `docs/` is **implemented** (Rust/Axum backend + `web/` SPA);
-docs remain the source of truth. The `0.1.16` 1Panel package is complete
-(`apps/mihomo-subscription/0.1.16/`). Ship a new version via `docs/release.md`
+docs remain the source of truth. The `0.2.0` 1Panel package is complete
+(`apps/mihomo-subscription/0.2.0/`). Ship a new version via `docs/release.md`
 (multi-arch `docker buildx ... --push` to Docker Hub
 `quinlanhoo/mihomo-subscription`, tag `vX.Y.Z`; on-host build is the
 offline/intranet fallback). This file is the authoritative guide for change
@@ -23,7 +23,7 @@ rules, security defaults, and 1Panel packaging.
 - Never delete changelog history, user data, or generated app-package files
   unless asked. On release: roll `[Unreleased]` into a dated version, tag
   `vX.Y.Z`, and keep `Cargo.toml`, `web/package.json`, and the app-package
-  version dir / image tag in sync (current `v0.1.16`).
+  version dir / image tag in sync (current `v0.2.0`).
 
 ## Commands
 
@@ -35,7 +35,7 @@ cargo test
 cargo audit                          # needs `cargo install cargo-audit`; ignores in .cargo/audit.toml
 
 # Local Dockerfile sanity check (not a CI gate):
-docker build -t mihomo-subscription:0.1.16 .
+docker build -t mihomo-subscription:0.2.0 .
 
 # One test / one file:
 cargo test --lib ssrf::tests::url_validation_rules
@@ -48,7 +48,7 @@ npm run build      # tsc --noEmit + vite build -> web/dist (served by Axum)
 
 # Validate 1Panel YAML after editing anything under apps/:
 ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f) }' \
-  apps/mihomo-subscription/data.yml apps/mihomo-subscription/0.1.16/{data,docker-compose}.yml
+  apps/mihomo-subscription/data.yml apps/mihomo-subscription/0.2.0/{data,docker-compose}.yml
 ```
 
 ## Architecture
@@ -58,6 +58,7 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f) }' \
 rules/nodes/groups via the Web UI; the service fetches provider YAML, appends
 custom nodes, **replaces** `rules` and `proxy-groups` with the admin's custom
 ones (provider rules/groups are imported on demand, not passed through), and
+**merges** custom rule-providers (规则集) onto the provider's, then
 serves the result at a permanent link:
 `https://<host>/<public-path-prefix>/api/sub/<profile-token>`.
 
@@ -108,6 +109,16 @@ and `docs/data-model.md`):
   provider update never changes rules/groups unless re-imported.
   `GET /api/profiles/:id/proxies` surfaces provider proxies + custom group names
   from the last generated output for editor autocomplete.
+- **Rule-providers (规则集) are different — a `merge`, not `replace`, model.**
+  Custom `rule_providers` (1—\* per profile, mirrors `custom_groups`:
+  `provider_type`/`behavior` columns + `options` JSON) are merged into the output
+  `rule-providers:` map *on top of* the provider's passthrough (custom overrides
+  by name), so imported provider `RULE-SET` rules keep resolving. CRUD at
+  `/api/profiles/:id/rule-providers[/:rp_id]`; the `RuleProvidersCard` edits them
+  via the same schema-driven form pattern (`ruleProviderSchema.ts`). No import
+  endpoint (provider entries already pass through); a new/edited rule-provider
+  takes effect on the next generate (`resync_cache` leaves `rule-providers`
+  untouched). `RULE-SET` rule payloads autocomplete from the defined names.
 - Node ordering is **two blocks**: the output `proxies` = provider block
   (provider proxies, upstream order, *not* user-orderable) + custom block (custom
   nodes) concatenated by `profiles.node_section_order` (a `["provider","custom"]`
@@ -156,12 +167,28 @@ with an `index.html` fallback (`WEB_DIR`).
 **preview** card (`NodesCard`/`GroupsCard`/`RulesCard`) — list rows with
 drag-to-reorder (`@dnd-kit`) and inline edit/delete/import, editing done in a
 modal via **schema-driven structured forms** (admins never edit raw YAML).
+Rule-providers add a fourth card (`RuleProvidersCard`, `ruleProviderSchema.ts`,
+i18n `ruleProviders`/`ruleProviderFields`) — same form pattern but **no**
+drag-reorder (a name-keyed map is order-insensitive).
 `nodeSchema.ts`/`groupSchema.ts` declare per-type field sets (`showWhen` toggles
 fields like REALITY/ws/grpc by transport/TLS); `fields.tsx` holds `FieldInput`
 plus dotted-path `getPath`/`setPath` that prune empties (so `alpn: []` never
 serializes). Model↔YAML conversion lives in each card. All copy goes through
-`i18n.ts` keys (zh-only). Adding a field/rule type means extending the
-schema/serializer **and** the i18n table — no free-text YAML escape hatch.
+`i18n.ts` keys (zh-only) — no free-text YAML escape hatch. Adding a node/group
+**field** means extending the schema/serializer **and** the `nodeFields`/
+`groupFields` i18n table (field labels are i18n keys). Adding a **rule type** is
+different: the `RulesCard.tsx` `RULE_TYPES` values are literal Mihomo strings
+(`DOMAIN-SUFFIX`, `AND`, …), not i18n keys, so just extend that list (the
+`AutoComplete` also accepts any free-typed type); `IP_TYPES` gates the
+`no-resolve` toggle, `RULE_EXAMPLES` supplies the per-type content-input
+placeholder, and `parseRule` peels the trailing `no-resolve`+policy off the end
+so payloads with commas/parens (logical `AND`/`OR`/`NOT`/`SUB-RULE`) round-trip.
+The `RulesCard` editor is a Clash-Verge-style **inline composer** (not a modal):
+one row of type · content · no-resolve · policy whose **content input adapts to
+the type** (`RULE-SET` → defined rule-set name, `NETWORK` → tcp/udp, else a
+free input with the `RULE_EXAMPLES` placeholder); "Edit" loads a row back into
+the composer. Rules stay one drag-reorderable list (the converter owns the whole
+`rules` block, so there is no Clash-Verge prepend/append/original split).
 
 **Test pattern:** integration tests in `tests/` build the router via
 `build_router` and drive it with `tower::util::ServiceExt::oneshot` against a

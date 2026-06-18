@@ -304,6 +304,21 @@ async fn convert(
     })
     .collect();
 
+    let rule_providers = sqlx::query_as::<_, (String, String, String, Option<String>)>(
+        "SELECT name, provider_type, behavior, options FROM rule_providers WHERE profile_id = ? AND enabled = 1 ORDER BY created_at",
+    )
+    .bind(profile_id)
+    .fetch_all(&state.db)
+    .await?
+    .into_iter()
+    .map(|(name, provider_type, behavior, options)| converter::RuleProvider {
+        name,
+        provider_type,
+        behavior,
+        options: options.and_then(|o| serde_json::from_str(&o).ok()),
+    })
+    .collect();
+
     // Manual ordering (NULL/garbage -> empty -> default): custom-node order,
     // node-section order (provider/custom blocks), proxy-group order.
     let (node_order, node_section_order, group_order) =
@@ -321,6 +336,7 @@ async fn convert(
         rules: &rules,
         nodes,
         groups,
+        rule_providers,
         node_order,
         node_section_order,
         group_order,
