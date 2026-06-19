@@ -126,6 +126,8 @@ endpoint require a valid session and otherwise return `401`.
 | GET / POST | `/api/profiles/:id/groups` | 是/Yes | 自定义分组 / Custom groups |
 | PUT / DELETE | `/api/profiles/:id/groups/:group_id` | 是/Yes | 单个分组 / Single group |
 | POST | `/api/profiles/:id/import-provider-groups` | 是/Yes | 导入机场 `proxy-groups` 为可编辑自定义分组(实时拉取,跳过同名/不支持类型)/ Import the provider's `proxy-groups` as editable custom groups (live fetch; skips existing names / unsupported types) |
+| GET / POST | `/api/profiles/:id/rule-providers` | 是/Yes | 自定义规则集 / Custom rule-providers (规则集) |
+| PUT / DELETE | `/api/profiles/:id/rule-providers/:rp_id` | 是/Yes | 单个规则集 / Single rule-provider |
 | GET | `/api/profiles/:id/preview` | 是/Yes | 预览生成的 YAML / Preview generated YAML |
 | POST | `/api/profiles/:id/generate` | 是/Yes | 校验并生成托管链接 / Validate & generate hosted link |
 | POST | `/api/profiles/:id/reset-token` | 是/Yes | 重置该配置 token / Reset profile token |
@@ -377,7 +379,7 @@ explicitly (implemented in `src/converter.rs`):
 | `proxies` | 机场块(机场代理,上游序)+ 自定义块(启用的自定义节点,按 `node_order` 排),按 `node_section_order` 拼接 / Provider block (provider proxies, upstream order) + custom block (enabled custom nodes ordered by `node_order`), concatenated per `node_section_order` |
 | `proxy-groups` | 整体替换为启用的自定义分组(机场分组不透传,需「导入机场分组」),再按 `group_order` 重排 / Replaced entirely with enabled custom groups (provider groups are not passed through; import them), then reordered by `group_order` |
 | `rules` | 整体替换为用户规则 / Replaced entirely with the user-defined rules |
-| `rule-providers` | 原样透传(用户规则可引用机场的 `RULE-SET`)/ Passed through unchanged (user rules may reference provider `RULE-SET`s) |
+| `rule-providers` | 机场的透传,启用的自定义规则集**合并**其上(同名覆盖);用户规则用 `RULE-SET` 引用其名 / Provider's passed through, with enabled custom rule-providers **merged** on top (override by name); `RULE-SET` rules reference them by name |
 | `proxy-providers` | **MVP 阶段剥离**:远程节点提供者会让客户端拉取绕过本服务 SSRF 防护与缓存的 URL,并可能暴露机场 URL / **Stripped in the MVP**: remote node providers would make the client fetch URLs that bypass this service's SSRF protection and caching, and may expose provider URLs |
 | 其余 (`port`、`dns`、`tun`、`sniffer`…) / All others | 原样透传 / Passed through unchanged |
 
@@ -401,6 +403,22 @@ imports its `proxy-groups` as **editable custom groups** (`name`/`type`/`proxies
 returning `{ imported, skipped }`. Import only writes `custom_groups`, so — like
 adding a custom group — it reaches the output on the next generate. Auth and SSRF
 protection match `provider-rules`.
+
+与分组/规则的「替换」不同,规则集(`rule-providers`)是「合并」模型:机场的仍透传,
+启用的自定义规则集按名覆盖其上。`GET/POST /api/profiles/:id/rule-providers` 与
+`PUT/DELETE /api/profiles/:id/rule-providers/:rp_id` 管理自定义规则集
+(`provider_type` ∈ `http`/`file`/`inline`,`behavior` ∈ `domain`/`ipcidr`/`classical`,
+其余键放进 `options`)。规则里用 `RULE-SET,<name>,<policy>` 按名引用;新增/修改在下次
+「生成」时进入输出。
+
+Unlike the "replace" model for groups/rules, rule-providers (`规则集`) use a
+"merge" model: the provider's still pass through and enabled custom rule-providers
+override by name. `GET/POST /api/profiles/:id/rule-providers` and
+`PUT/DELETE /api/profiles/:id/rule-providers/:rp_id` manage the custom entries
+(`provider_type` ∈ `http`/`file`/`inline`, `behavior` ∈
+`domain`/`ipcidr`/`classical`, remaining keys go into `options`). Rules reference
+them by name via `RULE-SET,<name>,<policy>`; adds/edits enter the output on the
+next generate.
 
 成功响应 / Success response:
 

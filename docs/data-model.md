@@ -41,6 +41,7 @@ app_settings (单行 / single row)
 profiles 1 ──── 1 rulesets
 profiles 1 ──── * custom_nodes
 profiles 1 ──── * custom_groups
+profiles 1 ──── * rule_providers
 profiles 1 ──── 1 generated_cache
 ```
 
@@ -223,6 +224,45 @@ CREATE INDEX idx_custom_groups_profile ON custom_groups (profile_id);
 - `options`:分组类型特有选项的 JSON 对象,如 `{"url": "...", "interval": 300}`。
 - `options`: JSON object of group-type-specific options, e.g.
   `{"url": "...", "interval": 300}`.
+
+### rule_providers
+
+自定义规则集(`规则集` / Mihomo `rule-providers`),被规则里的 `RULE-SET,<name>,<policy>`
+按名引用。`provider_type`/`behavior` 为一等列(用于展示与校验),其余键(url、path、
+payload、format、interval、size-limit、proxy 等)放进 `options` JSON。迁移
+`0005_rule_providers.sql`。
+
+Custom rule-providers (`规则集`), referenced by name from `RULE-SET,<name>,<policy>`
+rules. `provider_type`/`behavior` are first-class columns (for display and
+validation); the remaining keys (url, path, payload, format, interval,
+size-limit, proxy, …) live in the `options` JSON blob. Migration
+`0005_rule_providers.sql`.
+
+```sql
+CREATE TABLE rule_providers (
+    id            TEXT    PRIMARY KEY,
+    profile_id    TEXT    NOT NULL REFERENCES profiles (id) ON DELETE CASCADE,
+    name          TEXT    NOT NULL,
+    provider_type TEXT    NOT NULL CHECK (provider_type IN ('http','file','inline')),
+    behavior      TEXT    NOT NULL CHECK (behavior IN ('domain','ipcidr','classical')),
+    options       TEXT,
+    enabled       INTEGER NOT NULL DEFAULT 1,
+    created_at    TEXT    NOT NULL,
+    updated_at    TEXT    NOT NULL,
+    UNIQUE (profile_id, name)
+);
+
+CREATE INDEX idx_rule_providers_profile ON rule_providers (profile_id);
+```
+
+- 与 `rules`/`custom_groups` 的"整体替换"不同,自定义规则集是**合并**进输出的
+  `rule-providers`:机场的仍透传,自定义条目按名覆盖。这样导入的机场 `RULE-SET`
+  规则仍能解析;新增/修改在下次生成时生效(见 `api-design.md`)。
+- Unlike the "replace entirely" handling of `rules`/`custom_groups`, custom
+  rule-providers are **merged** into the output `rule-providers`: the provider's
+  still pass through and custom entries override by name. This keeps imported
+  provider `RULE-SET` rules resolving; adds/edits take effect on the next
+  generation (see `api-design.md`).
 
 ### generated_cache
 

@@ -130,6 +130,14 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/profiles/:id/groups/:group_id",
             put(profiles::update_group).delete(profiles::delete_group),
         )
+        .route(
+            "/profiles/:id/rule-providers",
+            get(profiles::list_rule_providers).post(profiles::create_rule_provider),
+        )
+        .route(
+            "/profiles/:id/rule-providers/:rp_id",
+            put(profiles::update_rule_provider).delete(profiles::delete_rule_provider),
+        )
         .route("/settings", get(settings::get))
         .route(
             "/settings/reset-public-path",

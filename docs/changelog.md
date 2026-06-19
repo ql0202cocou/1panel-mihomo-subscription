@@ -50,6 +50,39 @@ possible, and grouped by change type.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-19
+
+### Added
+
+- 规则集 (rule-providers) management: a new `RuleProvidersCard` on the profile
+  detail page with full CRUD over custom rule-providers (`http`/`file`/`inline`
+  types; `domain`/`ipcidr`/`classical` behaviors) via schema-driven structured
+  forms. New `rule_providers` table (1—\* per profile) and management endpoints
+  `GET/POST /api/profiles/:id/rule-providers` and
+  `PUT/DELETE /api/profiles/:id/rule-providers/:rp_id`; the profile detail
+  response now includes `rule_providers`.
+
+### Changed
+
+- The converter now **merges** custom rule-providers into the output
+  `rule-providers:` map on top of the provider's (a custom entry overrides a
+  provider entry of the same name) instead of only passing the provider's
+  through. Additive, so imported provider `RULE-SET` rules keep resolving;
+  changes take effect on the next generate.
+- Reworked the rule editor (`RulesCard`) into an inline, Clash-Verge-style
+  composer (no more modal): a single row of type · content · no-resolve · policy
+  where the **content input adapts to the rule type** (`RULE-SET` picks a defined
+  rule-set name, `NETWORK` picks tcp/udp, others show a per-type example
+  placeholder via `RULE_EXAMPLES`). "Edit" loads a rule back into the composer in
+  place; the rule list stays a single drag-reorderable list (the converter owns
+  the whole `rules` block, so there is no prepend/append split).
+
+### Documentation
+
+- Document the `rule_providers` table (`data-model.md`), the rule-provider
+  management endpoints and merge semantics (`api-design.md`), and re-align
+  `CLAUDE.md`.
+
 ## [0.1.16] - 2026-06-17
 
 ### Changed
