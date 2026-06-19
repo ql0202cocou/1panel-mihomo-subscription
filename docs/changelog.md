@@ -58,6 +58,12 @@
   引用。
 - 清理 `changelog.md` 中的重复中文段落:0.1.4—0.1.16 各条目此前在原始中文之后
   附了一份机翻自英文的冗余中文行,现移除该重复行,仅保留原始中文条目(共 29 行)。
+- 修复根 `README.md` 版本滞后:状态横幅与一键部署 Compose 镜像 tag 由 `0.1.8`
+  更新到 `0.2.0`(此前照 README 部署会拉到旧镜像)。
+- 修复指向 `CLAUDE.md` 的失效链接:`CLAUDE.md` 已转为本地专属、不再纳入版本控制,
+  故 `README.md`「文档与开发」段改为指向 `.github/workflows/ci.yml`(CI 门禁)与
+  `docs/release.md`(发布/变更规则);`docs/release.md` 的发布前检查改为引用
+  `docs/changelog.md` 维护规则。
 
 ## [0.2.0] - 2026-06-19
 
