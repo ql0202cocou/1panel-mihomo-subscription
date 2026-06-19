@@ -1,3 +1,6 @@
 .env
 target/
 *.db
+
+# Local-only Claude Code project guide (kept out of version control by request).
+CLAUDE.md
