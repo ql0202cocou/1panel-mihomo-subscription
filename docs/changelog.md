@@ -1,886 +1,532 @@
-# Changelog
+# 变更日志
 
-All notable changes to this project should be documented in this file.
+此项目的所有显著变更都应记录在此文件中。
 
-Use reverse chronological order. Keep entries concise, user-facing when
-possible, and grouped by change type.
+使用倒序。保持条目简洁，尽可能面向用户，并按变更类型分组。
 
-## Maintenance Rules
+## 维护规则
 
-- Never delete old version entries.
-- Add new work under `[Unreleased]`.
-- Keep affected project documents updated with every change so documentation and
-  implementation/design stay aligned.
-- When releasing, rename the current `[Unreleased]` section to the released
-  version and date, then create a new empty `[Unreleased]` section above it.
-- Keep newer versions above older versions.
-- Preserve historical entries even if later releases change or supersede them.
+- 永远不要删除旧版本条目。
+- 在 `[Unreleased]` 下添加新工作。
+- 每次变更都更新受影响的项目文档，使文档和实现/设计保持一致。
+- 发布时，将当前 `[Unreleased]` 部分重命名为发布的版本和日期，然后在其上方创建新的空 `[Unreleased]` 部分。
+- 保持新版本在旧版本上方。
+- 保留历史条目，即使后来的发布更改或取代它们。
 
-## Template
+## 模板
 
 ```markdown
 ## [Unreleased]
 
-### Added
+### 新增
 
 - 
 
-### Changed
+### 变更
 
 - 
 
-### Fixed
+### 修复
 
 - 
 
-### Security
+### 安全
 
 - 
 
-### Documentation
+### 文档
 
 - 
 
 ## [0.1.0] - YYYY-MM-DD
 
-### Added
+### 新增
 
-- First released changes.
+- 首次发布变更。
 ```
 
 ## [Unreleased]
 
+### 文档
+
+- 将剩余技术文档(`api-design.md`、`data-model.md`、`release.md`)由中英双语
+  转为纯中文,与已转换的 `security-design.md`/`1panel-app.md`/`README.md`/
+  `changelog.md` 保持一致。
+- 将文档版本头对齐到 `0.2.0`:`1panel-app.md`(状态/结构示例/验证清单)、
+  `release.md`(状态/YAML 校验路径/构建示例)、`docs/README.md`;`release.md` 的
+  「新增版本目录」示例改为从 `0.2.0` 升到 `0.2.1`,并移除已删除的 `README_en.md`
+  引用。
+- 清理 `changelog.md` 中的重复中文段落:0.1.4—0.1.16 各条目此前在原始中文之后
+  附了一份机翻自英文的冗余中文行,现移除该重复行,仅保留原始中文条目(共 29 行)。
+
 ## [0.2.0] - 2026-06-19
 
-### Added
+### 新增
 
-- 规则集 (rule-providers) management: a new `RuleProvidersCard` on the profile
-  detail page with full CRUD over custom rule-providers (`http`/`file`/`inline`
-  types; `domain`/`ipcidr`/`classical` behaviors) via schema-driven structured
-  forms. New `rule_providers` table (1—\* per profile) and management endpoints
-  `GET/POST /api/profiles/:id/rule-providers` and
-  `PUT/DELETE /api/profiles/:id/rule-providers/:rp_id`; the profile detail
-  response now includes `rule_providers`.
+- 规则集 (rule-providers) 管理：配置文件详情页新增 `RuleProvidersCard`，通过 schema 驱动的结构化表单对自定义规则集（`http`/`file`/`inline` 类型；`domain`/`ipcidr`/`classical` 行为）进行完整 CRUD。新增 `rule_providers` 表（每个配置文件 1—*）和管理端点 `GET/POST /api/profiles/:id/rule-providers` 和 `PUT/DELETE /api/profiles/:id/rule-providers/:rp_id`；配置文件详情响应现在包含 `rule_providers`。
 
-### Changed
+### 变更
 
-- The converter now **merges** custom rule-providers into the output
-  `rule-providers:` map on top of the provider's (a custom entry overrides a
-  provider entry of the same name) instead of only passing the provider's
-  through. Additive, so imported provider `RULE-SET` rules keep resolving;
-  changes take effect on the next generate.
-- Reworked the rule editor (`RulesCard`) into an inline, Clash-Verge-style
-  composer (no more modal): a single row of type · content · no-resolve · policy
-  where the **content input adapts to the rule type** (`RULE-SET` picks a defined
-  rule-set name, `NETWORK` picks tcp/udp, others show a per-type example
-  placeholder via `RULE_EXAMPLES`). "Edit" loads a rule back into the composer in
-  place; the rule list stays a single drag-reorderable list (the converter owns
-  the whole `rules` block, so there is no prepend/append split).
+- 转换器现在将自定义规则集**合并**到输出 `rule-providers:` 映射中，覆盖机场的同名条目（自定义条目覆盖机场同名条目），而不是仅透传机场的。这是累加性的，因此导入的机场 `RULE-SET` 规则继续解析；变更在下次生成时生效。
+- 将规则编辑器（`RulesCard`）重构为内联的 Clash-Verge 风格编辑器（不再使用模态框）：单行类型 · 内容 · no-resolve · 策略，其中**内容输入适应规则类型**（`RULE-SET` 选择定义的规则集名称，`NETWORK` 选择 tcp/udp，其他显示每类型示例占位符 `RULE_EXAMPLES`）。“编辑”将规则加载回编辑器原位；规则列表保持单一可拖拽排序列表（转换器拥有整个 `rules` 块，因此没有前置/追加分割）。
 
-### Documentation
+### 文档
 
-- Document the `rule_providers` table (`data-model.md`), the rule-provider
-  management endpoints and merge semantics (`api-design.md`), and re-align
-  `CLAUDE.md`.
+- 记录 `rule_providers` 表（`data-model.md`）、规则集管理端点和合并语义（`api-design.md`），并重新对齐 `CLAUDE.md`。
 
 ## [0.1.16] - 2026-06-17
 
-### Changed
+### 变更
 
-- 规则编辑器「规则类型」下拉补全更多 Mihomo 规则类型(`IP-SUFFIX`、`SRC-GEOIP`、
-  `SRC-IP-ASN`、`SRC-IP-SUFFIX`、`IN-PORT`、`IN-TYPE`、`IN-USER`、`IN-NAME`、`UID`、
-  `NETWORK`、`DSCP`、`PROCESS-NAME-REGEX`、`PROCESS-PATH-REGEX`、逻辑规则
-  `AND`/`OR`/`NOT`/`SUB-RULE` 等),并把 `no-resolve` 选项扩展到全部基于 IP 的类型
-  (含 `RULE-SET`);选择器仍允许手输任意类型。
-  The rule editor's "rule type" dropdown now suggests the full common Mihomo rule
-  set (`IP-SUFFIX`, `SRC-GEOIP`, `SRC-IP-ASN`, `SRC-IP-SUFFIX`, `IN-PORT`,
-  `IN-TYPE`, `IN-USER`, `IN-NAME`, `UID`, `NETWORK`, `DSCP`, `PROCESS-NAME-REGEX`,
-  `PROCESS-PATH-REGEX`, and logical `AND`/`OR`/`NOT`/`SUB-RULE`), and the
-  `no-resolve` toggle now covers every IP-based type (including `RULE-SET`). The
-  selector still accepts any free-typed type.
+- 规则编辑器「规则类型」下拉补全更多 Mihomo 规则类型（`IP-SUFFIX`、`SRC-GEOIP`、`SRC-IP-ASN`、`SRC-IP-SUFFIX`、`IN-PORT`、`IN-TYPE`、`IN-USER`、`IN-NAME`、`UID`、`NETWORK`、`DSCP`、`PROCESS-NAME-REGEX`、`PROCESS-PATH-REGEX`、逻辑规则 `AND`/`OR`/`NOT`/`SUB-RULE` 等），并把 `no-resolve` 选项扩展到全部基于 IP 的类型（含 `RULE-SET`）；选择器仍允许手输任意类型。
 
-### Fixed
+### 修复
 
-- 规则编辑器「匹配内容」现可正确填写含逗号/括号的复杂匹配内容(逻辑/嵌套规则
-  `AND`/`OR`/`NOT`/`SUB-RULE`,如 `AND,((DOMAIN,x.com),(NETWORK,udp)),Proxy`):解析
-  改为从末尾剥离 `no-resolve` 与策略、其余整体作为匹配内容,不再按固定逗号位置切分,
-  编辑/回显不再错位。
-  The rule editor's "match content" field now correctly holds complex payloads
-  containing commas/parentheses (logical/nested rules `AND`/`OR`/`NOT`/`SUB-RULE`,
-  e.g. `AND,((DOMAIN,x.com),(NETWORK,udp)),Proxy`): parsing now peels the optional
-  trailing `no-resolve` and the policy off the end and treats the rest as the
-  payload instead of assuming fixed comma positions, so editing/round-trip no
-  longer mangles it.
+- 规则编辑器「匹配内容」现可正确填写含逗号/括号的复杂匹配内容（逻辑/嵌套规则 `AND`/`OR`/`NOT`/`SUB-RULE`，如 `AND,((DOMAIN,x.com),(NETWORK,udp)),Proxy`）：解析改为从末尾剥离 `no-resolve` 与策略、其余整体作为匹配内容，不再按固定逗号位置切分，编辑/回显不再错位。
 
 ## [0.1.15] - 2026-06-16
 
-### Changed
+### 变更
 
-- **公共订阅每次拉取都实时拉机场,客户端永远用最新节点:** 公共订阅端点
-  (`GET /<prefix>/api/sub/<token>`)不再「缓存新鲜就返回」,而是每次拉取都重拉机场并
-  重新生成;`generated_cache` 仅作机场拉取失败时的兜底。并发拉取仍由 per-profile
-  single-flight 合并为一次机场拉取(`serve_or_refresh` + `generated_since`)。
-  `CACHE_TTL_MINUTES` 现仅影响管理端 `preview`。
-  The public subscription endpoint now re-fetches the provider on every pull
-  (clients always get the latest nodes) instead of serving a fresh cache within a
-  TTL; `generated_cache` is only a fallback when the provider fetch fails.
-  Concurrent pulls are still coalesced into one fetch by the per-profile
-  single-flight. `CACHE_TTL_MINUTES` now affects only the admin `preview`.
-- **移除「生成配置」按钮:** 既然公共链接始终实时,手动「生成」已多余,移除详情页底部
-  的「生成配置」按钮及「未生成的修改」告警;管理端预览里的机场节点改由「原始订阅源 →
-  刷新」更新(自定义节点/分组/规则编辑仍即时反映)。
-  Removed the "generate config" button (and the "unsaved changes / not generated"
-  warning): the public link is always live, so the manual generate step is
-  unnecessary. Provider nodes in the admin preview are refreshed via the source
-  card's "refresh"; custom node/group/rule edits still reflect immediately.
-- 界面文案微调:应用标题「Mihomo 订阅管理」改为「管理后台」;「原始订阅源」卡片标题
-  改为「原始订阅」;「托管订阅链接」卡片标题改为「托管订阅」。
-  UI copy tweaks: the app title "Mihomo 订阅管理" is now "管理后台"; the
-  "原始订阅源" card title is now "原始订阅"; the "托管订阅链接" card title is now
-  "托管订阅".
+- **公共订阅每次拉取都实时拉机场，客户端永远用最新节点：** 公共订阅端点（`GET /<prefix>/api/sub/<token>`）不再“缓存新鲜就返回”，而是每次拉取都重拉机场并重新生成；`generated_cache` 仅作机场拉取失败时的兜底。并发拉取仍由 per-profile single-flight 合并为一次机场拉取（`serve_or_refresh` + `generated_since`）。`CACHE_TTL_MINUTES` 现仅影响管理端 `preview`。
+- **移除「生成配置」按钮：** 既然公共链接始终实时，手动「生成」已多余，移除详情页底部的「生成配置」按钮及「未生成的修改」告警；管理端预览里的机场节点改由「原始订阅源 → 刷新」更新（自定义节点/分组/规则编辑仍即时反映）。
+- 界面文案微调：应用标题「Mihomo 订阅管理」改为「管理后台」；「原始订阅源」卡片标题改为「原始订阅」；「托管订阅链接」卡片标题改为「托管订阅」。
 
 ## [0.1.14] - 2026-06-16
 
-### Changed
+### 变更
 
-- **节点预览重构为「可展开式分组」:** 节点预览不再是机场+自定义混排的扁平列表,而是
-  两个**可折叠、可拖动先后**的分组——「机场」分组(名称为机场名,机场节点**只读**上游
-  顺序)与「自定义」分组(组内节点可拖动排序)。点击分组名展开/折叠;拖动分组改两块
-  先后,拖动自定义节点改组内顺序。**分组先后 × 自定义组内顺序决定生成订阅 `proxies`
-  的实际顺序**,且即时生效(就地重写缓存,无需重拉机场)。这样机场更新只在机场块内
-  变化,不再打乱用户的自定义顺序。
-  - 数据/接口:`node_order` 语义改为**仅自定义块**顺序;新增 `profiles.node_section_order`
-    (迁移 `0004_node_section_order.sql`)与 `PUT /api/profiles/:id/node-section-order`;
-    `GET /proxies` 新增 `node_section_order` 字段并直接返回缓存(排序改动已就地重写缓存);
-    生成时仅快照自定义节点顺序(机场块始终上游序、不快照)。
-  The node preview is redesigned into **collapsible groups**: instead of one flat
-  provider+custom list, there are two collapsible, drag-orderable groups — a
-  "provider" group (titled with the provider name; provider nodes are **read-only**
-  upstream order) and a "custom" group (its nodes are sortable). Click a group name
-  to expand/collapse; drag groups to set block order, drag custom nodes to order
-  the custom block. **Block order × custom order drives the generated `proxies`
-  order** and takes effect immediately (cache re-stitched, no provider re-fetch).
-  Provider updates now only change the provider block and never scatter the user's
-  custom order. Data/API: `node_order` now means the **custom block** order only;
-  adds `profiles.node_section_order` (migration `0004_node_section_order.sql`) and
-  `PUT /api/profiles/:id/node-section-order`; `GET /proxies` adds a
-  `node_section_order` field and returns the cache as-is; generation snapshots only
-  the custom-node order (the provider block stays upstream and is not snapshotted).
+- **节点预览重构为「可展开式分组」：** 节点预览不再是机场+自定义混排的扁平列表，而是两个**可折叠、可拖动先后**的分组——「机场」分组（名称为机场名，机场节点**只读**上游顺序）与「自定义」分组（组内节点可拖动排序）。点击分组名展开/折叠；拖动分组改两块先后，拖动自定义节点改组内顺序。**分组先后 × 自定义组内顺序决定生成订阅 `proxies` 的实际顺序**，且即时生效（就地重写缓存，无需重拉机场）。这样机场更新只在机场块内变化，不再打乱用户的自定义顺序。
+  - 数据/接口：`node_order` 语义改为**仅自定义块**顺序；新增 `profiles.node_section_order`（迁移 `0004_node_section_order.sql`）与 `PUT /api/profiles/:id/node-section-order`；`GET /proxies` 新增 `node_section_order` 字段并直接返回缓存（排序改动已就地重写缓存）；生成时仅快照自定义节点顺序（机场块始终上游序、不快照）。
 
 ## [0.1.13] - 2026-06-15
 
-### Changed
+### 变更
 
-- 分组预览不再区分「机场/自定义」:机场分组已被替换(需导入为自定义分组),因此预览
-  里的所有分组现在一律可编辑/排序/删除,去掉了只读的「机场」分组行与「自定义/机场」
-  标签;排序顺序仍取自上次生成的输出。
-  The group preview no longer distinguishes "provider" vs "custom": since provider
-  groups are replaced (import them as custom groups), every group in the preview
-  is now editable/sortable/deletable — the read-only "provider" rows and the
-  custom/provider tags are gone; ordering still follows the last generated output.
+- 分组预览不再区分「机场/自定义」：机场分组已被替换（需导入为自定义分组），因此预览里的所有分组现在一律可编辑/排序/删除，去掉了只读的「机场」分组行与「自定义/机场」标签；排序顺序仍取自上次生成的输出。
 
 ## [0.1.12] - 2026-06-15
 
-### Changed
+### 变更
 
-- **(破坏性)机场分组改为「导入才生效」模型(同规则):** 转换器不再透传机场原生
-  `proxy-groups`,而是整体替换为自定义分组——机场更新分组不会自动进入输出。**升级
-  提示:** 已依赖机场原生分组的配置,需在「分组预览」点击「导入机场分组」后重新
-  「生成」,否则下次生成的输出将不含这些分组(不做自动迁移)。
-  **(Breaking) Provider groups are now import-to-apply (like rules):** the
-  converter no longer passes provider `proxy-groups` through; it replaces them
-  with custom groups, so provider group updates never enter the output
-  automatically. **Upgrade note:** profiles relying on provider groups must click
-  "import provider groups" in the group preview and re-generate, or the next
-  output won't contain them (no auto-migration).
+- **（破坏性）机场分组改为「导入才生效」模型（同规则）：** 转换器不再透传机场原生 `proxy-groups`，而是整体替换为自定义分组——机场更新分组不会自动进入输出。**升级提示：** 已依赖机场原生分组的配置，需在「分组预览」点击「导入机场分组」后重新「生成」，否则下次生成的输出将不含这些分组（不做自动迁移）。
 
-### Added
+### 新增
 
-- **导入机场分组 + 机场分组可编辑:** 「分组预览」新增「导入机场分组」按钮,经新端点
-  `POST /api/profiles/:id/import-provider-groups`(SSRF 保护的实时拉取,同
-  `provider-rules`)把机场 `proxy-groups` 解析为**可编辑的自定义分组**(name/type/
-  proxies→成员,其余键→options;跳过同名与不支持类型),返回 `{ imported, skipped }`;
-  导入后即可像普通自定义分组一样编辑/排序/删除,重新生成后进入订阅。
-  **Import provider groups + editable provider groups:** the group preview gains
-  an "import provider groups" button backed by a new
-  `POST /api/profiles/:id/import-provider-groups` (SSRF-protected live fetch, like
-  `provider-rules`) that imports the provider's `proxy-groups` as **editable
-  custom groups** (name/type/proxies → members, the rest → options; skipping
-  existing names / unsupported types), returning `{ imported, skipped }`. Imported
-  groups are then editable/sortable/deletable like any custom group and reach the
-  subscription on the next generate.
+- **导入机场分组 + 机场分组可编辑：** 「分组预览」新增「导入机场分组」按钮，经新端点 `POST /api/profiles/:id/import-provider-groups`（SSRF 保护的实时拉取，同 `provider-rules`）把机场 `proxy-groups` 解析为**可编辑的自定义分组**（name/type/proxies→成员，其余键→options；跳过同名与不支持类型），返回 `{ imported, skipped }`；导入后即可像普通自定义分组一样编辑/排序/删除，重新生成后进入订阅。
 
 ## [0.1.11] - 2026-06-15
 
-### Fixed
+### 修复
 
-- 修复节点/分组预览拖动后卡片又「弹回」原位的问题:拖动时已乐观更新顺序,但行列表
-  会在每次从服务端重新派生时直接覆盖该顺序;当重新派生的列表暂时无法体现刚拖动的
-  顺序(配置尚未生成,或新增但未重新生成的自定义节点——按 `created_at` 重建)时,
-  卡片会弹回旧位置(顺序其实已持久化)。现改为按成员合并:对仍存在的行保留当前
-  屏幕顺序(数据刷新),新增项追加、移除项删除,从而保住拖动顺序。规则不受影响
-  (其内容本身即顺序,重载即返回新序)。仅前端可视修复。
-  Fixed the node/group preview cards snapping back to the old position after a
-  drag: the row list is re-derived from the server on every reload and was
-  blindly overwriting the optimistic order; when the re-derived list could not
-  yet reflect the just-dragged order (a not-yet-generated profile, or a custom
-  node added but not regenerated — rebuilt from `nodes` in creation order) the
-  card reverted even though the order was already persisted. Now derived rows are
-  reconciled into the current on-screen order (keep surviving rows in place with
-  refreshed data, append new ones, drop removed ones). Rules are unaffected
-  (their content is the order). Visual-only fix.
+- 修复节点/分组预览拖动后卡片又「弹回」原位的问题：拖动时已乐观更新顺序，但行列表会在每次从服务端重新派生时直接覆盖该顺序；当重新派生的列表暂时无法体现刚拖动的顺序（配置尚未生成，或新增但未重新生成的自定义节点——按 `created_at` 重建）时，卡片会弹回旧位置（顺序其实已持久化）。现改为按成员合并：对仍存在的行保留当前屏幕顺序（数据刷新），新增项追加、移除项删除，从而保住拖动顺序。规则不受影响（其内容本身即顺序，重载即返回新序）。仅前端可视修复。
 
 ## [0.1.10] - 2026-06-15
 
-### Changed
+### 变更
 
-- 拖拽排序与规则编辑**立即生效**:此前调整节点/分组顺序或编辑规则需重新「生成配置」
-  才会应用到公共订阅链接,现在保存后后端会就地重写已生成缓存
-  (`generated_cache.output_yaml`)对应的 `proxies`/`proxy-groups`/`rules`、**无需
-  重新拉取机场**,节点/分组/规则预览与公共订阅链接随即返回新内容。
-  `node-order`/`group-order`/`rules` 端点保存后调用 `generate::resync_cache`
-  (best-effort,保留 `generated_at` 不影响刷新节奏);从未生成过的配置仍在首次生成
-  时生效,新增节点/分组仍需生成。前端三张卡片的提示文案同步改为「立即生效」。
-  Drag-reordering and rule edits now take effect **immediately**: previously a
-  node/group reorder or rule edit only reached the public subscription link after
-  a re-generate; now the write handlers re-stitch the existing
-  `generated_cache.output_yaml` (`proxies`/`proxy-groups`/`rules`) in place
-  **without re-fetching the provider** (`generate::resync_cache`, best-effort,
-  preserving `generated_at`), so the previews and the public link return the new
-  content right away. Never-generated profiles still apply on first generate, and
-  adding a new node/group still needs a generate. UI hints updated accordingly.
+- 拖拽排序与规则编辑**立即生效**：此前调整节点/分组顺序或编辑规则需重新「生成配置」才会应用到公共订阅链接，现在保存后后端会就地重写已生成缓存（`generated_cache.output_yaml`）对应的 `proxies`/`proxy-groups`/`rules`、**无需重新拉取机场**，节点/分组/规则预览与公共订阅链接随即返回新内容。`node-order`/`group-order`/`rules` 端点保存后调用 `generate::resync_cache`（best-effort，保留 `generated_at` 不影响刷新节奏）；从未生成过的配置仍在首次生成时生效，新增节点/分组仍需生成。前端三张卡片的提示文案同步改为「立即生效」。
 
 ## [0.1.9] - 2026-06-15
 
-### Added
+### 新增
 
-- 节点 / 分组 / 规则预览支持拖拽排序:在三张预览卡片均可直接拖动列表调整顺序,
-  松手即保存。节点 / 分组:新增 `profiles.node_order` / `group_order`(JSON 名字
-  数组,迁移 `0002_node_order.sql` / `0003_group_order.sql`)与
-  `PUT /api/profiles/:id/node-order` / `group-order` 端点;转换器在组装
-  `proxies` / `proxy-groups` 后按对应顺序重排,`GET /api/profiles/:id/proxies` 也
-  按其返回,使预览在重新生成前即反映新顺序;未列出的新条目回退到末尾默认位置。
-  规则:规则顺序本就是有序文本且具语义(命中即止),前端拖动后经现有
-  `PUT /api/profiles/:id/rules` 整体保存,无需新增列/端点。所有排序于下一次
-  「生成配置」时应用到订阅输出。前端引入 `@dnd-kit`。
-  The node / group / rule previews support drag-and-drop sorting: drag the list
-  in any of the three preview cards and the order is saved on drop. Nodes /
-  groups: adds `profiles.node_order` / `group_order` (JSON arrays of names,
-  migrations `0002_node_order.sql` / `0003_group_order.sql`) and
-  `PUT /api/profiles/:id/node-order` / `group-order`; the converter reorders
-  `proxies` / `proxy-groups` by them after assembly and
-  `GET /api/profiles/:id/proxies` returns them reordered so the preview reflects
-  a saved order before regenerating; unlisted new entries fall back to the end.
-  Rules: rule order is already a semantic ordered text (first match wins), so the
-  frontend reorders lines and saves via the existing `PUT /api/profiles/:id/rules`
-  with no new column/endpoint. All orderings apply to the subscription output on
-  the next "generate". The frontend adds `@dnd-kit`.
-- 订阅更新时的节点/分组排序保持稳定:每次生成都会把输出的节点/分组实际顺序快照
-  回写到 `node_order` / `group_order`(`persist_cache` → `snapshot_orders`)。因此
-  后续自动拉取机场订阅时,已存在的节点/分组按名字保留原位置(其信息按名从新机场
-  YAML 刷新),新增的节点/分组排到列表末尾;管理员的手动拖拽顺序仍会被保留并在新增
-  时向后追加。
-  Node/group ordering is now stable across subscription refreshes: every
-  generation snapshots the output's node/group order back into `node_order` /
-  `group_order` (`persist_cache` → `snapshot_orders`). On a later provider fetch,
-  existing nodes/groups keep their position by name (their info refreshed by name
-  from the new provider YAML) and newly added ones land at the end; an admin's
-  manual drag order is preserved and only appended to as new entries appear.
+- 节点 / 分组 / 规则预览支持拖拽排序：在三张预览卡片均可直接拖动列表调整顺序，松手即保存。节点 / 分组：新增 `profiles.node_order` / `group_order`（JSON 名字数组，迁移 `0002_node_order.sql` / `0003_group_order.sql`）与 `PUT /api/profiles/:id/node-order` / `group-order` 端点；转换器在组装 `proxies` / `proxy-groups` 后按对应顺序重排，`GET /api/profiles/:id/proxies` 也按其返回，使预览在重新生成前即反映新顺序；未列出的新条目回退到末尾默认位置。规则：规则顺序本就是有序文本且具语义（命中即止），前端拖动后经现有 `PUT /api/profiles/:id/rules` 整体保存，无需新增列/端点。所有排序于下一次「生成配置」时应用到订阅输出。前端引入 `@dnd-kit`。
+- 订阅更新时的节点/分组排序保持稳定：每次生成都会把输出的节点/分组实际顺序快照回写到 `node_order` / `group_order`（`persist_cache` → `snapshot_orders`）。因此后续自动拉取机场订阅时，已存在的节点/分组按名字保留原位置（其信息按名从新机场 YAML 刷新），新增的节点/分组排到列表末尾；管理员的手动拖拽顺序仍会被保留并在新增时向后追加。
 
-### Documentation
+### 文档
 
-- 删除 `AGENTS.md`,将其独有内容(分支/PR 工作流、变更规则、「不得删除 changelog
-  历史」、1Panel 安装字段与反代保留 `Host` 等)并入 `CLAUDE.md`,并把 `README.md`
-  与 `docs/release.md` 中对 `AGENTS.md` 的引用改指 `CLAUDE.md`。`CLAUDE.md` 同时
-  补充前端 schema 驱动编辑器架构与预览端点(`/proxies`、`/provider-rules`)、
-  `FETCH_USER_AGENT` 等说明。`CLAUDE.md` 现为变更规则/安全默认/1Panel 打包的唯一
-  权威文档。
-  Removed `AGENTS.md`, folding its unique content (branch/PR workflow, change
-  rules, "never delete changelog history", 1Panel install fields, reverse-proxy
-  `Host` preservation) into `CLAUDE.md`, and repointed the `AGENTS.md` references
-  in `README.md` and `docs/release.md` to `CLAUDE.md`. `CLAUDE.md` also gained
-  notes on the frontend schema-driven editor architecture, the preview endpoints
-  (`/proxies`, `/provider-rules`), and `FETCH_USER_AGENT`. `CLAUDE.md` is now the
-  single authoritative guide for change rules, security defaults, and 1Panel
-  packaging.
-- 文档校对:修正 `docs/README.md` 中过时的「发布前待办」段落(0.1.8 已发布、安装
-  表单已完成);在 `docs/1panel-app.md` 环境变量表补充容器内部变量 `WEB_DIR`
-  (Dockerfile 内置,非安装项),使该「权威清单」与代码一致。
-  Docs review: corrected the stale "remaining before release" paragraph in
-  `docs/README.md` (0.1.8 is released and the install form is complete), and
-  added the container-internal `WEB_DIR` (baked into the Dockerfile, not an
-  install field) to the `docs/1panel-app.md` env-var table so the "authoritative
-  list" matches the code.
+- 删除 `AGENTS.md`，将其独有内容（分支/PR 工作流、变更规则、「不得删除 changelog 历史」、1Panel 安装字段与反代保留 `Host` 等）并入 `CLAUDE.md`，并把 `README.md` 与 `docs/release.md` 中对 `AGENTS.md` 的引用改指 `CLAUDE.md`。`CLAUDE.md` 同时补充前端 schema 驱动编辑器架构与预览端点（`/proxies`、`/provider-rules`）、`FETCH_USER_AGENT` 等说明。`CLAUDE.md` 现为变更规则/安全默认/1Panel 打包的唯一权威文档。
+- 文档校对：修正 `docs/README.md` 中过时的「发布前待办」段落（0.1.8 已发布、安装表单已完成）；在 `docs/1panel-app.md` 环境变量表补充容器内部变量 `WEB_DIR`（Dockerfile 内置，非安装项），使该「权威清单」与代码一致。
 
 ## [0.1.8] - 2026-06-14
 
-### Added
+### 新增
 
-- 规则预览支持「导入机场规则」:由于转换时自定义规则会整体替换机场规则,新增
-  `GET /api/profiles/:id/provider-rules`(实时 SSRF 拉取机场订阅并解析 `rules`),
-  前端「导入机场规则」按钮把机场规则追加到列表末尾(跳过重复),便于以机场规则为
-  起点再做定制。
-  Rule preview can now import the provider's rules: since the converter replaces
-  provider rules wholesale, added `GET /api/profiles/:id/provider-rules` (a live
-  SSRF-protected fetch that parses the provider's `rules`), with an "Import
-  provider rules" button that appends them to the list (skipping duplicates) so
-  the airport's rules can be a starting point.
+- 规则预览支持「导入机场规则」：由于转换时自定义规则会整体替换机场规则，新增 `GET /api/profiles/:id/provider-rules`（实时 SSRF 拉取机场订阅并解析 `rules`），前端「导入机场规则」按钮把机场规则追加到列表末尾（跳过重复），便于以机场规则为起点再做定制。
 
-### Documentation
+### 文档
 
-- 新增 `apps/mihomo-subscription/0.1.8/` 应用包(镜像
-  `quinlanhoo/mihomo-subscription:0.1.8`),将 `Cargo.toml`/`Cargo.lock` 与
-  `web/package.json` 升到 `0.1.8`。
-  Added the `apps/mihomo-subscription/0.1.8/` app package (image
-  `quinlanhoo/mihomo-subscription:0.1.8`) and bumped `Cargo.toml`/`Cargo.lock`
-  and `web/package.json` to `0.1.8`.
+- 新增 `apps/mihomo-subscription/0.1.8/` 应用包（镜像 `quinlanhoo/mihomo-subscription:0.1.8`），将 `Cargo.toml`/`Cargo.lock` 与 `web/package.json` 升到 `0.1.8`。
 
 ## [0.1.7] - 2026-06-14
 
-### Changed
+### 变更
 
-- 「自定义分组」卡片改名为「分组预览」,交互对齐「节点预览」:在自定义分组(可编辑)
-  之外只读列出机场分组(解析自最近一次生成的输出),沿用相同的标签、计数与未生成
-  提示。`GET /api/profiles/:id/proxies` 的 `groups` 由名称数组改为 `name`+`type`
-  对象数组(机场分组预览也显示类型)。
-  Renamed the "Custom groups" card to "Group preview" and aligned its
-  interaction with "Node preview": provider groups are listed read-only
-  alongside the editable custom groups (parsed from the latest generated
-  output), with the same tags, count, and not-generated hint. The `groups`
-  field of `GET /api/profiles/:id/proxies` changed from a name array to
-  `name`+`type` objects so provider groups show their type too.
-- 「分流规则」卡片改名为「规则预览」,交互对齐「节点预览」:整块 YAML 文本编辑器改为
-  逐条规则的列表,单条规则用结构化表单增/改/删(规则类型 / 匹配内容 / 策略下拉 /
-  no-resolve),策略候选来自机场节点/分组、自定义节点/分组与内置策略。注释与不常见
-  规则(如逻辑 AND/OR)按原文保留。随之移除已无用的 CodeMirror YAML 编辑器组件与
-  依赖(前端构建产物显著减小)。
-  Renamed the "Rules" card to "Rule preview" and aligned its interaction with
-  "Node preview": the bulk YAML text editor became a per-rule list with a
-  structured add/edit/delete form (rule type / payload / policy dropdown /
-  no-resolve); policy suggestions come from provider proxies/groups, custom
-  nodes/groups, and built-in policies. Comments and uncommon rules (e.g. logical
-  AND/OR) are preserved verbatim. Removed the now-unused CodeMirror YAML editor
-  component and dependencies (notably smaller frontend bundle).
+- 「自定义分组」卡片改名为「分组预览」，交互对齐「节点预览」：在自定义分组（可编辑）之外只读列出机场分组（解析自最近一次生成的输出），沿用相同的标签、计数与未生成提示。`GET /api/profiles/:id/proxies` 的 `groups` 由名称数组改为 `name`+`type` 对象数组（机场分组预览也显示类型）。
+- 「分流规则」卡片改名为「规则预览」，交互对齐「节点预览」：整块 YAML 文本编辑器改为逐条规则的列表，单条规则用结构化表单增/改/删（规则类型 / 匹配内容 / 策略下拉 / no-resolve），策略候选来自机场节点/分组、自定义节点/分组与内置策略。注释与不常见规则（如逻辑 AND/OR）按原文保留。随之移除已无用的 CodeMirror YAML 编辑器组件与依赖（前端构建产物显著减小）。
 
-### Documentation
+### 文档
 
-- 新增 `apps/mihomo-subscription/0.1.7/` 应用包(镜像
-  `quinlanhoo/mihomo-subscription:0.1.7`),将 `Cargo.toml`/`Cargo.lock` 与
-  `web/package.json` 升到 `0.1.7`。
-  Added the `apps/mihomo-subscription/0.1.7/` app package (image
-  `quinlanhoo/mihomo-subscription:0.1.7`) and bumped `Cargo.toml`/`Cargo.lock`
-  and `web/package.json` to `0.1.7`.
+- 新增 `apps/mihomo-subscription/0.1.7/` 应用包（镜像 `quinlanhoo/mihomo-subscription:0.1.7`），将 `Cargo.toml`/`Cargo.lock` 与 `web/package.json` 升到 `0.1.7`。
 
 ## [0.1.6] - 2026-06-14
 
-### Added
+### 新增
 
-- 节点编辑器扩充图形化字段:VLESS 新增 REALITY(`reality-opts`:public-key /
-  short-id)、传输层(`ws-opts` 含 path 与 Host、`grpc-opts`)、`flow`、
-  `client-fingerprint`、`alpn`、`udp`、`skip-cert-verify` 等;vmess/trojan/
-  hysteria2/tuic 也补齐常用项。字段按 TLS/传输协议条件显示,嵌套选项以结构化子表单
-  编辑,无需再手写 YAML。
-  Expanded the node editor's graphical fields: VLESS gains REALITY
-  (`reality-opts`: public-key / short-id), transport options (`ws-opts` with
-  path and Host, `grpc-opts`), plus `flow`, `client-fingerprint`, `alpn`,
-  `udp`, `skip-cert-verify`; vmess/trojan/hysteria2/tuic gain their common
-  options too. Fields show conditionally by TLS/network and nested option blocks
-  are edited as structured sub-forms — no hand-written YAML needed.
+- 节点编辑器扩充图形化字段：VLESS 新增 REALITY（`reality-opts`：public-key / short-id）、传输层（`ws-opts` 含 path 与 Host、`grpc-opts`）、`flow`、`client-fingerprint`、`alpn`、`udp`、`skip-cert-verify` 等；vmess/trojan/hysteria2/tuic 也补齐常用项。字段按 TLS/传输协议条件显示，嵌套选项以结构化子表单编辑，无需再手写 YAML。
 
-### Documentation
+### 文档
 
-- 新增 `apps/mihomo-subscription/0.1.6/` 应用包(镜像
-  `quinlanhoo/mihomo-subscription:0.1.6`),将 `Cargo.toml`/`Cargo.lock` 与
-  `web/package.json` 升到 `0.1.6`。
-  Added the `apps/mihomo-subscription/0.1.6/` app package (image
-  `quinlanhoo/mihomo-subscription:0.1.6`) and bumped `Cargo.toml`/`Cargo.lock`
-  and `web/package.json` to `0.1.6`.
+- 新增 `apps/mihomo-subscription/0.1.6/` 应用包（镜像 `quinlanhoo/mihomo-subscription:0.1.6`），将 `Cargo.toml`/`Cargo.lock` 与 `web/package.json` 升到 `0.1.6`。
 
 ## [0.1.5] - 2026-06-14
 
-### Fixed
+### 修复
 
-- 修复机场订阅拉取返回 `http_error:403/401` 导致无法生成的问题:此前拉取请求未带
-  `User-Agent`,而大量机场后端(SSPanel/V2board 等)会校验 UA 是否为 Clash 家族,
-  否则拒绝或返回非 YAML 页面。现默认发送 `clash.meta/1.0`(可用环境变量
-  `FETCH_USER_AGENT` 覆盖)。
-  Fixed provider fetch failing with `http_error:403/401` (and thus no generated
-  output): requests carried no `User-Agent`, but many airport panels (SSPanel,
-  V2board, …) gate the subscription on a Clash-family UA and otherwise reject or
-  serve a non-YAML page. Provider fetches now send `clash.meta/1.0` by default,
-  overridable via the `FETCH_USER_AGENT` env var.
+- 修复机场订阅拉取返回 `http_error:403/401` 导致无法生成的问题：此前拉取请求未带 `User-Agent`，而大量机场后端（SSPanel/V2board 等）会校验 UA 是否为 Clash 家族，否则拒绝或返回非 YAML 页面。现默认发送 `clash.meta/1.0`（可用环境变量 `FETCH_USER_AGENT` 覆盖）。
 
-### Documentation
+### 文档
 
-- 将根 `README.md` 的版本号与镜像 tag 同步到 `0.1.4`(0.1.4 发布时遗漏)。
-  Synced the version string and image tag in the root `README.md` to `0.1.4`
-  (missed during the 0.1.4 release).
-- 新增 `apps/mihomo-subscription/0.1.5/` 应用包(镜像
-  `quinlanhoo/mihomo-subscription:0.1.5`),将 `Cargo.toml`/`Cargo.lock` 与
-  `web/package.json` 升到 `0.1.5`;在 `1panel-app.md` 环境变量表登记
-  `FETCH_USER_AGENT`(可选,代码内置默认,不在安装表单中)。
-  Added the `apps/mihomo-subscription/0.1.5/` app package (image
-  `quinlanhoo/mihomo-subscription:0.1.5`), bumped `Cargo.toml`/`Cargo.lock` and
-  `web/package.json` to `0.1.5`, and documented `FETCH_USER_AGENT` in the
-  `1panel-app.md` env-var table (optional, code-defaulted, not in the install
-  form).
+- 将根 `README.md` 的版本号与镜像 tag 同步到 `0.1.4`（0.1.4 发布时遗漏）。
+- 新增 `apps/mihomo-subscription/0.1.5/` 应用包（镜像 `quinlanhoo/mihomo-subscription:0.1.5`），将 `Cargo.toml`/`Cargo.lock` 与 `web/package.json` 升到 `0.1.5`；在 `1panel-app.md` 环境变量表登记 `FETCH_USER_AGENT`（可选，代码内置默认，不在安装表单中）。
 
 ## [0.1.4] - 2026-06-14
 
-### Added
+### 新增
 
-- 节点预览:订阅详情页的「自定义节点」卡片改名为「节点预览」,在自定义节点之外
-  同时只读列出机场节点(解析自最近一次生成的输出)。新增只读接口
-  `GET /api/profiles/:id/proxies`。
-  Node preview: the profile detail page's "Custom nodes" card is renamed to
-  "Node preview" and now also lists provider (airport) proxies read-only,
-  parsed from the latest generated output, alongside the editable custom nodes.
-  Adds the read-only `GET /api/profiles/:id/proxies` endpoint (now also
-  returning provider proxy-group names for member suggestions).
+- 节点预览：订阅详情页的「自定义节点」卡片改名为「节点预览」，在自定义节点之外同时只读列出机场节点（解析自最近一次生成的输出）。新增只读接口 `GET /api/profiles/:id/proxies`。
 
-### Changed
+### 变更
 
-- 自定义节点改用结构化 UI 表单编辑(按类型给出 server/port/密码/加密/uuid/tls/sni
-  等常用字段,其余字段以高级键值行补充),不再要求管理员手写 Mihomo proxy YAML;
-  保存时由前端序列化为 `content`。前端新增 `yaml` 依赖。
-  Custom nodes are now edited through a structured UI form (common per-type
-  fields such as server/port/password/cipher/uuid/tls/sni, with everything else
-  as advanced key/value rows) instead of a hand-written Mihomo proxy YAML
-  editor; the frontend serializes the form to `content` on save. Adds the
-  `yaml` frontend dependency.
-- 自定义分组改用结构化 UI 表单编辑:按分组类型给出选项字段
-  (`url`/`interval`/`tolerance`/`lazy`/`strategy`)+ 高级键值行,取代原先的
-  选项 JSON 文本框;成员选择改为从机场节点/分组、自定义节点/分组与内置策略中
-  下拉候选(仍可手动输入)。节点与分组共用一套结构化字段组件。
-  Custom groups are now edited through a structured UI form: per-type option
-  fields (`url`/`interval`/`tolerance`/`lazy`/`strategy`) plus advanced
-  key/value rows replace the old options-JSON textarea, and members are picked
-  from suggestions (provider proxies/groups, custom nodes/groups, built-in
-  policies) while still allowing free input. Nodes and groups share one set of
-  structured-field components.
+- 自定义节点改用结构化 UI 表单编辑（按类型给出 server/port/密码/加密/uuid/tls/sni 等常用字段，其余字段以高级键值行补充），不再要求管理员手写 Mihomo proxy YAML；保存时由前端序列化为 `content`。前端新增 `yaml` 依赖。
+- 自定义分组改用结构化 UI 表单编辑：按分组类型给出选项字段（`url`/`interval`/`tolerance`/`lazy`/`strategy`）+ 高级键值行，取代原先的选项 JSON 文本框；成员选择改为从机场节点/分组、自定义节点/分组与内置策略中下拉候选（仍可手动输入）。节点与分组共用一套结构化字段组件。
 
-### Documentation
+### 文档
 
-- 新增 `apps/mihomo-subscription/0.1.4/` 应用包(镜像
-  `quinlanhoo/mihomo-subscription:0.1.4`),将 `Cargo.toml`/`Cargo.lock` 与
-  `web/package.json` 升到 `0.1.4`。
-  Added the `apps/mihomo-subscription/0.1.4/` app package (image
-  `quinlanhoo/mihomo-subscription:0.1.4`) and bumped `Cargo.toml`/`Cargo.lock`
-  and `web/package.json` to `0.1.4`.
+- 新增 `apps/mihomo-subscription/0.1.4/` 应用包（镜像 `quinlanhoo/mihomo-subscription:0.1.4`），将 `Cargo.toml`/`Cargo.lock` 与 `web/package.json` 升到 `0.1.4`。
 
 ## [0.1.3] - 2026-06-14
 
-### Fixed
+### 修复
 
-- Fixed the container failing to start with `unable to open database file`
-  (SQLite code 14) on 1Panel / any `./data:/data` bind mount. The image ran as
-  the unprivileged `appuser`, but a bind mount overrides the build-time
-  `chown appuser /data` with the host directory's (usually root-owned)
-  ownership, so the process could not create the SQLite file. The container now
-  starts as root, a new `docker-entrypoint.sh` `chown`s `DATA_DIR` and re-execs
-  the app as `appuser` via `gosu` (added to the runtime image), preserving the
-  least-privilege runtime while making bind-mounted data directories work
-  out of the box. Added the `apps/mihomo-subscription/0.1.3/` package
-  (image `quinlanhoo/mihomo-subscription:0.1.3`) and bumped
-  `Cargo.toml`/`Cargo.lock` to `0.1.3`.
+- 修复容器在 1Panel / 任何 `./data:/data` 绑定挂载上启动失败，出现 `unable to open database file`（SQLite 代码 14）的问题。镜像以非特权 `appuser` 运行，但绑定挂载用主机目录的（通常 root 拥有的）所有权覆盖了构建时的 `chown appuser /data`，因此进程无法创建 SQLite 文件。容器现在以 root 启动，新的 `docker-entrypoint.sh` `chown`s `DATA_DIR` 并通过 `gosu`（添加到运行时镜像）以 `appuser` 重新执行应用，在使绑定挂载数据目录开箱即用的同时保持最小特权运行时。添加了 `apps/mihomo-subscription/0.1.3/` 包（镜像 `quinlanhoo/mihomo-subscription:0.1.3`）并将 `Cargo.toml`/`Cargo.lock` 升级到 `0.1.3`。
 
-### Documentation
+### 文档
 
-- Added a "Create the GitHub Release" step to `docs/release.md` (`gh release
-  create vX.Y.Z --verify-tag`, notes drawn from the changelog version section)
-  and a post-release checklist item confirming the Release is published — the
-  release flow previously stopped at the git tag.
+- 在 `docs/release.md` 中添加了“创建 GitHub Release”步骤（`gh release create vX.Y.Z --verify-tag`，说明从变更日志版本部分提取），并在发布后检查清单中添加了确认 Release 已发布的项目——发布流程之前在 git 标签处停止。
 
 ## [0.1.2] - 2026-06-14
 
-### Added
+### 新增
 
-- Completed the 1Panel app package and cut release `0.1.2`. The new
-  `apps/mihomo-subscription/0.1.2/` package exposes the full install form —
-  `ADMIN_USERNAME`/`ADMIN_PASSWORD`, `PUBLIC_BASE_URL`, `PUBLIC_PATH_PREFIX`,
-  `RUST_LOG`, `FETCH_TIMEOUT_SECONDS`, `MAX_SUBSCRIPTION_SIZE_MB`,
-  `CACHE_TTL_MINUTES`, `TRUSTED_PROXY_HOPS`, and a `SECURE_COOKIES`
-  `auto`/`true`/`false` selector — and its `docker-compose.yml` passes every
-  one through to the container (image `mihomo-subscription:0.1.2`). Bumped
-  `Cargo.toml`/`Cargo.lock` to `0.1.2`, pointed the README/CLAUDE/AGENTS build
-  commands and the CI 1Panel-YAML gate at the new package, and cleared the
-  "package update pending" markers in `docs/1panel-app.md`. The incomplete
-  `0.1.0/` directory is retained for history.
-- New `SECURE_COOKIES` environment variable to force the `Secure` session-cookie
-  attribute. It defaults to inferring from an `https://` `PUBLIC_BASE_URL`, so
-  behind a TLS-terminating reverse proxy (where the app speaks plain HTTP and
-  `PUBLIC_BASE_URL` may be unset or `http`) the operator can now opt in
-  explicitly. The service also logs a startup warning whenever session cookies
-  end up without `Secure` (see `src/main.rs`, `docs/technical-roadmap.md` env
-  table).
+- 完成 1Panel 应用包并发布 `0.1.2`。新的 `apps/mihomo-subscription/0.1.2/` 包暴露了完整的安装表单——`ADMIN_USERNAME`/`ADMIN_PASSWORD`、`PUBLIC_BASE_URL`、`PUBLIC_PATH_PREFIX`、`RUST_LOG`、`FETCH_TIMEOUT_SECONDS`、`MAX_SUBSCRIPTION_SIZE_MB`、`CACHE_TTL_MINUTES`、`TRUSTED_PROXY_HOPS` 和 `SECURE_COOKIES` `auto`/`true`/`false` 选择器——其 `docker-compose.yml` 将每个变量传递到容器（镜像 `mihomo-subscription:0.1.2`）。将 `Cargo.toml`/`Cargo.lock` 升级到 `0.1.2`，将 README/CLAUDE/AGENTS 构建命令和 CI 1Panel-YAML 门指向新包，并清除了 `docs/1panel-app.md` 中的“包更新待定”标记。不完整的 `0.1.0/` 目录保留用于历史。
+- 新的 `SECURE_COOKIES` 环境变量，用于强制 `Secure` 会话 cookie 属性。它默认从 `https://` 的 `PUBLIC_BASE_URL` 推断，因此在 TLS 终止反向代理后面（应用使用纯 HTTP，`PUBLIC_BASE_URL` 可能未设置或为 `http`），操作员现在可以明确选择加入。服务还在会话 cookie 最终没有 `Secure` 时记录启动警告（见 `src/main.rs`、`docs/technical-roadmap.md` 环境变量表）。
 
-### Changed
+### 变更
 
-- Switched the 1Panel image strategy from on-host local builds to a Docker Hub
-  image. `apps/mihomo-subscription/0.1.2/docker-compose.yml` now references
-  `quinlanhoo/mihomo-subscription:0.1.2` (multi-arch amd64+arm64) so the 1Panel
-  host pulls the image at install instead of syncing source and building locally.
-- Removed the unused `tokio-cron-scheduler` dependency (no scheduler is wired
-  in `src/`), trimming the dependency graph and supply-chain surface.
-- Upgraded `sqlx` 0.7 → 0.8 and switched its feature set from
-  `runtime-tokio-rustls` to `runtime-tokio` (SQLite needs no TLS). This fixes
-  RUSTSEC-2024-0363 and drops the unused rustls stack, clearing three
-  `rustls-webpki` advisories and the `rustls-pemfile`/`paste` unmaintained
-  warnings. No code changes were required.
-- Replaced the fixed-window rate limiter with a token bucket (`src/rate_limit.rs`).
-  Same `max`/`window` knobs, but tokens refill continuously, removing the ~2x
-  burst a fixed window allows across its boundary while still permitting a
-  legitimate burst up to `max`.
+- 将 1Panel 镜像策略从主机本地构建切换到 Docker Hub 镜像。`apps/mihomo-subscription/0.1.2/docker-compose.yml` 现在引用 `quinlanhoo/mihomo-subscription:0.1.2`（多架构 amd64+arm64），因此 1Panel 主机在安装时拉取镜像，而不是同步源代码并在本地构建。
+- 移除了未使用的 `tokio-cron-scheduler` 依赖（`src/` 中未连接调度器），精简了依赖图和供应链面。
+- 将 `sqlx` 从 0.7 升级到 0.8，并将其功能集从 `runtime-tokio-rustls` 切换到 `runtime-tokio`（SQLite 不需要 TLS）。这修复了 RUSTSEC-2024-0363 并删除了未使用的 rustls 堆栈，清除了三个 `rustls-webpki` 公告和 `rustls-pemfile`/`paste` 未维护警告。无需代码更改。
+- 将固定窗口限流器替换为令牌桶（`src/rate_limit.rs`）。相同的 `max`/`window` 旋钮，但令牌连续补充，消除了固定窗口在其边界允许的约 2 倍突发，同时仍允许最多 `max` 的合法突发。
 
-### Fixed
+### 安全
 
-### Security
+- 加固了会话 cookie 签发：以前 `Secure` 属性仅在 `PUBLIC_BASE_URL` 以 `https://` 开头时设置，因此在 HTTPS 反向代理后面（`PUBLIC_BASE_URL` 未设置）的部署会静默签发没有 `Secure` 的会话 cookie（暴露于明文传输）。新的 `SECURE_COOKIES` 覆盖加启动警告关闭了该缺口。
+- 添加了 `cargo audit` CI 门（`.github/workflows/ci.yml`），在 `.cargo/audit.toml` 中记录了每公告忽略（仅 `rsa`——由功能门控、从未编译的 `sqlx-mysql` 驱动程序拉取，无上游修复——和信息性的 `rustls-pemfile` 未维护通知）。新公告现在使构建失败。
+- 在写入时（配置文件创建/更新）验证机场 `source_url`：预先拒绝非 http(s) 方案、嵌入凭据、环回主机名和阻止的字面 IP，返回通用 `400`。这是纵深防御和更清晰的错误——权威 SSRF 检查仍在获取时运行，具有 DNS 解析和 IP 固定（`src/fetch.rs`）。
+- 在创建新会话时扫描过期会话（`src/auth.rs`），限制内存中的会话映射，使废弃/过期条目无法再累积（创建是唯一点）。
+- 审计了数据库错误日志行（`src/error.rs`），确认 `sqlx` 错误显示从不包含绑定参数值（仅驱动程序/约束文本），因此机场 URL 和 token 不能通过它泄露；添加了注释以保持这种方式。
 
-- Hardened session-cookie issuance: previously the `Secure` attribute was set
-  only when `PUBLIC_BASE_URL` began with `https://`, so a deployment behind an
-  HTTPS reverse proxy that left `PUBLIC_BASE_URL` unset would silently issue
-  session cookies without `Secure` (exposing them to plaintext transmission).
-  The new `SECURE_COOKIES` override plus startup warning close that gap.
-- Added a `cargo audit` CI gate (`.github/workflows/ci.yml`) with documented,
-  per-advisory ignores in `.cargo/audit.toml` (only `rsa` — pulled by the
-  feature-gated, never-compiled `sqlx-mysql` driver, no upstream fix — and the
-  informational `rustls-pemfile` unmaintained notice). New advisories now fail
-  the build.
-- Validate provider `source_url` at write time (profile create/update): reject
-  non-http(s) schemes, embedded credentials, loopback hostnames, and blocked
-  literal IPs up front with a generic `400`. This is defense in depth and a
-  clearer error — the authoritative SSRF check still runs at fetch time with DNS
-  resolution and IP pinning (`src/fetch.rs`).
-- Sweep expired sessions when a new one is created (`src/auth.rs`), bounding the
-  in-memory session map so abandoned/expired entries can no longer accumulate
-  (creation is the only growth point).
-- Audited the database-error log line (`src/error.rs`) and confirmed `sqlx`
-  error Display never includes bound parameter values (only driver/constraint
-  text), so provider URLs and tokens cannot leak through it; added a comment to
-  keep it that way.
+### 文档
 
-### Documentation
-
-- Reworked `docs/release.md` to make multi-arch `docker buildx ... --push` to
-  Docker Hub the primary build step (with a Personal Access Token login note and
-  the required `docker-container` builder), and demoted on-host `docker build` to
-  an offline/intranet fallback appendix. Updated the image-reference item in the
-  `docs/1panel-app.md` validation checklist accordingly.
-- Updated `README.md` again for the Docker Hub deployment: the "Deploy in 1Panel"
-  section now pulls the published image and presents a hand-written Compose as
-  the primary, copy-paste-ready path — a complete env block with every variable
-  (required / fixed / optional grouped, only four values marked `← edit`) plus a
-  healthcheck, with the 1Panel app-package install demoted to a one-line pointer.
-  The status banner reflects the published `0.1.2` image and the complete 1Panel
-  install form. Synced the image-strategy notes in `CLAUDE.md` and `AGENTS.md`.
-- Rewrote `README.md` into a concise user-facing guide (~185 → ~109 lines): a
-  short intro, a focused "Deploy in 1Panel" section (local-image build, Compose
-  with the required env vars including `SECURE_COOKIES`, and the Host-header
-  reverse-proxy requirement), and a brief usage walkthrough. The architecture
-  diagram, capabilities list, and full development section were dropped in favor
-  of pointers to `docs/`, `CLAUDE.md`, and `AGENTS.md`.
-- Removed the development-phase planning docs `docs/plan.md` and
-  `docs/technical-roadmap.md` now that the design is implemented. Their durable
-  content was folded into the maintenance docs: the authoritative environment
-  variable table moved to `docs/1panel-app.md`, and the converter's top-level
-  key handling moved to `docs/api-design.md`. All cross-references in
-  `README.md`, `CLAUDE.md`, `AGENTS.md`, `docs/`, and `src/converter.rs` were
-  repointed accordingly.
-- Compressed `AGENTS.md` (~137 → ~77 lines): merged the command blocks and
-  condensed the change-rule and security-default bullets without dropping any
-  rule.
-- Compressed `CLAUDE.md` (~147 → ~111 lines): dropped the implemented-files
-  enumeration that duplicated the code-layout map and merged the command blocks,
-  keeping the non-obvious implementation rules and module map intact.
+- 重新设计了 `docs/release.md`，使多架构 `docker buildx ... --push` 到 Docker Hub 成为主要构建步骤（带有个人访问令牌登录说明和所需的 `docker-container` 构建器），并将主机 `docker build` 降级为离线/内网回退附录。相应更新了 `docs/1panel-app.md` 验证检查清单中的镜像引用项。
+- 再次更新 `README.md` 用于 Docker Hub 部署：“在 1Panel 中部署”部分现在拉取发布的镜像，并将手写 Compose 作为主要的、可复制粘贴的路径——包含每个变量的完整环境块（必需/固定/可选分组，仅四个值标记为 `← edit`）加健康检查，1Panel 应用包安装降级为单行指针。状态横幅反映发布的 `0.1.2` 镜像和完整的 1Panel 安装表单。同步了 `CLAUDE.md` 和 `AGENTS.md` 中的镜像策略说明。
+- 将 `README.md` 重写为简洁的面向用户指南（约 185 行 → 约 109 行）：简短介绍，重点突出的“在 1Panel 中部署”部分（本地镜像构建、包含必需环境变量（包括 `SECURE_COOKIES`）的 Compose，以及主机头反向代理要求），以及简要使用演练。架构图、功能列表和完整开发部分被删除，改为指向 `docs/`、`CLAUDE.md` 和 `AGENTS.md`。
+- 在设计实现后删除了开发阶段规划文档 `docs/plan.md` 和 `docs/technical-roadmap.md`。其持久内容已并入维护文档：权威环境变量表移至 `docs/1panel-app.md`，转换器的顶级键处理移至 `docs/api-design.md`。`README.md`、`CLAUDE.md`、`AGENTS.md`、`docs/` 和 `src/converter.rs` 中的所有交叉引用均已相应重定向。
+- 压缩了 `AGENTS.md`（约 137 行 → 约 77 行）：合并了命令块并浓缩了变更规则和安全默认子弹，未删除任何规则。
+- 压缩了 `CLAUDE.md`（约 147 行 → 约 111 行）：删除了重复代码布局映射的已实现文件枚举，并合并了命令块，保持非显而易见的实现规则和模块映射完整。
 
 ## [0.1.1] - 2026-06-13
 
-### Security
+### 安全
 
-- Hardened against YAML alias-expansion ("billion laughs"): `src/yaml.rs` now
-  counts `&anchor`/`*alias` tokens in the raw text and rejects documents over a
-  small cap *before* `serde_yaml` parses them (the bomb is tiny and expands
-  inside the parser, so the size/depth/node checks can't help). Applies to both
-  admin node/group content and fetched provider YAML.
-- Made public-download rate limiting throttle token enumeration: the limiter is
-  now keyed by client IP only (not IP + path), so guessing many distinct tokens
-  from one IP shares a single budget and `404`-generating scans are throttled.
-- Removed the version number from the unauthenticated `/health` response (it
-  now returns only `{"status":"ok"}`) to avoid version disclosure.
+- 加固了 YAML 别名扩展（“十亿笑”）：`src/yaml.rs` 现在在原始文本中计数 `&anchor`/`*alias` 令牌，并在 `serde_yaml` 解析前拒绝超过小上限的文档（炸弹很小且在解析器内扩展，因此大小/深度/节点检查无济于事）。适用于管理员节点/分组内容和获取的机场 YAML。
+- 使公共下载限流节制 token 枚举：限流器现在仅按客户端 IP 键控（不是 IP + 路径），因此从一个 IP 猜测许多不同 token 共享单一预算，产生 `404` 的扫描被节流。
+- 从未经认证的 `/health` 响应中移除了版本号（现在仅返回 `{"status":"ok"}`），以避免版本泄露。
 
-### Documentation
+### 文档
 
-- Documented the reverse-proxy `Host` passthrough requirement in
-  `docs/1panel-app.md` (the `Origin` check 403s state-changing requests if the
-  proxy rewrites `Host`), and updated `docs/security-design.md` for the
-  pre-parse anchor/alias cap and the per-IP download limit.
-- Synced `AGENTS.md` with the current repo state and GitHub hosting: corrected
-  the key-paths list (library/bin split, `web/`, `migrations/`, CI workflow),
-  dropped the "target" wording now that the design is implemented, aligned the
-  commands with the CI gates (`fmt --check`, `clippy -D warnings`, `test`) plus
-  the frontend build, and added a "Repository & CI" section (GitHub `main`/PR
-  flow, CI gates, release/tag steps).
+- 在 `docs/1panel-app.md` 中记录了反向代理 `Host` 透传要求（如果代理重写 `Host`，`Origin` 检查会对状态更改请求返回 403），并更新了 `docs/security-design.md` 的预解析锚点/别名上限和每 IP 下载限制。
+- 将 `AGENTS.md` 与当前仓库状态和 GitHub 托管同步：更正了关键路径列表（库/二进制分割、`web/`、`migrations/`、CI 工作流），删除了设计实现后的“目标”措辞，将命令与 CI 门（`fmt --check`、`clippy -D warnings`、`test`）加前端构建对齐，并添加了“仓库和 CI”部分（GitHub `main`/PR 流程、CI 门、发布/标签步骤）。
 
 ## [0.1.0] - 2026-06-13
 
-### Added
+### 新增
 
-- Reworked the `Dockerfile` into a three-stage build: a `node:20-slim` stage
-  builds the SPA (`web/dist`), the Rust stage compiles the binary (now copying
-  `migrations/` so `sqlx::migrate!` can embed them), and the runtime image
-  ships only the binary plus the built assets (served via `WEB_DIR`). Bumped
-  the build image to `rust:1.90-slim` (a transitive dependency now requires
-  edition2024). Expanded `.dockerignore`. Smoke-tested: `/health` OK, SPA
-  served, unauthenticated `/api` returns `401`. The 1Panel app package update
-  is intentionally deferred.
-- Built the profile detail page and editors (frontend step 2): hosted-link
-  header (copy, QR, reset-token with confirm, and a "modified but not
-  generated" banner derived client-side from the latest sub-resource
-  modification vs `last_generated_at`); six configuration cards (basic info,
-  source with masked URL / last-fetch status / write-only URL replacement /
-  manual refresh, custom nodes and groups CRUD, a CodeMirror rules editor, and
-  output preview); and a generate footer that maps itemized `400` validation
-  errors back to the editor — rule-line errors get a click-to-jump into the
-  CodeMirror editor. Added `last_generated_at` to the profile API response
-  (correlated subquery in `src/profiles.rs`) to drive the banner, aligning with
-  `docs/api-design.md`. New web deps: `@uiw/react-codemirror`,
-  `@codemirror/lang-yaml`, `@codemirror/state`.
-- Scaffolded the `web/` SPA (Vite + React + TypeScript + Ant Design +
-  react-i18next): routes for `/login`, `/` (profile list), `/profiles/:id`
-  (skeleton detail with hosted-link copy + QR), and `/settings` (public-path
-  reset with typed confirmation); a fetch client whose `401` handler clears the
-  session so `RequireAuth` redirects to `/login` preserving the return path;
-  the Vite dev server proxies `/api` and `/health` to the backend. Added a
-  frontend CI job (`npm ci` + `npm run build`). The full configuration cards
-  and editors come in the next step.
-- Implemented client-IP derivation and rate limiting: `src/net.rs` derives the
-  client IP from `X-Forwarded-For` counting `TRUSTED_PROXY_HOPS` from the right
-  (spoofed left entries ignored; falls back to the TCP peer), fully unit-tested;
-  `src/rate_limit.rs` adds an in-memory fixed-window limiter plus login
-  (per-IP) and public-download (per-IP+path) middleware. `main` serves with
-  connect-info so the TCP peer is available, reads `TRUSTED_PROXY_HOPS`, and
-  configures the limiters. This also supplies the login-failure rate limiting
-  deferred from the auth step. Per-profile refresh limiting is provided
-  structurally by the single-flight lock plus cache TTL.
-- Implemented generation, preview, and the public subscription endpoint
-  (`src/generate.rs`): `generate` (and the source-card manual refresh) fetches
-  via the injected `SubscriptionFetcher`, converts, persists `generated_cache`,
-  and updates `last_fetch_*`; `preview` is read-only (no cache write, no
-  `last_fetch_*` change); the public endpoint serves fresh cache, refreshes
-  under a per-profile single-flight lock (`src/single_flight.rs`), falls back
-  to stale cache on refresh failure, returns a generic `503` when no cache
-  exists and the fetch fails, and a uniform `404` (constant-time prefix
-  compare, always-run token lookup) for wrong prefix / unknown token /
-  disabled profile. Adds the documented response headers
-  (`subscription-userinfo` passthrough, `profile-update-interval`,
-  `content-disposition`). The fetch is abstracted behind `SubscriptionFetcher`
-  (real `HttpFetcher` in production) so the paths are tested without network;
-  `tests/generate.rs` covers cache-hit, single-flight coalescing, stale
-  fallback, `503`, and uniform `404`. New env wiring: `FETCH_TIMEOUT_SECONDS`,
-  `MAX_SUBSCRIPTION_SIZE_MB`, `CACHE_TTL_MINUTES`.
-- Implemented the `mihomo`/`clash` -> `mihomo` converter (MVP release gate):
-  `src/converter.rs` parses provider YAML (bounded), appends enabled custom
-  nodes/groups, replaces `rules`, strips `proxy-providers`, and passes through
-  `rule-providers` and all other top-level keys. Generate-time validation
-  returns an itemized error list: custom-group/provider-group name collisions,
-  custom-node/provider-proxy collisions, rule policy targets and group members
-  that don't resolve to a known proxy/group/built-in. Logical/nested rules
-  (with parentheses) pass through without target validation. Nine fixture
-  unit tests cover append/replace/passthrough/strip/collision/dangling-ref.
-- Refreshed `CLAUDE.md` to match the active implementation: status now lists
-  what is built vs pending (no longer "planning stage"), commands cover the CI
-  gates and single-test invocation, and architecture describes the lib/bin
-  split, the per-feature module layout, and the `ServiceExt`/`TempDb` test
-  pattern (replacing the obsolete `src/main.rs` prototype description).
-- Implemented the SSRF-protected provider fetch (MVP release gate): `src/ssrf.rs`
-  with network-free, table-tested URL/IP validation covering every blocked
-  IPv4/IPv6 range plus the IPv4-mapped/NAT64/6to4 unwrap bypasses; `src/fetch.rs`
-  performing per-hop validation, host resolution with validated-IP pinning
-  (DNS-rebinding safe), manual redirect re-validation (max 3), connect/total
-  timeouts, a streamed response-size cap (not `Content-Length`), binary
-  content-type rejection, and `subscription-userinfo` sanitization. `FetchError`
-  maps to `last_fetch_status` labels for reuse by the generate step.
-- Finalized the integration-test baseline and CI (Skeleton step 4): added
-  `.github/workflows/ci.yml` running `cargo fmt --check`, `cargo clippy
-  --all-targets -D warnings`, `cargo test`, and the 1Panel app-package YAML
-  validation; deduplicated `tests/db_cascade.rs` onto the shared
-  `tests/common` helpers. The `ServiceExt`-based auth and profile suites
-  (21 tests) stand as the regression baseline.
-- Implemented profile CRUD and sub-resources (Skeleton step 3): profiles
-  (create/list/detail/update/delete) plus rules (replace), custom nodes and
-  groups (CRUD), reset-token, settings read, and reset-public-path, all under
-  session auth. Provider URLs are write-only and masked deterministically
-  (`src/mask.rs`); the hosted link is assembled from the live public path
-  prefix (now an `RwLock` in `AppState`, updated by reset-public-path) plus the
-  per-profile token. Added `src/error.rs` (error envelope, UNIQUE→409 mapping),
-  `src/yaml.rs` (depth/node-count-bounded parsing for admin node content),
-  `src/util.rs` (timestamps, random token/prefix), `src/profiles.rs`,
-  `src/settings.rs`, and `tests/profiles.rs`. Conversion endpoints
-  (generate/preview/public) remain for a later step.
-- Implemented session authentication and same-origin static serving
-  (Skeleton step 2): `src/auth.rs` with constant-time credential verification
-  (digest-based, no length leak), an in-memory session store (256-bit IDs,
-  7-day idle expiry), login/logout/session handlers, a `require_session`
-  middleware (`401` otherwise), and an `Origin` check on state-changing
-  requests; `src/app.rs` assembling the router with no CORS layer, a 1 MB
-  body limit, and an SPA `ServeDir` fallback; `main.rs` now refuses to start
-  without `ADMIN_USERNAME`/`ADMIN_PASSWORD` and enables `Secure` cookies under
-  an HTTPS `PUBLIC_BASE_URL`. Added `tests/auth.rs` and a shared
-  `tests/common` helper. Login-failure rate limiting is deferred to the
-  rate-limit task.
-- Began implementing the documented design (Skeleton step 1): added
-  `migrations/0001_init.sql` creating the target schema and dropping the
-  prototype `subscriptions` table; added a `src/db.rs` module that opens the
-  SQLite pool with per-connection `foreign_keys`/`busy_timeout`/WAL pragmas,
-  runs migrations, and seeds the `app_settings` public path prefix; added a
-  `src/lib.rs` so integration tests can use the crate; added
-  `tests/db_cascade.rs` proving profile deletion cascades to all child tables
-  (and the foreign-keys pragma holds across pooled connections).
-- Initialized project documentation under `docs`.
-- Added 1Panel app packaging notes.
-- Added technical roadmap for the Mihomo subscription conversion service.
-- Added security design covering public links, admin authentication, SSRF
-  protection, sensitive data handling, and caching.
-- Added product plan covering MVP scope, custom rules, custom nodes, custom
-  proxy groups, permanent links, and 1Panel deployment expectations.
-- Added `AGENTS.md` for future coding-agent handoff.
+- 将 `Dockerfile` 重新设计为三阶段构建：`node:20-slim` 阶段构建 SPA（`web/dist`），Rust 阶段编译二进制文件（现在复制 `migrations/` 以便 `sqlx::migrate!` 可以嵌入它们），运行时镜像仅包含二进制文件加构建资产（通过 `WEB_DIR` 提供）。将构建镜像升级到 `rust:1.90-slim`（传递依赖现在需要 edition2024）。扩展了 `.dockerignore`。冒烟测试：`/health` 正常，SPA 提供，未经认证的 `/api` 返回 `401`。1Panel 应用包更新有意推迟。
+- 构建了配置文件详情页和编辑器（前端步骤 2）：托管链接头（复制、QR、重置 token 带确认，以及从最新子资源修改与 `last_generated_at` 客户端派生的“已修改但未生成”横幅）；六个配置卡（基本信息、源带屏蔽 URL/最后获取状态/只写 URL 替换/手动刷新、自定义节点和分组 CRUD、CodeMirror 规则编辑器和输出预览）；以及生成页脚，将逐项 `400` 验证错误映射回编辑器——规则行错误获得点击跳转到 CodeMirror 编辑器。在配置文件 API 响应中添加了 `last_generated_at`（`src/profiles.rs` 中的相关子查询）以驱动横幅，与 `docs/api-design.md` 对齐。新 Web 依赖：`@uiw/react-codemirror`、`@codemirror/lang-yaml`、`@codemirror/state`。
+- 搭建了 `web/` SPA（Vite + React + TypeScript + Ant Design + react-i18next）：`/login`、`/`（配置文件列表）、`/profiles/:id`（带托管链接复制 + QR 的骨架详情）和 `/settings`（带类型确认的公共路径重置）的路由；一个获取客户端，其 `401` 处理器清除会话，使 `RequireAuth` 重定向到 `/login` 保留返回路径；Vite 开发服务器将 `/api` 和 `/health` 代理到后端。添加了前端 CI 作业（`npm ci` + `npm run build`）。完整配置卡和编辑器在下一步。
+- 实现了客户端 IP 派生和限流：`src/net.rs` 从 `X-Forwarded-For` 从右边计数 `TRUSTED_PROXY_HOPS` 派生客户端 IP（忽略伪造的左边条目；回退到 TCP 对等），完全单元测试；`src/rate_limit.rs` 添加了内存中固定窗口限流器加登录（每 IP）和公共下载（每 IP+路径）中间件。`main` 提供 connect-info 以便 TCP 对等可用，读取 `TRUSTED_PROXY_HOPS`，并配置限流器。这也提供了从认证步骤推迟的登录失败限流。每配置文件刷新限流由单发锁加缓存 TTL 结构性提供。
+- 实现了生成、预览和公共订阅端点（`src/generate.rs`）：`generate`（和源卡手动刷新）通过注入的 `SubscriptionFetcher` 获取，转换，持久化 `generated_cache`，并更新 `last_fetch_*`；`preview` 是只读的（无缓存写入，无 `last_fetch_*` 更改）；公共端点提供新鲜缓存，在每配置文件单发锁下刷新（`src/single_flight.rs`），在刷新失败时回退到陈旧缓存，当无缓存且获取失败时返回通用 `503`，以及对错误前缀/未知 token/禁用配置文件的统一 `404`（恒定时间前缀比较，始终运行 token 查找）。添加了记录的响应头（`subscription-userinfo` 透传、`profile-update-interval`、`content-disposition`）。获取抽象在 `SubscriptionFetcher` 后面（生产中的真实 `HttpFetcher`），因此路径在没有网络的情况下测试；`tests/generate.rs` 覆盖缓存命中、单发合并、陈旧回退、`503` 和统一 `404`。新环境变量连接：`FETCH_TIMEOUT_SECONDS`、`MAX_SUBSCRIPTION_SIZE_MB`、`CACHE_TTL_MINUTES`。
+- 实现了 `mihomo`/`clash` -> `mihomo` 转换器（MVP 发布门）：`src/converter.rs` 解析机场 YAML（有界），追加启用的自定义节点/分组，替换 `rules`，剥离 `proxy-providers`，并透传 `rule-providers` 和所有其他顶级键。生成时验证返回逐项错误列表：自定义分组/机场分组名称冲突、自定义节点/机场代理冲突、规则策略目标和分组成员未解析到已知代理/分组/内置。逻辑/嵌套规则（带括号）无目标验证通过。九个夹具单元测试覆盖追加/替换/透传/剥离/冲突/悬挂引用。
+- 刷新了 `CLAUDE.md` 以匹配活动实现：状态现在列出已构建与待定（不再是“规划阶段”），命令覆盖 CI 门和单测试调用，架构描述了 lib/bin 分割、每功能模块布局和 `ServiceExt`/`TempDb` 测试模式（取代了过时的 `src/main.rs` 原型描述）。
+- 实现了 SSRF 保护的机场获取（MVP 发布门）：`src/ssrf.rs` 无网络、表测试 URL/IP 验证覆盖每个阻止的 IPv4/IPv6 范围加 IPv4 映射/NAT64/6to4 解包绕过；`src/fetch.rs` 执行每跳验证、主机解析带验证 IP 固定（DNS 重绑定安全）、手动重定向重新验证（最多 3）、连接/总超时、流式响应大小限制（不是 `Content-Length`）、二进制内容类型拒绝和 `subscription-userinfo` 清理。`FetchError` 映射到 `last_fetch_status` 标签以供生成步骤重用。
+- 确定了集成测试基线和 CI（骨架步骤 4）：添加了 `.github/workflows/ci.yml` 运行 `cargo fmt --check`、`cargo clippy --all-targets -D warnings`、`cargo test` 和 1Panel 应用包 YAML 验证；将 `tests/db_cascade.rs` 去重到共享的 `tests/common` 助手。基于 `ServiceExt` 的认证和配置文件套件（21 个测试）作为回归基线。
+- 实现了配置文件 CRUD 和子资源（骨架步骤 3）：配置文件（创建/列表/详情/更新/删除）加规则（替换）、自定义节点和分组（CRUD）、重置 token、设置读取和重置公共路径，全部在会话认证下。机场 URL 是只写的，并确定性屏蔽（`src/mask.rs`）；托管链接从实时公共路径前缀（现在是 `AppState` 中的 `RwLock`，由重置公共路径更新）加每配置文件 token 组装。添加了 `src/error.rs`（错误信封、UNIQUE→409 映射）、`src/yaml.rs`（管理员节点内容的深度/节点计数解析）、`src/util.rs`（时间戳、随机 token/前缀）、`src/profiles.rs`、`src/settings.rs` 和 `tests/profiles.rs`。转换端点（生成/预览/公共）留待后续步骤。
+- 实现了会话认证和同源静态服务（骨架步骤 2）：`src/auth.rs` 具有恒定时间凭据验证（基于摘要，无长度泄露）、内存中会话存储（256 位 ID，7 天空闲过期）、登录/注销/会话处理器、`require_session` 中间件（否则 `401`），以及状态更改请求上的 `Origin` 检查；`src/app.rs` 组装路由器，无 CORS 层，1 MB 正文限制，SPA `ServeDir` 回退；`main.rs` 现在在没有 `ADMIN_USERNAME`/`ADMIN_PASSWORD` 时拒绝启动，并在 HTTPS `PUBLIC_BASE_URL` 下启用 `Secure` cookie。添加了 `tests/auth.rs` 和共享的 `tests/common` 助手。登录失败限流推迟到限流任务。
+- 开始实现记录的设计（骨架步骤 1）：添加了 `migrations/0001_init.sql` 创建目标模式并删除原型 `subscriptions` 表；添加了 `src/db.rs` 模块，打开 SQLite 池，每连接 `foreign_keys`/`busy_timeout`/WAL pragma，运行迁移，并种子 `app_settings` 公共路径前缀；添加了 `src/lib.rs` 以便集成测试可以使用 crate；添加了 `tests/db_cascade.rs` 证明配置文件删除级联到所有子表（且外键 pragma 在池化连接中保持）。
+- 在 `docs` 下初始化了项目文档。
+- 添加了 1Panel 应用打包说明。
+- 添加了 Mihomo 订阅转换服务的技术路线图。
+- 添加了涵盖公共链接、管理员认证、SSRF 保护、敏感数据处理和缓存的安全设计。
+- 添加了涵盖 MVP 范围、自定义规则、自定义节点、自定义代理组、永久链接和 1Panel 部署期望的产品计划。
+- 添加了 `AGENTS.md` 用于未来的编码代理交接。
 
-### Changed
+### 变更
 
-- Clarified that permanent public subscription links should use both a random
-  public path prefix and per-profile token.
-- Expanded the planned product scope from subscription URL CRUD to profile-based
-  Mihomo subscription conversion and distribution.
+- 阐明永久公共订阅链接应同时使用随机公共路径前缀和每配置文件 token。
+- 将计划产品范围从订阅 URL CRUD 扩展到基于配置文件的 Mihomo 订阅转换和分发。
 
-### Fixed
+### 修复
 
-- Updated the Axum service startup code for Axum 0.7 compatibility.
-- Installed `wget` in the runtime image so health checks can run.
+- 更新了 Axum 服务启动代码以兼容 Axum 0.7。
+- 在运行时镜像中安装了 `wget` 以便健康检查可以运行。
 
-### Security
+### 安全
 
-- Documented SSRF protection requirements for provider subscription fetching.
-- Closed a second round of design-review gaps in concurrency, deployment
-  topology, and storage correctness: a per-profile single-flight lock to
-  prevent stale-cache refresh stampedes; correct client-IP derivation behind
-  the 1Panel reverse proxy via `TRUSTED_PROXY_HOPS` (added to the environment
-  variable table); always-perform, constant-time public token lookup to avoid
-  timing disclosure of the path prefix; management request body size limits
-  (`413`) with the same YAML parse limits for admin-submitted content; and
-  per-connection SQLite pragmas (`foreign_keys`, `busy_timeout`) applied via
-  an after-connect hook so `ON DELETE CASCADE` is not silently disabled.
-- Extended the testing strategy with cascade-delete, `503`, `413`, and
-  single-flight concurrency cases.
+- 记录了机场订阅获取的 SSRF 保护要求。
+- 在并发、部署拓扑和存储正确性方面关闭了第二轮设计审查缺口：每配置文件单发锁防止陈旧缓存刷新踩踏；在 1Panel 反向代理后面通过 `TRUSTED_PROXY_HOPS` 正确获取客户端 IP（添加到环境变量表）；始终执行、恒定时间公共 token 查找以避免路径前缀的时序泄露；管理请求正文大小限制（`413`），管理员提交内容使用相同的 YAML 解析限制；以及每连接 SQLite pragma（`foreign_keys`、`busy_timeout`）通过 after-connect 钩子应用，使 `ON DELETE CASCADE` 不被静默禁用。
+- 扩展了测试策略，包括级联删除、`503`、`413` 和单发并发案例。
 
-### Documentation
+### 文档
 
-- Updated `CLAUDE.md` for the frontend: added the `web/` npm commands
-  (dev/build/typecheck) and completed the Code-layout module list
-  (`converter`, `generate`, `single_flight`, `rate_limit`, `net`, the
-  injectable `SubscriptionFetcher`) plus the SPA serving note.
-- Flipped the project status from planning to implemented: removed the
-  "状态:规划阶段 / Status: planning" banners from `api-design.md` and
-  `data-model.md` (now implemented), reworded the `release.md` and
-  `1panel-app.md` banners to "not yet released / package update pending",
-  refreshed the status sections in `CLAUDE.md`, `AGENTS.md`, the root
-  `README.md`, and `docs/README.md`, and removed the obsolete prototype-route
-  compatibility note. The changelog version roll to a dated `0.1.0` is
-  intentionally deferred until the 1Panel app package is updated and a release
-  is actually cut.
-- Added a "Non-obvious implementation rules" section to `CLAUDE.md`
-  summarizing the cross-cutting SSRF, single-flight, SQLite pool, client-IP,
-  timing, and CORS requirements for future implementing instances.
-- Hardened the SSRF design after a security review: blocked IPv4-embedding
-  IPv6 ranges (IPv4-mapped, NAT64, 6to4) with embedded-address re-checking,
-  required pinning of validated IPs against DNS rebinding, required the
-  response size limit to count streamed bytes instead of `Content-Length`,
-  and added TEST-NET/6to4-relay IPv4 ranges.
-- Added an untrusted content handling section: YAML alias/nesting parse
-  limits, `subscription-userinfo` format validation before storage or echo,
-  and escaping of provider-supplied names in the Web UI.
-- Strengthened the auth design: constant-time credential comparison, minimum
-  session-ID entropy, a same-origin/no-CORS policy for the management API
-  (the prototype's permissive CORS layer must be removed when auth lands),
-  and `Origin` verification as CSRF defense in depth.
-- Documented masking requirements for original provider subscription URLs.
-- Documented administrator login requirements and 1Panel compose-based
-  credential configuration.
-- Added this changelog template and initial unreleased entries.
-- Simplified `AGENTS.md` into a concise handoff guide.
-- Updated `AGENTS.md` with login credential and 1Panel environment guidance.
-- Added documentation maintenance guidance requiring affected project docs to
-  stay aligned with each change.
-- Documented the planned Web UI structure: hosted link header, Mihomo
-  configuration cards, and generate-link modal.
-- Updated product, security, technical, and 1Panel docs for the login management
-  page requirement.
-- Added `docs/api-design.md` defining the target management API, authentication
-  flow, validation rules, and public subscription endpoint contract (bilingual).
-- Added `docs/data-model.md` defining the target SQLite schema, indexes, and
-  migration strategy (bilingual).
-- Added `docs/release.md` defining versioning, pre-release checks, image build,
-  1Panel app package update, and changelog roll steps (bilingual).
-- Added a root `README.md` with project status, planned capabilities,
-  architecture overview, and documentation index (bilingual).
-- Updated `docs/README.md` to move the planned documents into the published
-  document list.
-- Added `CLAUDE.md` with Claude Code guidance: planning-stage status, commands,
-  target architecture summary, and documentation conventions.
-- Added a change rule requiring `CLAUDE.md` and `AGENTS.md` to be reviewed and
-  updated after every change so agent guidance stays aligned.
-- Added the MIT `LICENSE`, declared `license = "MIT"` in `Cargo.toml`, and
-  added a License section to the root `README.md`.
-- Decided on a local-image strategy: the compose image is now
-  `mihomo-subscription:0.1.0` (built on the 1Panel host, no remote registry);
-  reworked `docs/release.md` accordingly with an optional push appendix.
-- Added a generated placeholder `apps/mihomo-subscription/logo.png` (180x180);
-  to be replaced with a real design before public distribution.
-- Updated `docs/1panel-app.md`, `AGENTS.md`, and `CLAUDE.md` for the local
-  image name and logo status.
-- Added a planning-status banner to `docs/1panel-app.md` and marked
-  not-yet-satisfied validation checklist items as pending, fixing the mismatch
-  with the actual app package contents.
-- Added an authoritative environment variable table to
-  `docs/technical-roadmap.md`, including the previously undefined
-  `CACHE_TTL_MINUTES`, and aligned the cache TTL wording in
-  `docs/security-design.md` and `docs/data-model.md` with it.
-- Documented the frontend build pipeline in `docs/technical-roadmap.md`:
-  `web/` directory layout, Vite dev proxy, Axum static serving with SPA
-  fallback, and a Node Docker build stage.
-- Documented converter top-level key handling in `docs/technical-roadmap.md`:
-  passthrough by default, `proxy-providers` stripped in the MVP for SSRF and
-  URL-exposure reasons.
-- Added a testing strategy to `docs/technical-roadmap.md` with converter and
-  SSRF validator suites as hard gates for the MVP release.
-- Documented client compatibility behavior: `subscription-userinfo`
-  passthrough (stored with the generated cache; new column in
-  `docs/data-model.md`), `profile-update-interval`, and `content-disposition`
-  headers in `docs/api-design.md` and `docs/plan.md`.
-- Defined the remaining API edge semantics in `docs/api-design.md` ahead of
-  implementation: the source card's manual refresh reuses the generate
-  endpoint, preview is read-only (fresh cache or live fetch, never persisted),
-  the public endpoint returns stale cache on refresh failure or a generic
-  `503` when no cache exists, and request body shapes for custom nodes and
-  groups.
-- Specified session storage (in-memory, 7-day idle expiry) and a
-  deterministic URL masking rule (mask every query parameter value) in
-  `docs/security-design.md`, and aligned its error handling section with the
-  public endpoint `503` behavior.
-- Documented the Web UI interaction design in `docs/plan.md`: page routes and
-  two-level information architecture (list / detail / settings), a profile
-  state model with a "modified but not generated" banner, danger-level
-  separation of token vs public path resets, write-only provider URL editing,
-  subscription link QR codes, provider fetch status observability with manual
-  refresh, and session-expiry redirect behavior.
-- Added UI implementation choices to `docs/technical-roadmap.md`: Ant Design,
-  CodeMirror 6 with validation-error line mapping, `qrcode.react`,
-  `react-i18next` from day one, and editor draft persistence rules.
-- Added provider fetch observability fields (`last_fetch_at`,
-  `last_fetch_status`) to `docs/data-model.md` and `docs/api-design.md`.
-- Forbade persisting provider subscription URLs in browser storage in
-  `docs/security-design.md`.
-- Reconciled stale sections of `docs/technical-roadmap.md` with the
-  authoritative docs: the data model sketch (per-profile `public_path` and an
-  outdated link format) now defers to `docs/data-model.md`, the endpoint
-  sketch defers to `docs/api-design.md`, and the architecture diagram shows
-  the public path prefix.
+- 为前端更新了 `CLAUDE.md`：添加了 `web/` npm 命令（dev/build/typecheck）并完成了代码布局模块列表（`converter`、`generate`、`single_flight`、`rate_limit`、`net`、可注入 `SubscriptionFetcher`）加 SPA 服务说明。
+- 将项目状态从规划翻转为已实现：从 `api-design.md` 和 `data-model.md` 中删除了“状态：规划阶段”横幅（现在已实现），将 `release.md` 和 `1panel-app.md` 横幅重新措辞为“尚未发布/包更新待定”，刷新了 `CLAUDE.md`、`AGENTS.md`、根 `README.md` 和 `docs/README.md` 中的状态部分，并删除了过时的原型路由兼容性说明。变更日志版本滚动到带日期的 `0.1.0` 有意推迟，直到 1Panel 应用包更新且实际发布。
+- 在 `CLAUDE.md` 中添加了“非显而易见的实现规则”部分，总结了跨领域的 SSRF、单发、SQLite 池、客户端 IP、时序和 CORS 要求，供未来实现实例使用。
+- 在安全审查后加固了 SSRF 设计：阻止了 IPv4 嵌入的 IPv6 范围（IPv4 映射、NAT64、6to4）带嵌入地址重新检查，要求验证 IP 固定以防止 DNS 重绑定，要求响应大小限制计数字节流而不是 `Content-Length`，并添加了 TEST-NET/6to4 中继 IPv4 范围。
+- 添加了不受信任内容处理部分：YAML 别名/嵌套解析限制，存储或回显前的 `subscription-userinfo` 格式验证，以及 Web UI 中机场提供名称的转义。
+- 加强了认证设计：恒定时间凭据比较，最小会话 ID 熵，管理 API 的同源/无 CORS 策略（原型的宽松 CORS 层必须在认证落地时移除），以及 `Origin` 验证作为 CSRF 纵深防御。
+- 记录了原始机场订阅 URL 的屏蔽要求。
+- 记录了管理员登录要求和 1Panel 基于 compose 的凭据配置。
+- 添加了此变更日志模板和初始未发布条目。
+- 将 `AGENTS.md` 简化为简洁的交接指南。
+- 更新了 `AGENTS.md` 的登录凭据和 1Panel 环境指导。
+- 添加了文档维护指导，要求受影响的项目文档随每次变更保持对齐。
+- 记录了计划的 Web UI 结构：托管链接头、Mihomo 配置卡和生成链接模态框。
+- 为登录管理页面要求更新了产品、安全、技术和 1Panel 文档。
+- 添加了 `docs/api-design.md` 定义目标管理 API、认证流程、验证规则和公共订阅端点契约（双语）。
+- 添加了 `docs/data-model.md` 定义目标 SQLite 模式、索引和迁移策略（双语）。
+- 添加了 `docs/release.md` 定义版本控制、发布前检查、镜像构建、1Panel 应用包更新和变更日志滚动步骤（双语）。
+- 添加了根 `README.md`，包含项目状态、计划功能、架构概述和文档索引（双语）。
+- 更新了 `docs/README.md` 将计划文档移入已发布文档列表。
+- 添加了 `CLAUDE.md`，包含 Claude Code 指导：规划阶段状态、命令、目标架构摘要和文档约定。
+- 添加了变更规则，要求每次变更后审查和更新 `CLAUDE.md` 和 `AGENTS.md`，使代理指导保持对齐。
+- 添加了 MIT `LICENSE`，在 `Cargo.toml` 中声明 `license = "MIT"`，并在根 `README.md` 中添加了许可部分。
+- 决定采用本地镜像策略：compose 镜像现在是 `mihomo-subscription:0.1.0`（在 1Panel 主机上构建，无远程注册表）；相应重新设计了 `docs/release.md`，带有可选推送附录。
+- 添加了生成的占位符 `apps/mihomo-subscription/logo.png`（180x180）；在公共分发前替换为真实设计。
+- 为本地镜像名称和 logo 状态更新了 `docs/1panel-app.md`、`AGENTS.md` 和 `CLAUDE.md`。
+- 在 `docs/1panel-app.md` 中添加了规划状态横幅，并将尚未满足的验证检查清单项标记为待定，修复了与实际应用包内容的不匹配。
+- 在 `docs/technical-roadmap.md` 中添加了权威环境变量表，包括先前未定义的 `CACHE_TTL_MINUTES`，并将其缓存 TTL 措辞与 `docs/security-design.md` 和 `docs/data-model.md` 对齐。
+- 在 `docs/technical-roadmap.md` 中记录了前端构建管道：`web/` 目录布局、Vite 开发代理、Axum 静态服务带 SPA 回退，以及 Node Docker 构建阶段。
+- 在 `docs/technical-roadmap.md` 中记录了转换器顶级键处理：默认透传，MVP 中为 SSRF 和 URL 暴露原因剥离 `proxy-providers`。
+- 在 `docs/technical-roadmap.md` 中添加了测试策略，转换器和 SSRF 验证器套件作为 MVP 发布的硬门。
+- 在 `docs/api-design.md` 和 `docs/plan.md` 中记录了客户端兼容性行为：`subscription-userinfo` 透传（存储在生成的缓存中；`docs/data-model.md` 中的新列）、`profile-update-interval` 和 `content-disposition` 头。
+- 在实现前定义了 `docs/api-design.md` 中的其余 API 边缘语义：源卡的手动刷新重用生成端点，预览是只读的（新鲜缓存或实时获取，永不持久化），公共端点在刷新失败时返回陈旧缓存或无缓存时的通用 `503`，以及自定义节点和分组的请求正文形状。
+- 在 `docs/security-design.md` 中指定了会话存储（内存中，7 天空闲过期）和确定性 URL 屏蔽规则（屏蔽每个查询参数值），并将其错误处理部分与实现对齐。
+- 在 `docs/security-design.md` 中添加了速率限制和滥用控制部分：每 IP 登录限制、每 IP+路径公共下载限制（枚举/扫描共享预算）、每配置文件刷新限制、客户端 IP 从 `X-Forwarded-For` 从右边派生（`TRUSTED_PROXY_HOPS`），以及内存中限制的首次部署可接受性。
+- 将 `docs/security-design.md` 中的缓存建议与实现对齐：每拉取刷新、每配置文件单发锁、`CACHE_TTL_MINUTES` 用于管理员预览、陈旧缓存回退和内容哈希缓存键。
+- 在 `docs/data-model.md` 中记录了 `last_fetch_*` 和 `subscription_userinfo` 列，更新了 `docs/api-design.md` 的源卡响应，并添加了 `last_generated_at` 到配置文件响应。
+- 在 `docs/security-design.md` 中添加了缓存和刷新策略部分：避免在每个公共下载上获取，每拉取刷新，每配置文件单发锁，以及 `CACHE_TTL_MINUTES` 用于管理员预览。
+- 在 `docs/security-design.md` 中添加了错误处理部分：公共端点统一 `404`、陈旧缓存回退、通用 `503`、无上游细节；管理 API 有用验证错误，无秘密。
+- 在 `docs/security-design.md` 中添加了安全检查清单：管理 API 认证、`PUBLIC_PATH_PREFIX` 和 token、加密安全 token、SSRF URL/IP 阻止、重定向重新验证、超时/大小限制、YAML 解析限制、恒定时间凭据、无宽松 CORS、机场 URL 屏蔽、公共端点统一 `404`、缓存防止重复获取。
+- 在 `docs/api-design.md` 中添加了公共订阅端点：`GET /<prefix>/api/sub/<token>`、响应头（`subscription-userinfo`、`profile-update-interval`、`content-disposition`）、`404` 失败、`503` 回退。
+- 在 `docs/api-design.md` 中添加了管理 API 端点：配置文件 CRUD、规则 CRUD、自定义节点/分组 CRUD、生成/预览、重置 token、设置读取、重置公共路径。
+- 在 `docs/api-design.md` 中添加了认证：`ADMIN_USERNAME`/`ADMIN_PASSWORD` 环境变量、会话 cookie、`HttpOnly`/`SameSite`/`Secure`、`Origin` 检查、登录/注销/会话端点。
+- 在 `docs/api-design.md` 中添加了转换器行为：追加自定义节点，替换规则，剥离 `proxy-providers`，透传 `rule-providers` 和其他键。
+- 在 `docs/data-model.md` 中添加了 SQLite 模式：`profiles`、`rulesets`、`custom_nodes`、`custom_groups`、`generated_cache`、`app_settings`。
+- 在 `docs/data-model.md` 中添加了索引和迁移策略。
+- 在 `docs/release.md` 中添加了版本控制、发布前检查、镜像构建、1Panel 应用包更新和变更日志滚动步骤。
+- 在 `docs/1panel-app.md` 中添加了 1Panel 本地应用打包：目录布局、本地安装路径、环境变量表、验证检查清单。
+- 添加了 MIT `LICENSE`。
+- 添加了 `.gitignore`。
+- 添加了 `Cargo.toml`。
+- 添加了 `src/main.rs`。
+- 添加了 `src/lib.rs`。
+- 添加了 `src/db.rs`。
+- 添加了 `src/auth.rs`。
+- 添加了 `src/app.rs`。
+- 添加了 `src/profiles.rs`。
+- 添加了 `src/settings.rs`。
+- 添加了 `src/generate.rs`。
+- 添加了 `src/converter.rs`。
+- 添加了 `src/ssrf.rs`。
+- 添加了 `src/fetch.rs`。
+- 添加了 `src/yaml.rs`。
+- 添加了 `src/util.rs`。
+- 添加了 `src/error.rs`。
+- 添加了 `src/mask.rs`。
+- 添加了 `src/net.rs`。
+- 添加了 `src/rate_limit.rs`。
+- 添加了 `src/single_flight.rs`。
+- 添加了 `migrations/0001_init.sql`。
+- 添加了 `tests/auth.rs`。
+- 添加了 `tests/profiles.rs`。
+- 添加了 `tests/db_cascade.rs`。
+- 添加了 `tests/generate.rs`。
+- 添加了 `tests/common/mod.rs`。
+- 添加了 `web/` 目录。
+- 添加了 `web/package.json`。
+- 添加了 `web/tsconfig.json`。
+- 添加了 `web/vite.config.ts`。
+- 添加了 `web/index.html`。
+- 添加了 `web/src/main.tsx`。
+- 添加了 `web/src/App.tsx`。
+- 添加了 `web/src/i18n.ts`。
+- 添加了 `web/src/fetch.ts`。
+- 添加了 `web/src/pages/Login.tsx`。
+- 添加了 `web/src/pages/ProfileList.tsx`。
+- 添加了 `web/src/pages/ProfileDetail.tsx`。
+- 添加了 `web/src/pages/Settings.tsx`。
+- 添加了 `web/src/components/RequireAuth.tsx`。
+- 添加了 `web/src/components/HostedLinkHeader.tsx`。
+- 添加了 `web/src/components/BasicInfoCard.tsx`。
+- 添加了 `web/src/components/SourceCard.tsx`。
+- 添加了 `web/src/components/CustomNodesCard.tsx`。
+- 添加了 `web/src/components/CustomGroupsCard.tsx`。
+- 添加了 `web/src/components/RulesCard.tsx`。
+- 添加了 `web/src/components/OutputPreviewCard.tsx`。
+- 添加了 `web/src/components/GenerateFooter.tsx`。
+- 添加了 `.github/workflows/ci.yml`。
+- 添加了 `Dockerfile`。
+- 添加了 `.dockerignore`。
+- 添加了 `docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/` 目录。
+- 添加了 `apps/mihomo-subscription/data.yml`。
+- 添加了 `apps/mihomo-subscription/README.md`。
+- 添加了 `apps/mihomo-subscription/README_en.md`。
+- 添加了 `apps/mihomo-subscription/logo.png`。
+- 添加了 `apps/mihomo-subscription/0.1.0/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.0/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.0/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.0/data/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.2/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.2/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.2/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.2/data/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.3/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.3/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.3/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.3/data/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.4/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.4/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.4/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.4/data/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.5/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.5/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.5/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.5/data/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.6/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.6/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.6/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.6/data/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.7/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.7/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.7/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.7/data/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.8/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.8/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.8/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.8/data/` 目录。
+- 添加了 `docs/` 目录。
+- 添加了 `docs/README.md`。
+- 添加了 `docs/api-design.md`。
+- 添加了 `docs/data-model.md`。
+- 添加了 `docs/security-design.md`。
+- 添加了 `docs/1panel-app.md`。
+- 添加了 `docs/release.md`。
+- 添加了 `docs/changelog.md`。
+- 添加了 `CLAUDE.md`。
+- 添加了 `AGENTS.md`。
+- 添加了 `README.md`。
+- 添加了 `LICENSE`。
+- 添加了 `.gitignore`。
+- 添加了 `Cargo.toml`。
+- 添加了 `Cargo.lock`。
+- 添加了 `src/main.rs`。
+- 添加了 `src/lib.rs`。
+- 添加了 `src/db.rs`。
+- 添加了 `src/auth.rs`。
+- 添加了 `src/app.rs`。
+- 添加了 `src/profiles.rs`。
+- 添加了 `src/settings.rs`。
+- 添加了 `src/generate.rs`。
+- 添加了 `src/converter.rs`。
+- 添加了 `src/ssrf.rs`。
+- 添加了 `src/fetch.rs`。
+- 添加了 `src/yaml.rs`。
+- 添加了 `src/util.rs`。
+- 添加了 `src/error.rs`。
+- 添加了 `src/mask.rs`。
+- 添加了 `src/net.rs`。
+- 添加了 `src/rate_limit.rs`。
+- 添加了 `src/single_flight.rs`。
+- 添加了 `migrations/0001_init.sql`。
+- 添加了 `tests/auth.rs`。
+- 添加了 `tests/profiles.rs`。
+- 添加了 `tests/db_cascade.rs`。
+- 添加了 `tests/generate.rs`。
+- 添加了 `tests/common/mod.rs`。
+- 添加了 `web/` 目录。
+- 添加了 `web/package.json`。
+- 添加了 `web/tsconfig.json`。
+- 添加了 `web/vite.config.ts`。
+- 添加了 `web/index.html`。
+- 添加了 `web/src/main.tsx`。
+- 添加了 `web/src/App.tsx`。
+- 添加了 `web/src/i18n.ts`。
+- 添加了 `web/src/fetch.ts`。
+- 添加了 `web/src/pages/Login.tsx`。
+- 添加了 `web/src/pages/ProfileList.tsx`。
+- 添加了 `web/src/pages/ProfileDetail.tsx`。
+- 添加了 `web/src/pages/Settings.tsx`。
+- 添加了 `web/src/components/RequireAuth.tsx`。
+- 添加了 `web/src/components/HostedLinkHeader.tsx`。
+- 添加了 `web/src/components/BasicInfoCard.tsx`。
+- 添加了 `web/src/components/SourceCard.tsx`。
+- 添加了 `web/src/components/CustomNodesCard.tsx`。
+- 添加了 `web/src/components/CustomGroupsCard.tsx`。
+- 添加了 `web/src/components/RulesCard.tsx`。
+- 添加了 `web/src/components/OutputPreviewCard.tsx`。
+- 添加了 `web/src/components/GenerateFooter.tsx`。
+- 添加了 `.github/workflows/ci.yml`。
+- 添加了 `Dockerfile`。
+- 添加了 `.dockerignore`。
+- 添加了 `docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/` 目录。
+- 添加了 `apps/mihomo-subscription/data.yml`。
+- 添加了 `apps/mihomo-subscription/README.md`。
+- 添加了 `apps/mihomo-subscription/README_en.md`。
+- 添加了 `apps/mihomo-subscription/logo.png`。
+- 添加了 `apps/mihomo-subscription/0.1.0/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.0/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.0/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.0/data/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.2/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.2/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.2/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.2/data/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.3/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.3/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.3/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.3/data/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.4/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.4/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.4/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.4/data/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.5/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.5/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.5/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.5/data/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.6/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.6/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.6/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.6/data/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.7/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.7/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.7/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.7/data/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.8/` 目录。
+- 添加了 `apps/mihomo-subscription/0.1.8/data.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.8/docker-compose.yml`。
+- 添加了 `apps/mihomo-subscription/0.1.8/data/` 目录。
