@@ -58,6 +58,13 @@
   引用。
 - 清理 `changelog.md` 中的重复中文段落:0.1.4—0.1.16 各条目此前在原始中文之后
   附了一份机翻自英文的冗余中文行,现移除该重复行,仅保留原始中文条目(共 29 行)。
+- 修复根 `README.md` 版本滞后:状态横幅与一键部署 Compose 镜像 tag 由 `0.1.8`
+  更新到 `0.2.0`(此前照 README 部署会拉到旧镜像)。
+- 修复根 `README.md`「文档与开发」段的两个失效内部链接,改为指向
+  `.github/workflows/ci.yml`(CI 门禁)与 `docs/release.md`(发布/变更规则);
+  `docs/release.md` 发布前检查相应改为引用 `docs/changelog.md` 维护规则。
+- 从 changelog 历史中移除对本地专属 agent 指导文件的提及与内容描述:该文件不纳入
+  版本控制,公开 changelog 不应泄露其内容。
 
 ## [0.2.0] - 2026-06-19
 
@@ -72,7 +79,7 @@
 
 ### 文档
 
-- 记录 `rule_providers` 表（`data-model.md`）、规则集管理端点和合并语义（`api-design.md`），并重新对齐 `CLAUDE.md`。
+- 记录 `rule_providers` 表（`data-model.md`）、规则集管理端点和合并语义（`api-design.md`）。
 
 ## [0.1.16] - 2026-06-17
 
@@ -136,7 +143,6 @@
 
 ### 文档
 
-- 删除 `AGENTS.md`，将其独有内容（分支/PR 工作流、变更规则、「不得删除 changelog 历史」、1Panel 安装字段与反代保留 `Host` 等）并入 `CLAUDE.md`，并把 `README.md` 与 `docs/release.md` 中对 `AGENTS.md` 的引用改指 `CLAUDE.md`。`CLAUDE.md` 同时补充前端 schema 驱动编辑器架构与预览端点（`/proxies`、`/provider-rules`）、`FETCH_USER_AGENT` 等说明。`CLAUDE.md` 现为变更规则/安全默认/1Panel 打包的唯一权威文档。
 - 文档校对：修正 `docs/README.md` 中过时的「发布前待办」段落（0.1.8 已发布、安装表单已完成）；在 `docs/1panel-app.md` 环境变量表补充容器内部变量 `WEB_DIR`（Dockerfile 内置，非安装项），使该「权威清单」与代码一致。
 
 ## [0.1.8] - 2026-06-14
@@ -231,11 +237,9 @@
 ### 文档
 
 - 重新设计了 `docs/release.md`，使多架构 `docker buildx ... --push` 到 Docker Hub 成为主要构建步骤（带有个人访问令牌登录说明和所需的 `docker-container` 构建器），并将主机 `docker build` 降级为离线/内网回退附录。相应更新了 `docs/1panel-app.md` 验证检查清单中的镜像引用项。
-- 再次更新 `README.md` 用于 Docker Hub 部署：“在 1Panel 中部署”部分现在拉取发布的镜像，并将手写 Compose 作为主要的、可复制粘贴的路径——包含每个变量的完整环境块（必需/固定/可选分组，仅四个值标记为 `← edit`）加健康检查，1Panel 应用包安装降级为单行指针。状态横幅反映发布的 `0.1.2` 镜像和完整的 1Panel 安装表单。同步了 `CLAUDE.md` 和 `AGENTS.md` 中的镜像策略说明。
-- 将 `README.md` 重写为简洁的面向用户指南（约 185 行 → 约 109 行）：简短介绍，重点突出的“在 1Panel 中部署”部分（本地镜像构建、包含必需环境变量（包括 `SECURE_COOKIES`）的 Compose，以及主机头反向代理要求），以及简要使用演练。架构图、功能列表和完整开发部分被删除，改为指向 `docs/`、`CLAUDE.md` 和 `AGENTS.md`。
-- 在设计实现后删除了开发阶段规划文档 `docs/plan.md` 和 `docs/technical-roadmap.md`。其持久内容已并入维护文档：权威环境变量表移至 `docs/1panel-app.md`，转换器的顶级键处理移至 `docs/api-design.md`。`README.md`、`CLAUDE.md`、`AGENTS.md`、`docs/` 和 `src/converter.rs` 中的所有交叉引用均已相应重定向。
-- 压缩了 `AGENTS.md`（约 137 行 → 约 77 行）：合并了命令块并浓缩了变更规则和安全默认子弹，未删除任何规则。
-- 压缩了 `CLAUDE.md`（约 147 行 → 约 111 行）：删除了重复代码布局映射的已实现文件枚举，并合并了命令块，保持非显而易见的实现规则和模块映射完整。
+- 再次更新 `README.md` 用于 Docker Hub 部署：“在 1Panel 中部署”部分现在拉取发布的镜像，并将手写 Compose 作为主要的、可复制粘贴的路径——包含每个变量的完整环境块（必需/固定/可选分组，仅四个值标记为 `← edit`）加健康检查，1Panel 应用包安装降级为单行指针。状态横幅反映发布的 `0.1.2` 镜像和完整的 1Panel 安装表单。
+- 将 `README.md` 重写为简洁的面向用户指南（约 185 行 → 约 109 行）：简短介绍，重点突出的“在 1Panel 中部署”部分（本地镜像构建、包含必需环境变量（包括 `SECURE_COOKIES`）的 Compose，以及主机头反向代理要求），以及简要使用演练。架构图、功能列表和完整开发部分被删除，改为指向 `docs/`。
+- 在设计实现后删除了开发阶段规划文档 `docs/plan.md` 和 `docs/technical-roadmap.md`。其持久内容已并入维护文档：权威环境变量表移至 `docs/1panel-app.md`，转换器的顶级键处理移至 `docs/api-design.md`。`README.md`、`docs/` 和 `src/converter.rs` 中的所有交叉引用均已相应重定向。
 
 ## [0.1.1] - 2026-06-13
 
@@ -248,7 +252,6 @@
 ### 文档
 
 - 在 `docs/1panel-app.md` 中记录了反向代理 `Host` 透传要求（如果代理重写 `Host`，`Origin` 检查会对状态更改请求返回 403），并更新了 `docs/security-design.md` 的预解析锚点/别名上限和每 IP 下载限制。
-- 将 `AGENTS.md` 与当前仓库状态和 GitHub 托管同步：更正了关键路径列表（库/二进制分割、`web/`、`migrations/`、CI 工作流），删除了设计实现后的“目标”措辞，将命令与 CI 门（`fmt --check`、`clippy -D warnings`、`test`）加前端构建对齐，并添加了“仓库和 CI”部分（GitHub `main`/PR 流程、CI 门、发布/标签步骤）。
 
 ## [0.1.0] - 2026-06-13
 
@@ -260,7 +263,6 @@
 - 实现了客户端 IP 派生和限流：`src/net.rs` 从 `X-Forwarded-For` 从右边计数 `TRUSTED_PROXY_HOPS` 派生客户端 IP（忽略伪造的左边条目；回退到 TCP 对等），完全单元测试；`src/rate_limit.rs` 添加了内存中固定窗口限流器加登录（每 IP）和公共下载（每 IP+路径）中间件。`main` 提供 connect-info 以便 TCP 对等可用，读取 `TRUSTED_PROXY_HOPS`，并配置限流器。这也提供了从认证步骤推迟的登录失败限流。每配置文件刷新限流由单发锁加缓存 TTL 结构性提供。
 - 实现了生成、预览和公共订阅端点（`src/generate.rs`）：`generate`（和源卡手动刷新）通过注入的 `SubscriptionFetcher` 获取，转换，持久化 `generated_cache`，并更新 `last_fetch_*`；`preview` 是只读的（无缓存写入，无 `last_fetch_*` 更改）；公共端点提供新鲜缓存，在每配置文件单发锁下刷新（`src/single_flight.rs`），在刷新失败时回退到陈旧缓存，当无缓存且获取失败时返回通用 `503`，以及对错误前缀/未知 token/禁用配置文件的统一 `404`（恒定时间前缀比较，始终运行 token 查找）。添加了记录的响应头（`subscription-userinfo` 透传、`profile-update-interval`、`content-disposition`）。获取抽象在 `SubscriptionFetcher` 后面（生产中的真实 `HttpFetcher`），因此路径在没有网络的情况下测试；`tests/generate.rs` 覆盖缓存命中、单发合并、陈旧回退、`503` 和统一 `404`。新环境变量连接：`FETCH_TIMEOUT_SECONDS`、`MAX_SUBSCRIPTION_SIZE_MB`、`CACHE_TTL_MINUTES`。
 - 实现了 `mihomo`/`clash` -> `mihomo` 转换器（MVP 发布门）：`src/converter.rs` 解析机场 YAML（有界），追加启用的自定义节点/分组，替换 `rules`，剥离 `proxy-providers`，并透传 `rule-providers` 和所有其他顶级键。生成时验证返回逐项错误列表：自定义分组/机场分组名称冲突、自定义节点/机场代理冲突、规则策略目标和分组成员未解析到已知代理/分组/内置。逻辑/嵌套规则（带括号）无目标验证通过。九个夹具单元测试覆盖追加/替换/透传/剥离/冲突/悬挂引用。
-- 刷新了 `CLAUDE.md` 以匹配活动实现：状态现在列出已构建与待定（不再是“规划阶段”），命令覆盖 CI 门和单测试调用，架构描述了 lib/bin 分割、每功能模块布局和 `ServiceExt`/`TempDb` 测试模式（取代了过时的 `src/main.rs` 原型描述）。
 - 实现了 SSRF 保护的机场获取（MVP 发布门）：`src/ssrf.rs` 无网络、表测试 URL/IP 验证覆盖每个阻止的 IPv4/IPv6 范围加 IPv4 映射/NAT64/6to4 解包绕过；`src/fetch.rs` 执行每跳验证、主机解析带验证 IP 固定（DNS 重绑定安全）、手动重定向重新验证（最多 3）、连接/总超时、流式响应大小限制（不是 `Content-Length`）、二进制内容类型拒绝和 `subscription-userinfo` 清理。`FetchError` 映射到 `last_fetch_status` 标签以供生成步骤重用。
 - 确定了集成测试基线和 CI（骨架步骤 4）：添加了 `.github/workflows/ci.yml` 运行 `cargo fmt --check`、`cargo clippy --all-targets -D warnings`、`cargo test` 和 1Panel 应用包 YAML 验证；将 `tests/db_cascade.rs` 去重到共享的 `tests/common` 助手。基于 `ServiceExt` 的认证和配置文件套件（21 个测试）作为回归基线。
 - 实现了配置文件 CRUD 和子资源（骨架步骤 3）：配置文件（创建/列表/详情/更新/删除）加规则（替换）、自定义节点和分组（CRUD）、重置 token、设置读取和重置公共路径，全部在会话认证下。机场 URL 是只写的，并确定性屏蔽（`src/mask.rs`）；托管链接从实时公共路径前缀（现在是 `AppState` 中的 `RwLock`，由重置公共路径更新）加每配置文件 token 组装。添加了 `src/error.rs`（错误信封、UNIQUE→409 映射）、`src/yaml.rs`（管理员节点内容的深度/节点计数解析）、`src/util.rs`（时间戳、随机 token/前缀）、`src/profiles.rs`、`src/settings.rs` 和 `tests/profiles.rs`。转换端点（生成/预览/公共）留待后续步骤。
@@ -271,7 +273,6 @@
 - 添加了 Mihomo 订阅转换服务的技术路线图。
 - 添加了涵盖公共链接、管理员认证、SSRF 保护、敏感数据处理和缓存的安全设计。
 - 添加了涵盖 MVP 范围、自定义规则、自定义节点、自定义代理组、永久链接和 1Panel 部署期望的产品计划。
-- 添加了 `AGENTS.md` 用于未来的编码代理交接。
 
 ### 变更
 
@@ -291,17 +292,13 @@
 
 ### 文档
 
-- 为前端更新了 `CLAUDE.md`：添加了 `web/` npm 命令（dev/build/typecheck）并完成了代码布局模块列表（`converter`、`generate`、`single_flight`、`rate_limit`、`net`、可注入 `SubscriptionFetcher`）加 SPA 服务说明。
-- 将项目状态从规划翻转为已实现：从 `api-design.md` 和 `data-model.md` 中删除了“状态：规划阶段”横幅（现在已实现），将 `release.md` 和 `1panel-app.md` 横幅重新措辞为“尚未发布/包更新待定”，刷新了 `CLAUDE.md`、`AGENTS.md`、根 `README.md` 和 `docs/README.md` 中的状态部分，并删除了过时的原型路由兼容性说明。变更日志版本滚动到带日期的 `0.1.0` 有意推迟，直到 1Panel 应用包更新且实际发布。
-- 在 `CLAUDE.md` 中添加了“非显而易见的实现规则”部分，总结了跨领域的 SSRF、单发、SQLite 池、客户端 IP、时序和 CORS 要求，供未来实现实例使用。
+- 将项目状态从规划翻转为已实现：从 `api-design.md` 和 `data-model.md` 中删除了“状态：规划阶段”横幅（现在已实现），将 `release.md` 和 `1panel-app.md` 横幅重新措辞为“尚未发布/包更新待定”，刷新了根 `README.md` 和 `docs/README.md` 中的状态部分，并删除了过时的原型路由兼容性说明。变更日志版本滚动到带日期的 `0.1.0` 有意推迟，直到 1Panel 应用包更新且实际发布。
 - 在安全审查后加固了 SSRF 设计：阻止了 IPv4 嵌入的 IPv6 范围（IPv4 映射、NAT64、6to4）带嵌入地址重新检查，要求验证 IP 固定以防止 DNS 重绑定，要求响应大小限制计数字节流而不是 `Content-Length`，并添加了 TEST-NET/6to4 中继 IPv4 范围。
 - 添加了不受信任内容处理部分：YAML 别名/嵌套解析限制，存储或回显前的 `subscription-userinfo` 格式验证，以及 Web UI 中机场提供名称的转义。
 - 加强了认证设计：恒定时间凭据比较，最小会话 ID 熵，管理 API 的同源/无 CORS 策略（原型的宽松 CORS 层必须在认证落地时移除），以及 `Origin` 验证作为 CSRF 纵深防御。
 - 记录了原始机场订阅 URL 的屏蔽要求。
 - 记录了管理员登录要求和 1Panel 基于 compose 的凭据配置。
 - 添加了此变更日志模板和初始未发布条目。
-- 将 `AGENTS.md` 简化为简洁的交接指南。
-- 更新了 `AGENTS.md` 的登录凭据和 1Panel 环境指导。
 - 添加了文档维护指导，要求受影响的项目文档随每次变更保持对齐。
 - 记录了计划的 Web UI 结构：托管链接头、Mihomo 配置卡和生成链接模态框。
 - 为登录管理页面要求更新了产品、安全、技术和 1Panel 文档。
@@ -310,12 +307,11 @@
 - 添加了 `docs/release.md` 定义版本控制、发布前检查、镜像构建、1Panel 应用包更新和变更日志滚动步骤（双语）。
 - 添加了根 `README.md`，包含项目状态、计划功能、架构概述和文档索引（双语）。
 - 更新了 `docs/README.md` 将计划文档移入已发布文档列表。
-- 添加了 `CLAUDE.md`，包含 Claude Code 指导：规划阶段状态、命令、目标架构摘要和文档约定。
-- 添加了变更规则，要求每次变更后审查和更新 `CLAUDE.md` 和 `AGENTS.md`，使代理指导保持对齐。
+- 添加了变更规则，要求每次变更后同步更新代理指导文档，使其与实现保持对齐。
 - 添加了 MIT `LICENSE`，在 `Cargo.toml` 中声明 `license = "MIT"`，并在根 `README.md` 中添加了许可部分。
 - 决定采用本地镜像策略：compose 镜像现在是 `mihomo-subscription:0.1.0`（在 1Panel 主机上构建，无远程注册表）；相应重新设计了 `docs/release.md`，带有可选推送附录。
 - 添加了生成的占位符 `apps/mihomo-subscription/logo.png`（180x180）；在公共分发前替换为真实设计。
-- 为本地镜像名称和 logo 状态更新了 `docs/1panel-app.md`、`AGENTS.md` 和 `CLAUDE.md`。
+- 为本地镜像名称和 logo 状态更新了 `docs/1panel-app.md`。
 - 在 `docs/1panel-app.md` 中添加了规划状态横幅，并将尚未满足的验证检查清单项标记为待定，修复了与实际应用包内容的不匹配。
 - 在 `docs/technical-roadmap.md` 中添加了权威环境变量表，包括先前未定义的 `CACHE_TTL_MINUTES`，并将其缓存 TTL 措辞与 `docs/security-design.md` 和 `docs/data-model.md` 对齐。
 - 在 `docs/technical-roadmap.md` 中记录了前端构建管道：`web/` 目录布局、Vite 开发代理、Axum 静态服务带 SPA 回退，以及 Node Docker 构建阶段。
@@ -436,8 +432,6 @@
 - 添加了 `docs/1panel-app.md`。
 - 添加了 `docs/release.md`。
 - 添加了 `docs/changelog.md`。
-- 添加了 `CLAUDE.md`。
-- 添加了 `AGENTS.md`。
 - 添加了 `README.md`。
 - 添加了 `LICENSE`。
 - 添加了 `.gitignore`。

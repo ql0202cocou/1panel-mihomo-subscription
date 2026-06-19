@@ -9,9 +9,9 @@ A lightweight self-hosted Mihomo subscription converter/distributor for 1Panel
 nodes, and proxy groups, and generate long-lived Mihomo links. Ships a web admin
 UI with login, SSRF protection, and provider-URL masking.
 
-> 状态:已实现并经安全审计加固。当前版本 `0.1.8`,镜像已发布到 Docker Hub
+> 状态:已实现并经安全审计加固。当前版本 `0.2.0`,镜像已发布到 Docker Hub
 > (`quinlanhoo/mihomo-subscription`,多架构 amd64+arm64),1Panel 应用包安装表单完整。
-> Status: implemented and security-hardened. Current version `0.1.8`; the image is
+> Status: implemented and security-hardened. Current version `0.2.0`; the image is
 > published on Docker Hub (`quinlanhoo/mihomo-subscription`, multi-arch
 > amd64+arm64) and the 1Panel app package ships a complete install form.
 
@@ -34,7 +34,7 @@ create:
 ```yaml
 services:
   mihomo-subscription:
-    image: quinlanhoo/mihomo-subscription:0.1.8
+    image: quinlanhoo/mihomo-subscription:0.2.0
     container_name: mihomo-subscription
     restart: always
     networks: [1panel-network]
@@ -114,11 +114,13 @@ settings to invalidate all links at once.
 参考文档见 [docs/](docs/)([api-design](docs/api-design.md)、
 [data-model](docs/data-model.md)、[security-design](docs/security-design.md)、
 [1panel-app](docs/1panel-app.md)、[release](docs/release.md)、
-[changelog](docs/changelog.md))。本地开发、CI 门禁与变更规则见
-[CLAUDE.md](CLAUDE.md)。
+[changelog](docs/changelog.md))。CI 门禁见
+[.github/workflows/ci.yml](.github/workflows/ci.yml),发布与变更规则见
+[docs/release.md](docs/release.md)。
 
-Reference docs are in [docs/](docs/); local development, CI gates, and change
-rules are in [CLAUDE.md](CLAUDE.md).
+Reference docs are in [docs/](docs/); CI gates are in
+[.github/workflows/ci.yml](.github/workflows/ci.yml), and release/change rules
+are in [docs/release.md](docs/release.md).
 
 ## 许可证 / License
 

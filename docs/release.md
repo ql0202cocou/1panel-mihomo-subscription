@@ -32,7 +32,7 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
 人工确认:
 
 - `docs/changelog.md` 的 `[Unreleased]` 包含本次发布的全部变更。
-- 受影响的产品/技术/安全文档已与实现对齐(见 `CLAUDE.md` Change Rules)。
+- 受影响的产品/技术/安全文档已与实现对齐(见 `docs/changelog.md` 维护规则)。
 - compose 中镜像名与本次版本一致(`mihomo-subscription:X.Y.Z`)。
 - 如计划公开分发:将占位 `logo.png` 替换为正式设计。
 
