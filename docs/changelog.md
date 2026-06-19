@@ -47,6 +47,25 @@
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-06-20
+
+### 移除
+
+- 移除自定义规则集(rule-providers)托管功能:本项目不再托管/管理自定义规则集。
+  - 后端:删除 `rule_providers` 表(新增迁移 `0006_drop_rule_providers.sql`,
+    `DROP TABLE IF EXISTS`,对旧装机幂等)、`/api/profiles/:id/rule-providers[/:rp_id]`
+    CRUD 端点及配置详情响应中的 `rule_providers` 字段;converter 不再合并自定义规则集,
+    仅**透传**机场自带的 `rule-providers:`(导入的机场 `RULE-SET` 规则仍能解析)。
+  - 前端:删除 `RuleProvidersCard`/`ruleProviderSchema` 及相关 i18n/类型;规则编辑器
+    的 `RULE-SET` 内容输入改为自由文本(引用机场自带规则集名)。
+  - 文档:`api-design.md`/`data-model.md` 同步移除规则集管理章节,改述为机场透传。
+
+### 变更
+
+- 规则编辑器(`RulesCard`):`MATCH` 兜底改回普通规则——移除独立的「兜底策略」控件,
+  `MATCH` 作为列表中的一条规则可正常添加/编辑/拖拽排序/删除(在规则类型下拉中可选,
+  仅需填策略)。仅前端改动,规则仍存为 `rulesets.content` 文本,后端契约不变。
+
 ## [0.2.2] - 2026-06-20
 
 ### 变更

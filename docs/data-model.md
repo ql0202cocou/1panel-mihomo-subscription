@@ -28,7 +28,6 @@ app_settings (单行)
 profiles 1 ──── 1 rulesets
 profiles 1 ──── * custom_nodes
 profiles 1 ──── * custom_groups
-profiles 1 ──── * rule_providers
 profiles 1 ──── 1 generated_cache
 ```
 
@@ -164,33 +163,12 @@ CREATE INDEX idx_custom_groups_profile ON custom_groups (profile_id);
   数据库约束。
 - `options`:分组类型特有选项的 JSON 对象,如 `{"url": "...", "interval": 300}`。
 
-### rule_providers
-
-自定义规则集(规则集,即 Mihomo `rule-providers`),被规则里的 `RULE-SET,<name>,<policy>`
-按名引用。`provider_type`/`behavior` 为一等列(用于展示与校验),其余键(url、path、
-payload、format、interval、size-limit、proxy 等)放进 `options` JSON。迁移
-`0005_rule_providers.sql`。
-
-```sql
-CREATE TABLE rule_providers (
-    id            TEXT    PRIMARY KEY,
-    profile_id    TEXT    NOT NULL REFERENCES profiles (id) ON DELETE CASCADE,
-    name          TEXT    NOT NULL,
-    provider_type TEXT    NOT NULL CHECK (provider_type IN ('http','file','inline')),
-    behavior      TEXT    NOT NULL CHECK (behavior IN ('domain','ipcidr','classical')),
-    options       TEXT,
-    enabled       INTEGER NOT NULL DEFAULT 1,
-    created_at    TEXT    NOT NULL,
-    updated_at    TEXT    NOT NULL,
-    UNIQUE (profile_id, name)
-);
-
-CREATE INDEX idx_rule_providers_profile ON rule_providers (profile_id);
-```
-
-- 与 `rules`/`custom_groups` 的"整体替换"不同,自定义规则集是**合并**进输出的
-  `rule-providers`:机场的仍透传,自定义条目按名覆盖。这样导入的机场 `RULE-SET`
-  规则仍能解析;新增/修改在下次生成时生效(见 `api-design.md`)。
+> **已移除自定义规则集(rule-providers)托管。** 迁移 `0005_rule_providers.sql`
+> 曾建 `rule_providers` 表用于自定义规则集 CRUD,但本项目不再托管/管理自定义规则集:
+> converter 仅**透传**机场自带的 `rule-providers:`(导入的机场 `RULE-SET` 规则仍能
+> 解析),不再合并自定义条目。迁移 `0006_drop_rule_providers.sql` 用
+> `DROP TABLE IF EXISTS` 删除该表(对旧装机幂等安全)。规则里仍可用
+> `RULE-SET,<name>,<policy>` 引用机场自带规则集的名称。
 
 ### generated_cache
 

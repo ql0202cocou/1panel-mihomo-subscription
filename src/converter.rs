@@ -2,9 +2,8 @@
 //!
 //! Parses provider YAML, appends enabled custom nodes/groups, replaces `rules`
 //! with the user's, and handles top-level keys per `docs/api-design.md`
-//! (rule-providers passthrough + custom 规则集 merged on top, proxy-providers
-//! stripped, unknown keys preserved). Validation follows `docs/api-design.md`
-//! and returns an itemized
+//! (rule-providers and unknown keys pass through, proxy-providers stripped).
+//! Validation follows `docs/api-design.md` and returns an itemized
 //! error list for the generate modal.
 
 use serde_yaml::{Mapping, Value};
@@ -34,17 +33,6 @@ pub struct CustomGroup {
     pub options: Option<serde_json::Value>,
 }
 
-pub struct RuleProvider {
-    pub name: String,
-    /// `http` / `file` / `inline`.
-    pub provider_type: String,
-    /// `domain` / `ipcidr` / `classical`.
-    pub behavior: String,
-    /// Remaining keys (url, path, payload, format, interval, ...) as a JSON
-    /// object; merged verbatim into the emitted mapping.
-    pub options: Option<serde_json::Value>,
-}
-
 pub struct ConvertInput<'a> {
     pub provider_yaml: &'a str,
     pub rules: &'a str,
@@ -52,9 +40,6 @@ pub struct ConvertInput<'a> {
     pub nodes: Vec<CustomNode>,
     /// Enabled custom groups only.
     pub groups: Vec<CustomGroup>,
-    /// Enabled custom rule-providers (规则集) only. Merged into the output
-    /// `rule-providers:` map on top of the provider's (custom overrides by name).
-    pub rule_providers: Vec<RuleProvider>,
     /// Manual ordering of the **custom** nodes within the custom block (custom
     /// node names). Names present here are emitted first in this order; any not
     /// listed (newly added) keep their default relative position at the end. The
@@ -155,20 +140,9 @@ pub fn convert(input: ConvertInput) -> Result<String, ConvertError> {
     // proxy-providers: stripped in the MVP (SSRF/caching bypass risk).
     root.remove(Value::from("proxy-providers"));
 
-    // rule-providers: the provider's pass through; custom 规则集 are merged on top
-    // (a custom entry overrides a provider entry of the same name). Additive so
-    // imported provider RULE-SET rules keep resolving.
-    if !input.rule_providers.is_empty() {
-        let mut map = match root.remove(Value::from("rule-providers")) {
-            Some(Value::Mapping(m)) => m,
-            _ => Mapping::new(),
-        };
-        for rp in input.rule_providers {
-            let name = rp.name.clone();
-            map.insert(Value::from(name), Value::Mapping(build_rule_provider(rp)));
-        }
-        root.insert(Value::from("rule-providers"), Value::Mapping(map));
-    }
+    // rule-providers: the provider's own map passes through untouched, so
+    // imported provider RULE-SET rules keep resolving. We don't host/manage
+    // custom rule-providers.
 
     // All other top-level keys (dns, tun, ...) pass through.
 
@@ -312,26 +286,6 @@ fn build_group(group: CustomGroup) -> Mapping {
     m
 }
 
-/// Build a rule-provider value (`{type, behavior, ...options}`). The `name` is
-/// the map key, so it is not repeated inside the value.
-fn build_rule_provider(rp: RuleProvider) -> Mapping {
-    let mut m = Mapping::new();
-    m.insert(Value::from("type"), Value::from(rp.provider_type));
-    m.insert(Value::from("behavior"), Value::from(rp.behavior));
-    if let Some(opts) = rp.options {
-        if let Ok(Value::Mapping(opt_map)) = serde_yaml::to_value(&opts) {
-            for (k, v) in opt_map {
-                // Never let options shadow the typed columns.
-                if matches!(k.as_str(), Some("type" | "behavior" | "name")) {
-                    continue;
-                }
-                m.insert(k, v);
-            }
-        }
-    }
-    m
-}
-
 /// Iterate non-empty, non-comment rule lines with their 1-based line numbers
 /// (numbered over the original text so messages match the editor).
 fn rule_lines(rules: &str) -> impl Iterator<Item = (usize, &str)> {
@@ -395,7 +349,6 @@ rules:
             rules,
             nodes,
             groups,
-            rule_providers: Vec::new(),
             node_order: Vec::new(),
             node_section_order: Vec::new(),
             group_order: Vec::new(),
@@ -560,7 +513,6 @@ rules:
             rules: "MATCH,DIRECT",
             nodes: vec![],
             groups: vec![],
-            rule_providers: vec![],
             node_order: Vec::new(),
             node_section_order: Vec::new(),
             group_order: Vec::new(),
@@ -590,44 +542,6 @@ rules:
         inp.group_order = vec!["G2".into()];
         let root = out(inp);
         assert_eq!(names_in(root.get("proxy-groups")), vec!["G2", "G1"]);
-    }
-
-    #[test]
-    fn custom_rule_providers_merge_over_provider() {
-        let mut inp = input("RULE-SET,my-block,REJECT\nMATCH,DIRECT", vec![], vec![]);
-        inp.rule_providers = vec![
-            // New custom 规则集.
-            RuleProvider {
-                name: "my-block".into(),
-                provider_type: "http".into(),
-                behavior: "domain".into(),
-                options: Some(serde_json::json!({
-                    "url": "https://example.com/block.yaml",
-                    "format": "yaml",
-                    "interval": 86400,
-                })),
-            },
-            // Same name as a provider entry -> overrides it.
-            RuleProvider {
-                name: "ads".into(),
-                provider_type: "inline".into(),
-                behavior: "classical".into(),
-                options: Some(serde_json::json!({ "payload": ["DOMAIN,ad.example.com"] })),
-            },
-        ];
-        let root = out(inp);
-        let rps = root.get("rule-providers").unwrap().as_mapping().unwrap();
-        // Provider `ads` was overridden by the custom inline entry.
-        let ads = rps.get("ads").unwrap().as_mapping().unwrap();
-        assert_eq!(ads.get("type").unwrap().as_str().unwrap(), "inline");
-        assert_eq!(ads.get("behavior").unwrap().as_str().unwrap(), "classical");
-        // Custom `my-block` added alongside.
-        let block = rps.get("my-block").unwrap().as_mapping().unwrap();
-        assert_eq!(block.get("type").unwrap().as_str().unwrap(), "http");
-        assert_eq!(
-            block.get("url").unwrap().as_str().unwrap(),
-            "https://example.com/block.yaml"
-        );
     }
 
     fn node(name: &str) -> CustomNode {
