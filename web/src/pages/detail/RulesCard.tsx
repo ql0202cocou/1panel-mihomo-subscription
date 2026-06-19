@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   AutoComplete,
   Button,
   Card,
+  Checkbox,
   Empty,
   Input,
   List,
@@ -53,8 +54,9 @@ interface Props {
   onSaved: () => void;
 }
 
-// Common Mihomo rule types (free text still allowed in the selector). Grouped
-// by category for readability; the AutoComplete still accepts any typed value.
+// Common Mihomo rule types (free text still allowed in the selector). `MATCH` is
+// intentionally absent — the fallback policy is edited via its own dedicated
+// control so it can never be dragged out of last position.
 const RULE_TYPES = [
   // Domain
   "DOMAIN-SUFFIX",
@@ -94,7 +96,6 @@ const RULE_TYPES = [
   "OR",
   "NOT",
   "SUB-RULE",
-  "MATCH",
 ];
 // Types whose match resolves an IP and thus accept the `no-resolve` modifier.
 const IP_TYPES = new Set([
@@ -152,6 +153,10 @@ interface RuleModel {
 
 const EMPTY_RULE: RuleModel = { type: "DOMAIN-SUFFIX", payload: "", policy: "", noResolve: false };
 
+const isComment = (line: string) => line.startsWith("#");
+const isMatchLine = (line: string) =>
+  !isComment(line) && parseRule(line).type.trim().toUpperCase() === "MATCH";
+
 function parseRule(line: string): RuleModel {
   const parts = line.split(",").map((p) => p.trim());
   const type = parts[0] ?? "";
@@ -179,8 +184,6 @@ function serializeRule(r: RuleModel): string {
   return r.noResolve ? `${base},no-resolve` : base;
 }
 
-const isComment = (line: string) => line.startsWith("#");
-
 export default function RulesCard({
   profileId,
   initial,
@@ -192,25 +195,41 @@ export default function RulesCard({
   onSaved,
 }: Props) {
   const { t } = useTranslation();
-  // Source of truth is the raw, non-empty lines so comments and uncommon rules
-  // (e.g. logical AND/OR) are preserved verbatim until explicitly edited.
+  // Source of truth is the raw, non-empty lines *excluding* the MATCH fallback
+  // (which is edited separately so it always stays last). Comments and uncommon
+  // rules (e.g. logical AND/OR) are preserved verbatim until explicitly edited.
   const [lines, setLines] = useState<string[]>([]);
-  // The inline composer: editingIndex === null means "append a new rule",
-  // otherwise we're rewriting the rule at that list position.
+  const [matchPolicy, setMatchPolicy] = useState("");
+  // The inline composer: editingIndex === null means the bottom "add" row,
+  // otherwise we're rewriting the rule at that list position in place.
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [model, setModel] = useState<RuleModel>(EMPTY_RULE);
   const [policies, setPolicies] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkPolicy, setBulkPolicy] = useState("");
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchText, setBatchText] = useState("");
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   useEffect(() => {
-    setLines(
-      initial
-        .split("\n")
-        .map((l) => l.trim())
-        .filter((l) => l !== ""),
-    );
+    const all = initial
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l !== "");
+    const nonMatch: string[] = [];
+    let mp = "";
+    for (const l of all) {
+      if (isMatchLine(l)) mp = parseRule(l).policy; // last MATCH wins
+      else nonMatch.push(l);
+    }
+    setLines(nonMatch);
+    setMatchPolicy(mp);
+    setSelected(new Set());
+    setEditingIndex(null);
+    setModel(EMPTY_RULE);
   }, [initial]);
 
   const loadPolicies = useCallback(async () => {
@@ -226,28 +245,34 @@ export default function RulesCard({
     void loadPolicies();
   }, [loadPolicies, generatedAt]);
 
-  async function persist(next: string[]) {
-    try {
-      await api(`/api/profiles/${profileId}/rules`, {
-        method: "PUT",
-        body: JSON.stringify({ content: next.join("\n") }),
-      });
-      onSaved();
-    } catch (e) {
-      message.error((e as ApiError).message ?? t("common.saveFailed"));
-    }
-  }
+  // Reassemble full content (rules + MATCH fallback last) and save. MATCH is
+  // appended only when a fallback policy is set, so it is always the final line.
+  const persist = useCallback(
+    async (nextLines: string[], nextMatch: string = matchPolicy) => {
+      const m = nextMatch.trim();
+      const content = (m ? [...nextLines, `MATCH,${m}`] : nextLines).join("\n");
+      setLines(nextLines);
+      setMatchPolicy(m);
+      try {
+        await api(`/api/profiles/${profileId}/rules`, {
+          method: "PUT",
+          body: JSON.stringify({ content }),
+        });
+        onSaved();
+      } catch (e) {
+        message.error((e as ApiError).message ?? t("common.saveFailed"));
+      }
+    },
+    [matchPolicy, profileId, onSaved, t],
+  );
 
   // Rule order is semantic (first match wins), so reordering directly changes
-  // behavior. Ids are list indices — stable within a render, which is all dnd
-  // needs; on drop we reorder and persist the joined content.
+  // behavior. Drag uses real list indices, so it is only enabled when no search
+  // filter is hiding rows (otherwise indices are ambiguous).
   function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = Number(active.id);
-    const newIndex = Number(over.id);
-    const next = arrayMove(lines, oldIndex, newIndex);
-    setLines(next); // optimistic; persist + reload reconciles
+    const next = arrayMove(lines, Number(active.id), Number(over.id));
     void persist(next);
     message.success(t("rules.orderSaved"));
   }
@@ -265,8 +290,7 @@ export default function RulesCard({
   // Add (editingIndex === null) or save (rewrite at editingIndex) the composed
   // rule, then clear the composer back to "append" mode.
   function submit() {
-    const isMatch = model.type.trim().toUpperCase() === "MATCH";
-    if (!model.type.trim() || !model.policy.trim() || (!isMatch && !model.payload.trim())) {
+    if (!model.type.trim() || !model.policy.trim() || !model.payload.trim()) {
       message.error(t("rules.incomplete"));
       return;
     }
@@ -284,6 +308,55 @@ export default function RulesCard({
     void persist(lines.filter((_, i) => i !== index));
   }
 
+  function moveTo(index: number, to: "top" | "bottom") {
+    const next = arrayMove(lines, index, to === "top" ? 0 : lines.length - 1);
+    void persist(next);
+  }
+
+  // ---- Multi-select bulk actions (keyed by real list index) ----
+  function toggleSelect(index: number, checked: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(index);
+      else next.delete(index);
+      return next;
+    });
+  }
+
+  function bulkDelete() {
+    void persist(lines.filter((_, i) => !selected.has(i)));
+    setSelected(new Set());
+  }
+
+  function applyBulkPolicy() {
+    const p = bulkPolicy.trim();
+    if (!p) return;
+    const next = lines.map((l, i) => {
+      if (!selected.has(i) || isComment(l)) return l;
+      return serializeRule({ ...parseRule(l), policy: p });
+    });
+    setSelected(new Set());
+    setBulkPolicy("");
+    void persist(next);
+  }
+
+  // ---- Batch (free-text) edit ----
+  function enterBatch() {
+    setBatchText(lines.join("\n"));
+    setBatchMode(true);
+    resetComposer();
+    setSelected(new Set());
+  }
+
+  function saveBatch() {
+    const next = batchText
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l !== "" && !isMatchLine(l)); // MATCH stays in its own control
+    setBatchMode(false);
+    void persist(next);
+  }
+
   // Seed the editor with the airport's own rules (the converter otherwise
   // replaces provider rules). Appends, skipping lines already present.
   async function importProviderRules() {
@@ -293,7 +366,7 @@ export default function RulesCard({
       const existing = new Set(lines);
       const incoming = res.rules
         .map((l) => l.trim())
-        .filter((l) => l !== "" && !existing.has(l));
+        .filter((l) => l !== "" && !isMatchLine(l) && !existing.has(l));
       if (incoming.length === 0) {
         message.info(t("rules.importNone"));
         return;
@@ -307,67 +380,53 @@ export default function RulesCard({
     }
   }
 
-  const policyOptions = Array.from(
-    new Set(
-      [
-        ...policies,
-        ...nodes.map((n) => n.name),
-        ...groups.map((g) => g.name),
-        ...BUILTIN_POLICIES,
-      ].filter((s) => s.trim() !== ""),
-    ),
-  ).map((value) => ({ value }));
+  const policyOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [
+            ...policies,
+            ...nodes.map((n) => n.name),
+            ...groups.map((g) => g.name),
+            ...BUILTIN_POLICIES,
+          ].filter((s) => s.trim() !== ""),
+        ),
+      ).map((value) => ({ value })),
+    [policies, nodes, groups],
+  );
 
-  const upperType = model.type.trim().toUpperCase();
-  const isMatch = upperType === "MATCH";
-  const showNoResolve = !isMatch && IP_TYPES.has(upperType);
+  // Filtered view: keep each row's real index so edit/delete/select/move act on
+  // the true position even while a search hides other rows.
+  const q = search.trim().toLowerCase();
+  const visible = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => q === "" || line.toLowerCase().includes(q));
+  const dragEnabled = q === "" && editingIndex === null;
 
-  // The content/payload input adapts to the selected rule type (à la Clash
-  // Verge): RULE-SET picks a defined rule-set name, NETWORK picks tcp/udp,
-  // everything else is a free text field with a per-type example placeholder.
-  function contentInput() {
-    if (upperType === "RULE-SET") {
-      return (
-        <AutoComplete
-          style={{ width: 220 }}
-          options={ruleProviders.map((rp) => ({ value: rp.name }))}
-          value={model.payload}
-          onChange={(payload) => setModel({ ...model, payload })}
-          placeholder={t("rules.ruleSetPayloadHint")}
-          filterOption={(input, opt) =>
-            String(opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
-          }
-        />
-      );
-    }
-    if (upperType === "NETWORK") {
-      return (
-        <AutoComplete
-          style={{ width: 220 }}
-          options={[{ value: "tcp" }, { value: "udp" }]}
-          value={model.payload}
-          onChange={(payload) => setModel({ ...model, payload })}
-          placeholder="tcp / udp"
-        />
-      );
-    }
-    return (
-      <Input
-        style={{ width: 220 }}
-        value={model.payload}
-        onChange={(e) => setModel({ ...model, payload: e.target.value })}
-        placeholder={RULE_EXAMPLES[upperType] ?? t("rules.payload")}
-      />
-    );
-  }
+  const composer = (
+    <RuleComposer
+      model={model}
+      onChange={setModel}
+      onSubmit={submit}
+      onCancel={editingIndex !== null ? resetComposer : undefined}
+      submitLabel={editingIndex === null ? t("rules.add") : t("common.save")}
+      ruleProviders={ruleProviders}
+      policyOptions={policyOptions}
+    />
+  );
 
   return (
     <Card
       title={`${t("rules.title")} (${lines.length})`}
       extra={
-        <Popconfirm title={t("rules.importConfirm")} onConfirm={importProviderRules}>
-          <Button loading={importing}>{t("rules.importProvider")}</Button>
-        </Popconfirm>
+        <Space>
+          <Button onClick={() => (batchMode ? setBatchMode(false) : enterBatch())}>
+            {batchMode ? t("common.cancel") : t("rules.batchEdit")}
+          </Button>
+          <Popconfirm title={t("rules.importConfirm")} onConfirm={importProviderRules}>
+            <Button loading={importing}>{t("rules.importProvider")}</Button>
+          </Popconfirm>
+        </Space>
       }
     >
       <Space direction="vertical" style={{ width: "100%" }} size="small">
@@ -383,77 +442,123 @@ export default function RulesCard({
           />
         )}
 
-        {/* Inline composer (Clash Verge style): type · content · no-resolve · policy. */}
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 8,
-            alignItems: "center",
-            padding: "8px 0",
-          }}
-        >
-          <AutoComplete
-            style={{ width: 200 }}
-            options={RULE_TYPES.map((v) => ({ value: v }))}
-            value={model.type}
-            onChange={(type) => setModel({ ...model, type })}
-            placeholder={t("rules.ruleType")}
-            filterOption={(input, opt) =>
-              (opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
-            }
-          />
-          {!isMatch && contentInput()}
-          {showNoResolve && (
-            <Space size={4}>
-              <Switch
-                size="small"
-                checked={model.noResolve}
-                onChange={(noResolve) => setModel({ ...model, noResolve })}
-              />
-              <Typography.Text type="secondary">no-resolve</Typography.Text>
+        {batchMode ? (
+          <>
+            <Typography.Text type="secondary">{t("rules.batchHint")}</Typography.Text>
+            <Input.TextArea
+              value={batchText}
+              onChange={(e) => setBatchText(e.target.value)}
+              autoSize={{ minRows: 8, maxRows: 24 }}
+              spellCheck={false}
+              style={{ fontFamily: "monospace" }}
+            />
+            <Space>
+              <Button type="primary" onClick={saveBatch}>
+                {t("common.save")}
+              </Button>
+              <Button onClick={() => setBatchMode(false)}>{t("common.cancel")}</Button>
             </Space>
-          )}
-          <AutoComplete
-            style={{ width: 200 }}
-            options={policyOptions}
-            value={model.policy}
-            onChange={(policy) => setModel({ ...model, policy })}
-            placeholder={t("rules.policy")}
-            filterOption={(input, opt) =>
-              String(opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
-            }
-          />
-          <Button type="primary" onClick={submit}>
-            {editingIndex === null ? t("rules.add") : t("common.save")}
-          </Button>
-          {editingIndex !== null && <Button onClick={resetComposer}>{t("common.cancel")}</Button>}
-        </div>
-
-        {lines.length === 0 ? (
-          <Empty description={t("rules.empty")} />
+          </>
         ) : (
           <>
-            <Typography.Text type="secondary">{t("rules.dragHint")}</Typography.Text>
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-              <SortableContext
-                items={lines.map((_, i) => String(i))}
-                strategy={verticalListSortingStrategy}
-              >
-                <List>
-                  {lines.map((line, index) => (
-                    <SortableRuleItem
-                      key={index}
-                      id={String(index)}
-                      line={line}
-                      active={index === editingIndex}
-                      onEdit={() => startEdit(index)}
-                      onRemove={() => remove(index)}
+            {/* Fallback policy (MATCH) — always applied last, never reorderable. */}
+            <Space wrap style={{ padding: "4px 0" }}>
+              <Typography.Text strong>{t("rules.fallback")}</Typography.Text>
+              <AutoComplete
+                style={{ width: 220 }}
+                options={policyOptions}
+                value={matchPolicy}
+                onChange={(v) => setMatchPolicy(v)}
+                onBlur={() => void persist(lines, matchPolicy)}
+                placeholder={t("rules.fallbackNone")}
+                filterOption={(input, opt) =>
+                  String(opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
+                }
+              />
+              <Typography.Text type="secondary">{t("rules.fallbackHint")}</Typography.Text>
+            </Space>
+
+            {/* Add composer (only in append mode; inline edit renders at its row). */}
+            {editingIndex === null && composer}
+
+            {/* Search + bulk action bar. */}
+            {lines.length > 0 && (
+              <Space wrap style={{ width: "100%" }}>
+                <Input.Search
+                  allowClear
+                  placeholder={t("rules.search")}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  style={{ width: 240 }}
+                />
+                {selected.size > 0 && (
+                  <>
+                    <Typography.Text>
+                      {t("rules.selectedCount", { count: selected.size })}
+                    </Typography.Text>
+                    <AutoComplete
+                      style={{ width: 180 }}
+                      options={policyOptions}
+                      value={bulkPolicy}
+                      onChange={setBulkPolicy}
+                      placeholder={t("rules.bulkPolicy")}
                     />
-                  ))}
-                </List>
-              </SortableContext>
-            </DndContext>
+                    <Button onClick={applyBulkPolicy} disabled={!bulkPolicy.trim()}>
+                      {t("rules.bulkApply")}
+                    </Button>
+                    <Popconfirm title={t("rules.deleteConfirm")} onConfirm={bulkDelete}>
+                      <Button danger>{t("rules.bulkDelete")}</Button>
+                    </Popconfirm>
+                    <Button type="link" onClick={() => setSelected(new Set())}>
+                      {t("rules.clearSelection")}
+                    </Button>
+                  </>
+                )}
+              </Space>
+            )}
+
+            {lines.length === 0 ? (
+              <Empty description={t("rules.empty")} />
+            ) : (
+              <>
+                <Typography.Text type="secondary">
+                  {dragEnabled ? t("rules.dragHint") : t("rules.dragDisabledSearch")}
+                </Typography.Text>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={onDragEnd}
+                >
+                  <SortableContext
+                    items={visible.map(({ index }) => String(index))}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <List>
+                      {visible.map(({ line, index }) =>
+                        index === editingIndex ? (
+                          <List.Item key={index} style={{ background: "rgba(22,119,255,0.08)" }}>
+                            {composer}
+                          </List.Item>
+                        ) : (
+                          <SortableRuleItem
+                            key={index}
+                            id={String(index)}
+                            line={line}
+                            checked={selected.has(index)}
+                            dragEnabled={dragEnabled}
+                            onToggle={(c) => toggleSelect(index, c)}
+                            onEdit={() => startEdit(index)}
+                            onRemove={() => remove(index)}
+                            onMoveTop={() => moveTo(index, "top")}
+                            onMoveBottom={() => moveTo(index, "bottom")}
+                          />
+                        ),
+                      )}
+                    </List>
+                  </SortableContext>
+                </DndContext>
+              </>
+            )}
           </>
         )}
       </Space>
@@ -461,15 +566,135 @@ export default function RulesCard({
   );
 }
 
+interface ComposerProps {
+  model: RuleModel;
+  onChange: (m: RuleModel) => void;
+  onSubmit: () => void;
+  onCancel?: () => void;
+  submitLabel: string;
+  ruleProviders: RuleProvider[];
+  policyOptions: { value: string }[];
+}
+
+// The type · content · no-resolve · policy row, reused for both "add" and
+// in-place edit. The content input adapts to the selected rule type (à la Clash
+// Verge): RULE-SET picks a defined rule-set name, NETWORK picks tcp/udp,
+// everything else is a free text field with a per-type example placeholder.
+function RuleComposer({
+  model,
+  onChange,
+  onSubmit,
+  onCancel,
+  submitLabel,
+  ruleProviders,
+  policyOptions,
+}: ComposerProps) {
+  const { t } = useTranslation();
+  const upperType = model.type.trim().toUpperCase();
+  const showNoResolve = IP_TYPES.has(upperType);
+
+  function contentInput() {
+    if (upperType === "RULE-SET") {
+      return (
+        <AutoComplete
+          style={{ width: 220 }}
+          options={ruleProviders.map((rp) => ({ value: rp.name }))}
+          value={model.payload}
+          onChange={(payload) => onChange({ ...model, payload })}
+          placeholder={t("rules.ruleSetPayloadHint")}
+          filterOption={(input, opt) =>
+            String(opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
+          }
+        />
+      );
+    }
+    if (upperType === "NETWORK") {
+      return (
+        <AutoComplete
+          style={{ width: 220 }}
+          options={[{ value: "tcp" }, { value: "udp" }]}
+          value={model.payload}
+          onChange={(payload) => onChange({ ...model, payload })}
+          placeholder="tcp / udp"
+        />
+      );
+    }
+    return (
+      <Input
+        style={{ width: 220 }}
+        value={model.payload}
+        onChange={(e) => onChange({ ...model, payload: e.target.value })}
+        placeholder={RULE_EXAMPLES[upperType] ?? t("rules.payload")}
+      />
+    );
+  }
+
+  return (
+    <div
+      style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: "8px 0" }}
+    >
+      <AutoComplete
+        style={{ width: 200 }}
+        options={RULE_TYPES.map((v) => ({ value: v }))}
+        value={model.type}
+        onChange={(type) => onChange({ ...model, type })}
+        placeholder={t("rules.ruleType")}
+        filterOption={(input, opt) =>
+          (opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
+        }
+      />
+      {contentInput()}
+      {showNoResolve && (
+        <Space size={4}>
+          <Switch
+            size="small"
+            checked={model.noResolve}
+            onChange={(noResolve) => onChange({ ...model, noResolve })}
+          />
+          <Typography.Text type="secondary">no-resolve</Typography.Text>
+        </Space>
+      )}
+      <AutoComplete
+        style={{ width: 200 }}
+        options={policyOptions}
+        value={model.policy}
+        onChange={(policy) => onChange({ ...model, policy })}
+        placeholder={t("rules.policy")}
+        filterOption={(input, opt) =>
+          String(opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
+        }
+      />
+      <Button type="primary" onClick={onSubmit}>
+        {submitLabel}
+      </Button>
+      {onCancel && <Button onClick={onCancel}>{t("common.cancel")}</Button>}
+    </div>
+  );
+}
+
 interface RuleItemProps {
   id: string;
   line: string;
-  active: boolean;
+  checked: boolean;
+  dragEnabled: boolean;
+  onToggle: (checked: boolean) => void;
   onEdit: () => void;
   onRemove: () => void;
+  onMoveTop: () => void;
+  onMoveBottom: () => void;
 }
 
-function SortableRuleItem({ id, line, active, onEdit, onRemove }: RuleItemProps) {
+function SortableRuleItem({
+  id,
+  line,
+  checked,
+  dragEnabled,
+  onToggle,
+  onEdit,
+  onRemove,
+  onMoveTop,
+  onMoveBottom,
+}: RuleItemProps) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -477,33 +702,45 @@ function SortableRuleItem({ id, line, active, onEdit, onRemove }: RuleItemProps)
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    background: isDragging ? "rgba(0,0,0,0.04)" : active ? "rgba(22,119,255,0.08)" : undefined,
+    background: isDragging ? "rgba(0,0,0,0.04)" : checked ? "rgba(22,119,255,0.06)" : undefined,
   };
   const comment = isComment(line);
   const r = parseRule(line);
 
-  const actions = comment
-    ? [
-        <Popconfirm key="del" title={t("rules.deleteConfirm")} onConfirm={onRemove}>
-          <a>{t("rules.delete")}</a>
-        </Popconfirm>,
-      ]
-    : [
-        <a key="edit" onClick={onEdit}>
-          {t("basic.edit")}
-        </a>,
-        <Popconfirm key="del" title={t("rules.deleteConfirm")} onConfirm={onRemove}>
-          <a>{t("rules.delete")}</a>
-        </Popconfirm>,
-      ];
+  const actions = [
+    <a key="top" onClick={onMoveTop}>
+      {t("rules.moveTop")}
+    </a>,
+    <a key="bottom" onClick={onMoveBottom}>
+      {t("rules.moveBottom")}
+    </a>,
+    ...(comment
+      ? []
+      : [
+          <a key="edit" onClick={onEdit}>
+            {t("basic.edit")}
+          </a>,
+        ]),
+    <Popconfirm key="del" title={t("rules.deleteConfirm")} onConfirm={onRemove}>
+      <a>{t("rules.delete")}</a>
+    </Popconfirm>,
+  ];
 
   return (
     <List.Item ref={setNodeRef} style={style} actions={actions}>
       <Space>
+        <Checkbox checked={checked} onChange={(e) => onToggle(e.target.checked)} />
         <span
           {...attributes}
           {...listeners}
-          style={{ cursor: "grab", color: "#999", userSelect: "none", touchAction: "none" }}
+          style={{
+            cursor: dragEnabled ? "grab" : "not-allowed",
+            color: "#999",
+            userSelect: "none",
+            touchAction: "none",
+            opacity: dragEnabled ? 1 : 0.3,
+            pointerEvents: dragEnabled ? "auto" : "none",
+          }}
           aria-label="drag handle"
         >
           ⋮⋮
@@ -513,7 +750,7 @@ function SortableRuleItem({ id, line, active, onEdit, onRemove }: RuleItemProps)
         ) : (
           <Space wrap>
             <Tag>{r.type}</Tag>
-            {r.type.toUpperCase() !== "MATCH" && <span>{r.payload}</span>}
+            <span>{r.payload}</span>
             <span style={{ color: "#999" }}>→</span>
             <Tag color="blue">{r.policy}</Tag>
             {r.noResolve && <Tag>no-resolve</Tag>}
