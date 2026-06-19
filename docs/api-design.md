@@ -97,8 +97,6 @@ GET  /api/auth/session
 | GET / POST | `/api/profiles/:id/groups` | 是 | 自定义分组 |
 | PUT / DELETE | `/api/profiles/:id/groups/:group_id` | 是 | 单个分组 |
 | POST | `/api/profiles/:id/import-provider-groups` | 是 | 导入机场 `proxy-groups` 为可编辑自定义分组(实时拉取,跳过同名/不支持类型) |
-| GET / POST | `/api/profiles/:id/rule-providers` | 是 | 自定义规则集 |
-| PUT / DELETE | `/api/profiles/:id/rule-providers/:rp_id` | 是 | 单个规则集 |
 | GET | `/api/profiles/:id/preview` | 是 | 预览生成的 YAML |
 | POST | `/api/profiles/:id/generate` | 是 | 校验并生成托管链接 |
 | POST | `/api/profiles/:id/reset-token` | 是 | 重置该配置 token |
@@ -260,7 +258,7 @@ PUT /api/profiles/:id/group-order         // 分组名数组
 | `proxies` | 机场块(机场代理,上游序)+ 自定义块(启用的自定义节点,按 `node_order` 排),按 `node_section_order` 拼接 |
 | `proxy-groups` | 整体替换为启用的自定义分组(机场分组不透传,需「导入机场分组」),再按 `group_order` 重排 |
 | `rules` | 整体替换为用户规则 |
-| `rule-providers` | 机场的透传,启用的自定义规则集**合并**其上(同名覆盖);用户规则用 `RULE-SET` 引用其名 |
+| `rule-providers` | 机场的**原样透传**(不托管自定义规则集);用户规则仍可用 `RULE-SET` 引用机场自带条目名 |
 | `proxy-providers` | **MVP 阶段剥离**:远程节点提供者会让客户端拉取绕过本服务 SSRF 防护与缓存的 URL,并可能暴露机场 URL |
 | 其余(`port`、`dns`、`tun`、`sniffer`…) | 原样透传 |
 
@@ -273,12 +271,10 @@ PUT /api/profiles/:id/group-order         // 分组名数组
 `custom_groups`,与新增自定义分组一样需重新「生成」才进入输出。鉴权与 SSRF 防护同
 `provider-rules`。
 
-与分组/规则的「替换」不同,规则集(`rule-providers`)是「合并」模型:机场的仍透传,
-启用的自定义规则集按名覆盖其上。`GET/POST /api/profiles/:id/rule-providers` 与
-`PUT/DELETE /api/profiles/:id/rule-providers/:rp_id` 管理自定义规则集
-(`provider_type` ∈ `http`/`file`/`inline`,`behavior` ∈ `domain`/`ipcidr`/`classical`,
-其余键放进 `options`)。规则里用 `RULE-SET,<name>,<policy>` 按名引用;新增/修改在下次
-「生成」时进入输出。
+规则集(`rule-providers`):本项目**不托管/管理自定义规则集**,转换器只把机场自带的
+`rule-providers:` 原样透传给客户端。用户规则里仍可用 `RULE-SET,<name>,<policy>` 引用
+机场自带规则集的名称,这些 `RULE-SET` 规则因透传而继续解析。(早期版本的自定义规则集
+CRUD 与 `rule_providers` 表已移除,见 `data-model.md`。)
 
 成功响应:
 

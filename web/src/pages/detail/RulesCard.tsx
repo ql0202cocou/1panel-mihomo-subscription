@@ -37,7 +37,6 @@ import type {
   CustomNode,
   ProviderRulesResponse,
   ProxiesResponse,
-  RuleProvider,
 } from "../../types";
 import { BUILTIN_POLICIES } from "./groupSchema";
 
@@ -46,7 +45,6 @@ interface Props {
   initial: string;
   nodes: CustomNode[];
   groups: CustomGroup[];
-  ruleProviders: RuleProvider[];
   /** Changes when the profile is (re)generated; refreshes policy suggestions. */
   generatedAt: string | null;
   /** Validation errors from the last generate attempt (itemized). */
@@ -54,9 +52,10 @@ interface Props {
   onSaved: () => void;
 }
 
-// Common Mihomo rule types (free text still allowed in the selector). `MATCH` is
-// intentionally absent — the fallback policy is edited via its own dedicated
-// control so it can never be dragged out of last position.
+// Common Mihomo rule types (free text still allowed in the selector). `MATCH`
+// (the fallback) is a normal rule here: it takes only a policy and is
+// added/edited/reordered/deleted like any other rule (it should stay last to be
+// effective, but that's left to the admin's ordering).
 const RULE_TYPES = [
   // Domain
   "DOMAIN-SUFFIX",
@@ -96,6 +95,8 @@ const RULE_TYPES = [
   "OR",
   "NOT",
   "SUB-RULE",
+  // Fallback
+  "MATCH",
 ];
 // Types whose match resolves an IP and thus accept the `no-resolve` modifier.
 const IP_TYPES = new Set([
@@ -189,17 +190,15 @@ export default function RulesCard({
   initial,
   nodes,
   groups,
-  ruleProviders,
   generatedAt,
   errors,
   onSaved,
 }: Props) {
   const { t } = useTranslation();
-  // Source of truth is the raw, non-empty lines *excluding* the MATCH fallback
-  // (which is edited separately so it always stays last). Comments and uncommon
-  // rules (e.g. logical AND/OR) are preserved verbatim until explicitly edited.
+  // Source of truth is the raw, non-empty rule lines (including the MATCH
+  // fallback, which is just a normal rule here). Comments and uncommon rules
+  // (e.g. logical AND/OR) are preserved verbatim until explicitly edited.
   const [lines, setLines] = useState<string[]>([]);
-  const [matchPolicy, setMatchPolicy] = useState("");
   // The add/edit modal: editingIndex === null means we're adding a new rule,
   // otherwise we're rewriting the rule at that list position.
   const [modalOpen, setModalOpen] = useState(false);
@@ -215,14 +214,7 @@ export default function RulesCard({
       .split("\n")
       .map((l) => l.trim())
       .filter((l) => l !== "");
-    const nonMatch: string[] = [];
-    let mp = "";
-    for (const l of all) {
-      if (isMatchLine(l)) mp = parseRule(l).policy; // last MATCH wins
-      else nonMatch.push(l);
-    }
-    setLines(nonMatch);
-    setMatchPolicy(mp);
+    setLines(all);
     setModalOpen(false);
     setEditingIndex(null);
     setModel(EMPTY_RULE);
@@ -241,14 +233,11 @@ export default function RulesCard({
     void loadPolicies();
   }, [loadPolicies, generatedAt]);
 
-  // Reassemble full content (rules + MATCH fallback last) and save. MATCH is
-  // appended only when a fallback policy is set, so it is always the final line.
+  // Save the current rule lines verbatim (MATCH is a normal line in the list).
   const persist = useCallback(
-    async (nextLines: string[], nextMatch: string = matchPolicy) => {
-      const m = nextMatch.trim();
-      const content = (m ? [...nextLines, `MATCH,${m}`] : nextLines).join("\n");
+    async (nextLines: string[]) => {
+      const content = nextLines.join("\n");
       setLines(nextLines);
-      setMatchPolicy(m);
       try {
         await api(`/api/profiles/${profileId}/rules`, {
           method: "PUT",
@@ -259,7 +248,7 @@ export default function RulesCard({
         message.error((e as ApiError).message ?? t("common.saveFailed"));
       }
     },
-    [matchPolicy, profileId, onSaved, t],
+    [profileId, onSaved, t],
   );
 
   // Rule order is semantic (first match wins), so reordering directly changes
@@ -293,7 +282,8 @@ export default function RulesCard({
   // Add (editingIndex === null) or save (rewrite at editingIndex) the composed
   // rule from the modal, then close it.
   function submit() {
-    if (!model.type.trim() || !model.policy.trim() || !model.payload.trim()) {
+    const isMatch = model.type.trim().toUpperCase() === "MATCH";
+    if (!model.type.trim() || !model.policy.trim() || (!isMatch && !model.payload.trim())) {
       message.error(t("rules.incomplete"));
       return;
     }
@@ -375,23 +365,6 @@ export default function RulesCard({
           />
         )}
 
-        {/* Fallback policy (MATCH) — always applied last, never reorderable. */}
-        <Space wrap style={{ padding: "4px 0" }}>
-          <Typography.Text strong>{t("rules.fallback")}</Typography.Text>
-          <AutoComplete
-            style={{ width: 220 }}
-            options={policyOptions}
-            value={matchPolicy}
-            onChange={(v) => setMatchPolicy(v)}
-            onBlur={() => void persist(lines, matchPolicy)}
-            placeholder={t("rules.fallbackNone")}
-            filterOption={(input, opt) =>
-              String(opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
-            }
-          />
-          <Typography.Text type="secondary">{t("rules.fallbackHint")}</Typography.Text>
-        </Space>
-
         {lines.length === 0 ? (
           <Empty description={t("rules.empty")} />
         ) : (
@@ -428,12 +401,7 @@ export default function RulesCard({
         cancelText={t("common.cancel")}
         destroyOnClose
       >
-        <RuleComposer
-          model={model}
-          onChange={setModel}
-          ruleProviders={ruleProviders}
-          policyOptions={policyOptions}
-        />
+        <RuleComposer model={model} onChange={setModel} policyOptions={policyOptions} />
       </Modal>
     </Card>
   );
@@ -442,31 +410,28 @@ export default function RulesCard({
 interface ComposerProps {
   model: RuleModel;
   onChange: (m: RuleModel) => void;
-  ruleProviders: RuleProvider[];
   policyOptions: { value: string }[];
 }
 
 // The structured rule fields (type · content · no-resolve · policy), rendered
 // vertically inside the add/edit modal. The content input adapts to the selected
-// rule type (à la Clash Verge): RULE-SET picks a defined rule-set name, NETWORK
-// picks tcp/udp, everything else is a free text field with a per-type example.
-function RuleComposer({ model, onChange, ruleProviders, policyOptions }: ComposerProps) {
+// rule type (à la Clash Verge): NETWORK picks tcp/udp, RULE-SET is a free-typed
+// rule-set name (referencing the provider's own rule-providers — we don't host
+// custom ones), everything else is a free text field with a per-type example.
+function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
   const { t } = useTranslation();
   const upperType = model.type.trim().toUpperCase();
+  const isMatch = upperType === "MATCH";
   const showNoResolve = IP_TYPES.has(upperType);
 
   function contentInput() {
     if (upperType === "RULE-SET") {
       return (
-        <AutoComplete
+        <Input
           style={{ width: "100%" }}
-          options={ruleProviders.map((rp) => ({ value: rp.name }))}
           value={model.payload}
-          onChange={(payload) => onChange({ ...model, payload })}
+          onChange={(e) => onChange({ ...model, payload: e.target.value })}
           placeholder={t("rules.ruleSetPayloadHint")}
-          filterOption={(input, opt) =>
-            String(opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
-          }
         />
       );
     }
@@ -506,11 +471,15 @@ function RuleComposer({ model, onChange, ruleProviders, policyOptions }: Compose
           }
         />
       </div>
-      <div>
-        <Typography.Text type="secondary">{t("rules.payload")}</Typography.Text>
-        {contentInput()}
-      </div>
-      {showNoResolve && (
+      {isMatch ? (
+        <Typography.Text type="secondary">{t("rules.matchHint")}</Typography.Text>
+      ) : (
+        <div>
+          <Typography.Text type="secondary">{t("rules.payload")}</Typography.Text>
+          {contentInput()}
+        </div>
+      )}
+      {showNoResolve && !isMatch && (
         <Space size={8}>
           <Switch
             size="small"
@@ -591,7 +560,7 @@ function SortableRuleItem({ id, line, onEdit, onRemove }: RuleItemProps) {
         ) : (
           <Space wrap>
             <Tag>{r.type}</Tag>
-            <span>{r.payload}</span>
+            {r.payload && <span>{r.payload}</span>}
             <span style={{ color: "#999" }}>→</span>
             <Tag color="blue">{r.policy}</Tag>
             {r.noResolve && <Tag>no-resolve</Tag>}
