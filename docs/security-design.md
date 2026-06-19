@@ -1,45 +1,42 @@
-# Security Design
+# 安全设计
 
-This document defines the security direction for Mihomo Subscription Manager.
-The project is intended to be self-hosted on 1Panel, but it should still be safe
-by default and avoid exposing sensitive subscription data.
+本文档定义了 Mihomo 订阅管理器的安全方向。
+该项目旨在 1Panel 上自托管，但仍应默认安全，避免暴露敏感订阅数据。
 
-## Security Goals
+## 安全目标
 
-- Do not expose original provider subscription URLs.
-- Do not allow the service to be used as an internal network scanner.
-- Do not make permanent subscription links easy to enumerate.
-- Protect all management APIs and the Web UI.
-- Keep error messages and logs free of subscription secrets.
-- Keep the design practical for a personal/self-hosted 1Panel application.
+- 不暴露原始机场订阅 URL。
+- 不允许服务被用作内部网络扫描器。
+- 不使永久订阅链接易于枚举。
+- 保护所有管理 API 和 Web UI。
+- 保持错误消息和日志不包含订阅秘密。
+- 保持设计对个人/自托管 1Panel 应用程序实用。
 
-## Trust Boundaries
+## 信任边界
 
-The system has three main trust boundaries:
+系统有三个主要信任边界：
 
 ```text
-Admin Browser
+管理员浏览器
   -> Web UI
-  -> Management API
+  -> 管理 API
 
-Public Subscription Client
-  -> Public subscription endpoint
+公共订阅客户端
+  -> 公共订阅端点
 
-Backend Service
-  -> Remote provider subscription URL
+后端服务
+  -> 远程机场订阅 URL
 ```
 
-Treat these surfaces differently:
+对这些接口区别对待：
 
-- Management APIs require authentication.
-- Public subscription endpoints do not require login, but require a random public
-  path prefix and a per-profile token.
-- Remote provider subscription fetches must be protected against SSRF.
+- 管理 API 需要认证。
+- 公共订阅端点不需要登录，但需要随机公共路径前缀和每个配置文件的 token。
+- 远程机场订阅获取必须受到 SSRF 保护。
 
-## Public Link Design
+## 公共链接设计
 
-Split public subscription links into an app-level random path and a profile-level
-token:
+将公共订阅链接拆分为应用级随机路径和配置文件级 token：
 
 ```text
 PUBLIC_BASE_URL=https://sub.example.com
@@ -47,142 +44,112 @@ PUBLIC_PATH_PREFIX=<random-app-path>
 profile_token=<random-profile-token>
 ```
 
-Generated link:
+生成的链接：
 
 ```text
 https://sub.example.com/<PUBLIC_PATH_PREFIX>/api/sub/<profile_token>
 ```
 
-Recommended properties:
+推荐属性：
 
-- `PUBLIC_BASE_URL` stores only the externally reachable origin.
-- `PUBLIC_PATH_PREFIX` should be a random 16-24 character path segment.
-- `profile_token` should be generated from at least 32 random bytes.
-- Each profile gets its own token.
-- Links must not include database IDs or original provider URLs.
+- `PUBLIC_BASE_URL` 仅存储外部可达的源。
+- `PUBLIC_PATH_PREFIX` 应为随机的 16-24 个字符的路径段。
+- `profile_token` 应从至少 32 个随机字节生成。
+- 每个配置文件获得自己的 token。
+- 链接不得包含数据库 ID 或原始机场 URL。
 
-Validation rules for public subscription requests:
+公共订阅请求的验证规则：
 
 ```text
-public path prefix matches
-profile token exists
-profile enabled = true
+公共路径前缀匹配
+配置文件 token 存在
+配置文件启用 = true
 ```
 
-Return `404 Not Found` for invalid path, invalid token, or disabled profile. Do
-not reveal which part failed.
+对无效路径、无效 token 或禁用的配置文件返回 `404 Not Found`。不透露哪部分失败。
 
-Avoid a timing side channel that distinguishes "wrong path prefix" (no database
-lookup) from "right prefix, wrong token" (a lookup runs): always perform the
-token lookup regardless of whether the path prefix matched, and compare both
-the path prefix and the token in constant time. Otherwise response timing lets
-an attacker confirm the path prefix independently, defeating the two-factor
-(prefix + token) design.
+避免区分"错误路径前缀"（无数据库查找）和"正确前缀，错误 token"（运行查找）的时序侧信道：始终执行 token 查找，无论路径前缀是否匹配，并以恒定时间比较路径前缀和 token。否则响应时序会让攻击者独立确认路径前缀，破坏双因素（前缀 + token）设计。
 
-## Token Rotation
+## Token 轮换
 
-Support these reset operations:
+支持以下重置操作：
 
-- Reset a single profile token.
-- Reset the global public path prefix.
-- Disable a profile, making its generated link immediately invalid.
+- 重置单个配置文件 token。
+- 重置全局公共路径前缀。
+- 禁用配置文件，使其生成的链接立即失效。
 
-Use cases:
+用例：
 
-- If one generated subscription link leaks, reset that profile token.
-- If the public entry path appears to be scanned, reset `PUBLIC_PATH_PREFIX`.
-- If a provider subscription changes, keep the public link stable unless the
-  user explicitly resets it.
+- 如果一个生成的订阅链接泄露，重置该配置文件 token。
+- 如果公共入口路径被扫描，重置 `PUBLIC_PATH_PREFIX`。
+- 如果机场订阅更改，保持公共链接稳定，除非用户明确重置。
 
-## Admin Authentication
+## 管理员认证
 
-Management surfaces:
+管理界面：
 
-- Web UI.
-- Profile CRUD APIs.
-- Rule CRUD APIs.
-- Token reset APIs.
-- System settings APIs.
+- Web UI。
+- 配置文件 CRUD API。
+- 规则 CRUD API。
+- Token 重置 API。
+- 系统设置 API。
 
-Recommended initial approach:
+推荐初始方法：
 
-- Read `ADMIN_USERNAME` from the environment.
-- Read `ADMIN_PASSWORD` from the environment.
-- Configure both values through the 1Panel app install form and
-  `docker-compose.yml` environment variables.
-- Refuse to start, or restrict to localhost, if either value is not set.
-- Store only a password hash if persistence is needed.
-- Compare submitted credentials in constant time to avoid timing side
-  channels.
-- Use session cookies for Web UI login, with at least 128 bits of CSPRNG
-  session-ID entropy.
-- Store sessions in memory: they are invalidated on service restart, which is
-  acceptable for a single-instance self-hosted app.
-- Expire sessions after a bounded idle time (default: 7 days).
-- Set cookies with `HttpOnly` and `SameSite=Lax`.
-- Set `Secure` when the deployment uses HTTPS. This is inferred from an
-  `https://` `PUBLIC_BASE_URL`, but behind a TLS-terminating reverse proxy the
-  app speaks plain HTTP, so the explicit `SECURE_COOKIES` override should be set
-  to `true`; the service logs a warning whenever cookies end up without
-  `Secure`.
-- Add basic login failure rate limiting.
+- 从环境读取 `ADMIN_USERNAME`。
+- 从环境读取 `ADMIN_PASSWORD`。
+- 通过 1Panel 应用安装表单和 `docker-compose.yml` 环境变量配置这两个值。
+- 如果任一值未设置，拒绝启动或限制为 localhost。
+- 如果需要持久化，仅存储密码哈希。
+- 以恒定时间比较提交的凭据，避免时序侧信道。
+- 使用会话 cookie 进行 Web UI 登录，至少 128 位 CSPRNG 会话 ID 熵。
+- 将会话存储在内存中：服务重启时失效，这对单实例自托管应用可接受。
+- 会话在有限空闲时间后过期（默认：7 天）。
+- 设置 cookie 为 `HttpOnly` 和 `SameSite=Lax`。
+- 部署使用 HTTPS 时设置 `Secure`。这从 `https://` 的 `PUBLIC_BASE_URL` 推断，但在 TLS 终止反向代理后面，应用使用纯 HTTP，因此应明确设置 `SECURE_COOKIES` 为 `true`；当 cookie 最终没有 `Secure` 时，服务记录警告。
+- 添加基本登录失败限流。
 
-CORS and CSRF:
+CORS 和 CSRF：
 
-- The SPA is served same-origin by the Axum service, so the management API
-  needs no CORS at all. No CORS layer is enabled; never reintroduce a
-  permissive one, otherwise cookie-based auth loses its same-origin protection.
-- `SameSite=Lax` blocks cross-site cookie sending on non-GET requests. As
-  defense in depth, also verify the `Origin` header on state-changing
-  management requests when it is present.
+- SPA 由 Axum 服务同源提供，因此管理 API 完全不需要 CORS。未启用 CORS 层；永远不要重新引入宽松的 CORS，否则基于 cookie 的认证会失去同源保护。
+- `SameSite=Lax` 阻止非 GET 请求的跨站 cookie 发送。作为纵深防御，当存在时，也在状态更改的管理请求上验证 `Origin` 头。
 
-Bearer token authentication can be used for early development, but session
-cookies are better for the Web UI experience.
+Bearer token 认证可用于早期开发，但会话 cookie 更适合 Web UI 体验。
 
-Initial login flow:
+初始登录流程：
 
 ```text
 GET /login
-  -> show login page
+  -> 显示登录页面
 
 POST /api/auth/login
-  -> validate ADMIN_USERNAME and ADMIN_PASSWORD
-  -> create session cookie
+  -> 验证 ADMIN_USERNAME 和 ADMIN_PASSWORD
+  -> 创建会话 cookie
 
 POST /api/auth/logout
-  -> clear session cookie
+  -> 清除会话 cookie
 ```
 
-Only authenticated sessions can access the Web UI and management APIs. Public
-subscription links still use `PUBLIC_PATH_PREFIX` plus profile token and do not
-require a login session.
+只有认证会话才能访问 Web UI 和管理 API。公共订阅链接仍使用 `PUBLIC_PATH_PREFIX` 加配置文件 token，不需要登录会话。
 
-## SSRF Protection
+## SSRF 保护
 
-User-provided provider subscription URLs are dangerous because the backend fetches
-them. Protect every outbound fetch. All provider fetches go through the single
-SSRF-protected fetcher — not just `generate`/`preview`/the public endpoint, but
-also the admin-triggered live fetches `GET /api/profiles/:id/provider-rules` and
-`POST /api/profiles/:id/import-provider-groups` (import the provider's rules/
-groups for editing).
+用户提供的机场订阅 URL 很危险，因为后端会获取它们。保护每个出站获取。所有机场获取通过单一 SSRF 保护的获取器——不仅 `generate`/`preview`/公共端点，还有管理员触发的实时获取 `GET /api/profiles/:id/provider-rules` 和 `POST /api/profiles/:id/import-provider-groups`（导入机场的规则/分组进行编辑）。
 
-Required URL rules:
+必需的 URL 规则：
 
-- Allow only `http` and `https`.
-- Reject empty hosts.
-- Reject username/password credentials in URLs.
-- Reject localhost names such as `localhost`.
-- Reject bare IPs in blocked ranges.
-- Resolve domains and check the resolved IPs.
-- Connect to the validated IP itself (pin it in the HTTP client resolver)
-  instead of re-resolving at request time. Validating first and letting the
-  client resolve again is vulnerable to DNS rebinding (TOCTOU).
-- For IPv6 addresses that embed an IPv4 address (IPv4-mapped, NAT64, 6to4),
-  extract the embedded IPv4 address and check it against the IPv4 blocklist.
-- Re-check every redirect target with the same rules, including IP pinning.
-- Limit redirects to a small number, such as 3.
+- 仅允许 `http` 和 `https`。
+- 拒绝空主机。
+- 拒绝 URL 中的用户名/密码凭据。
+- 拒绝 localhost 名称，如 `localhost`。
+- 拒绝阻止范围内的裸 IP。
+- 解析域并检查解析的 IP。
+- 连接到验证的 IP 本身（在 HTTP 客户端解析器中固定），而不是在请求时重新解析。先验证再让客户端解析容易受到 DNS 重绑定（TOCTOU）攻击。
+- 对于嵌入 IPv4 地址的 IPv6 地址（IPv4 映射、NAT64、6to4），提取嵌入的 IPv4 地址并根据 IPv4 阻止列表检查。
+- 用相同规则重新检查每个重定向目标，包括 IP 固定。
+- 将重定向限制为少量，例如 3。
 
-Blocked IPv4 ranges:
+阻止的 IPv4 范围：
 
 ```text
 0.0.0.0/8
@@ -202,193 +169,140 @@ Blocked IPv4 ranges:
 240.0.0.0/4
 ```
 
-Blocked IPv6 ranges:
+阻止的 IPv6 范围：
 
 ```text
 ::/128
 ::1/128
-::ffff:0:0/96    # IPv4-mapped: extract embedded IPv4 and re-check
-64:ff9b::/96     # NAT64: extract embedded IPv4 and re-check
-2002::/16        # 6to4: extract embedded IPv4 and re-check
+::ffff:0:0/96    # IPv4 映射：提取嵌入的 IPv4 并重新检查
+64:ff9b::/96     # NAT64：提取嵌入的 IPv4 并重新检查
+2002::/16        # 6to4：提取嵌入的 IPv4 并重新检查
 fc00::/7
 fe80::/10
 ff00::/8
 ```
 
-The three IPv4-embedding ranges are classic SSRF bypasses: a URL such as
-`http://[::ffff:127.0.0.1]/` is not in any blocked IPv6 range by itself, so
-the embedded IPv4 address must be extracted and checked against the IPv4
-blocklist.
+这三个 IPv4 嵌入范围是经典的 SSRF 绕过：像 `http://[::ffff:127.0.0.1]/` 这样的 URL 本身不在任何阻止的 IPv6 范围内，因此必须提取嵌入的 IPv4 地址并根据 IPv4 阻止列表检查。
 
-Docker/internal network ranges may also be blocked through configuration.
+Docker/内部网络范围也可以通过配置阻止。
 
-Outbound request limits:
+出站请求限制：
 
-- Connect timeout: 5-10 seconds.
-- Total request timeout: 10-20 seconds.
-- Maximum response size: 5-10 MB, enforced on the streamed byte count while
-  reading the body. Do not rely on the `Content-Length` header — it is
-  attacker-controlled and can lie.
-- Maximum redirects: 3.
-- Only fetch text/YAML-like content for subscription processing.
+- 连接超时：5-10 秒。
+- 总请求超时：10-20 秒。
+- 最大响应大小：5-10 MB，在读取正文时对流字节计数强制执行。不要依赖 `Content-Length` 头——它是攻击者控制的，可能撒谎。
+- 最大重定向：3。
+- 仅为订阅处理获取文本/类 YAML 内容。
 
-## Untrusted Content Handling
+## 不受信任的内容处理
 
-Provider responses are untrusted input even after the URL passes SSRF checks.
+即使 URL 通过 SSRF 检查，机场响应也是不受信任的输入。
 
-- Parse fetched YAML with resource limits. YAML anchors/aliases can amplify a
-  size-limited input into unbounded memory ("billion laughs"); because the bomb
-  is tiny and expands inside the parser, cap anchors/aliases by scanning the raw
-  text *before* parsing (reject above a small threshold), then enforce nesting
-  depth and node count after. Apply the same parse limits to admin-submitted
-  node/group YAML, and bound every management request body (default 1 MB, reject
-  with `413`) — an authenticated admin is not a reason to allow unbounded memory
-  or database growth.
-- Sanitize the provider `subscription-userinfo` header before storing or
-  echoing it on the public endpoint: accept only a single header value
-  matching the expected `key=value; ...` shape, and reject values containing
-  control characters (CR/LF) to prevent response header injection.
-- Treat provider node names and group names as plain data. The Web UI must
-  escape them on render; never interpolate them into HTML or shell commands.
+- 用资源限制解析获取的 YAML。YAML 锚点/别名可以将大小有限的输入放大为无界内存（"十亿笑"）；因为炸弹很小且在解析器内扩展，所以在解析前扫描原始文本*之前*限制锚点/别名（超过小阈值则拒绝），然后在之后强制嵌套深度和节点计数。对管理员提交的节点/分组 YAML 应用相同的解析限制，并限制每个管理请求正文（默认 1 MB，用 `413` 拒绝）——认证管理员不是允许无界内存或数据库增长的理由。
+- 在存储或在公共端点回显之前清理机场 `subscription-userinfo` 头：仅接受符合预期 `key=value; ...` 形状的单个头值，并拒绝包含控制字符（CR/LF）的值以防止响应头注入。
+- 将机场节点名称和分组名称视为纯数据。Web UI 必须在渲染时转义；永远不要将它们插入 HTML 或 shell 命令。
 
-## Sensitive Data Handling
+## 敏感数据处理
 
-Original provider subscription URLs often contain secrets. Treat them as
-sensitive.
+原始机场订阅 URL 通常包含秘密。将它们视为敏感数据。
 
-Rules:
+规则：
 
-- Do not log complete provider subscription URLs.
-- Do not include provider URLs in public subscription output.
-- Do not include provider URLs in generated error messages.
-- Management APIs should hide or mask provider URLs by default.
-- Exported configuration should not include provider URLs unless explicitly
-  requested by an authenticated administrator.
-- The Web UI never persists provider URLs in browser storage
-  (localStorage/sessionStorage); only masked values are ever held client-side.
+- 不记录完整的机场订阅 URL。
+- 不在公共订阅输出中包含机场 URL。
+- 不在生成的错误消息中包含机场 URL。
+- 管理 API 默认应隐藏或屏蔽机场 URL。
+- 导出的配置不应包含机场 URL，除非认证管理员明确请求。
+- Web UI 永远不要在浏览器存储（localStorage/sessionStorage）中持久化机场 URL；客户端仅持有屏蔽值。
 
-Example masking:
+屏蔽示例：
 
 ```text
 https://example.com/api/sub?token=abcdef
 https://example.com/api/sub?token=***
 ```
 
-Masking rule (deterministic, applied everywhere): keep the scheme, host, and
-path; replace every query parameter value with `***`. The same rule applies
-to logs, API responses, and error messages.
+屏蔽规则（确定性，到处应用）：保留方案、主机和路径；将每个查询参数值替换为 `***`。相同规则适用于日志、API 响应和错误消息。
 
-## Rate Limiting and Abuse Control
+## 限流和滥用控制
 
-Recommended limits:
+推荐限制：
 
-- Login attempts: limit by IP and account scope.
-- Public subscription downloads: limit by source IP independent of the token,
-  so guessing many distinct tokens from one IP shares a single budget and
-  enumeration/scanning is actually throttled (the limit applies before the
-  handler, so `404`s count too).
-- Provider refresh operations: limit per profile.
-- Manual generate/refresh API: authenticated and rate limited.
+- 登录尝试：按 IP 和账户范围限制。
+- 公共订阅下载：按源 IP 独立于 token 限制，因此从一个 IP 猜测许多不同 token 共享单一预算，枚举/扫描实际上被节流（限制在处理器之前应用，因此 `404` 也计数）。
+- 机场刷新操作：每个配置文件限制。
+- 手动生成/刷新 API：认证并限流。
 
-For the first self-hosted version, in-memory rate limits are acceptable. If the
-app later becomes multi-instance, move limits to a shared store.
+对于第一个自托管版本，内存中限流可接受。如果应用后来成为多实例，将限制移动到共享存储。
 
-### Deriving the Client IP
+### 获取客户端 IP
 
-The service runs behind the 1Panel reverse proxy, so the TCP peer address is
-always the proxy, not the client. Rate limits and access logs that key on
-"source IP" must therefore derive the client IP correctly:
+服务在 1Panel 反向代理后面运行，因此 TCP 对等地址始终是代理，不是客户端。因此，基于"源 IP"的限流和访问日志必须正确获取客户端 IP：
 
-- Trust `X-Forwarded-For` only from the known reverse proxy, and take the
-  rightmost untrusted hop — not the leftmost, which is client-controlled and
-  spoofable.
-- Make the number of trusted proxy hops configurable
-  (`TRUSTED_PROXY_HOPS`, default `1` for the standard 1Panel deployment).
-- If the header is absent or malformed, fall back to the TCP peer address.
+- 仅信任来自已知反向代理的 `X-Forwarded-For`，并取最右边的不受信任跳数——不是最左边的，那是客户端控制和可欺骗的。
+- 使受信任的代理跳数可配置（`TRUSTED_PROXY_HOPS`，标准 1Panel 部署默认 `1`）。
+- 如果头缺失或格式错误，回退到 TCP 对等地址。
 
-Getting this wrong collapses all clients into the proxy IP (rate limits become
-global) or lets a client forge the header to evade per-IP limits.
+弄错这个会使所有客户端坍缩到代理 IP（限流变成全局）或让客户端伪造头以逃避每 IP 限制。
 
-## Cache and Refresh Strategy
+## 缓存和刷新策略
 
-Avoid fetching provider subscriptions on every public download request.
+避免在每个公共下载请求上获取机场订阅。
 
-Suggested behavior:
+建议行为：
 
 ```text
 GET /<public-path>/api/sub/<token>
-  -> every pull re-fetches the provider and regenerates (latest nodes)
-  -> serve the previous cache only if the provider fetch fails
+  -> 每次拉取重新获取机场并重新生成（最新节点）
+  -> 仅在机场获取失败时提供先前缓存
 ```
 
-The public endpoint re-fetches the provider on **every** pull so clients always
-get the latest nodes; per-IP rate limiting plus the per-profile single-flight
-(below) bound the resulting load. `CACHE_TTL_MINUTES` now governs only the admin
-`preview`, not the public endpoint.
+公共端点在**每次**拉取时重新获取机场，因此客户端始终获得最新节点；每 IP 限流加上每个配置文件的单发（如下）限制了产生的负载。`CACHE_TTL_MINUTES` 现在仅管理管理员 `preview`，而不是公共端点。
 
-Single-flight refresh (required): coalesce concurrent refreshes of the same
-profile behind a per-profile lock so a stale-cache stampede cannot fan out
-into many simultaneous provider fetches. Concurrent requests for that profile
-either await the in-flight refresh or serve the existing stale cache; only one
-upstream fetch runs at a time per profile. Without this, one popular expiring
-link multiplies into N provider fetches, hammering the provider and amplifying
-outbound load.
+单发刷新（必需）：在每个配置文件锁后面合并同一配置文件的并发刷新，因此陈旧缓存踩踏不能扇出为许多同时的机场获取。该配置文件的并发请求要么等待进行中的刷新，要么提供现有的陈旧缓存；每个配置文件一次只有一个上游获取运行。没有这个，一个流行的过期链接会乘以 N 个机场获取，猛击机场并放大出站负载。
 
-Cache recommendations:
+缓存建议：
 
-- Cache generated Mihomo YAML, not excessive intermediate data.
-- Use a configurable TTL via `CACHE_TTL_MINUTES` (default 15; see the
-  environment variable table in `1panel-app.md`).
-- Store cache by profile and content hash.
-- Allow authenticated manual refresh.
-- If refresh fails and stale cache exists, optionally return stale cache with a
-  logged warning.
+- 缓存生成的 Mihomo YAML，而不是过多的中间数据。
+- 通过 `CACHE_TTL_MINUTES` 使用可配置的 TTL（默认 15；见 `1panel-app.md` 中的环境变量表）。
+- 按配置文件和内容哈希存储缓存。
+- 允许认证手动刷新。
+- 如果刷新失败且存在陈旧缓存，可选择返回陈旧缓存并记录警告。
 
-## Error Handling
+## 错误处理
 
-Public subscription endpoint:
+公共订阅端点：
 
-- Return `404 Not Found` for invalid path, invalid token, or disabled profile.
-- Return a generic `503` when the request is valid but no cache exists and
-  the provider fetch failed; the body must contain no upstream details.
-- Return generic errors without provider URLs.
-- Do not reveal whether a token exists.
+- 对无效路径、无效 token 或禁用的配置文件返回 `404 Not Found`。
+- 当请求有效但无缓存且机场获取失败时返回通用 `503`；正文不得包含上游细节。
+- 返回不包含机场 URL 的通用错误。
+- 不透露 token 是否存在。
 
-Management API:
+管理 API：
 
-- Return useful validation errors.
-- Do not include provider subscription secrets.
-- Log internal details only after masking sensitive fields.
+- 返回有用的验证错误。
+- 不包含机场订阅秘密。
+- 仅在屏蔽敏感字段后记录内部细节。
 
-## Security Checklist
+## 安全检查清单
 
-- Management APIs require authentication.
-- Admin username and password are configured through 1Panel compose environment
-  variables.
-- Public links use both `PUBLIC_PATH_PREFIX` and profile token.
-- Tokens are generated with cryptographically secure randomness.
-- Token reset is supported per profile.
-- Public path prefix reset is supported globally.
-- URL scheme is limited to `http` and `https`.
-- DNS resolution results are checked against blocked IP ranges, and the
-  validated IP is pinned for the actual connection (DNS-rebinding safe).
-- IPv4-embedding IPv6 addresses (IPv4-mapped, NAT64, 6to4) are unwrapped and
-  re-checked against the IPv4 blocklist.
-- Redirect targets are checked before following.
-- Request timeout, redirect limit, and response size limit are enforced; the
-  size limit counts streamed bytes, not `Content-Length`.
-- Fetched YAML is parsed with alias-expansion and nesting-depth limits.
-- `subscription-userinfo` is format-validated before being stored or echoed.
-- Credentials are compared in constant time.
-- No permissive CORS layer; the management API is same-origin only, with
-  `Origin` verification on state-changing requests as defense in depth.
-- Management request bodies are size-bounded (`413` on overflow) and
-  admin-submitted YAML uses the same parse limits as provider content.
-- Provider URLs are masked in logs and responses.
-- Public endpoint returns generic `404` for invalid access, with the token
-  lookup always performed and constant-time comparison to avoid timing
-  disclosure of the path prefix.
-- Cache prevents public requests from repeatedly fetching provider URLs, and a
-  per-profile single-flight lock prevents stale-cache refresh stampedes.
-- Client IP for rate limiting is derived from a trusted reverse proxy hop, not
-  a client-spoofable header.
+- 管理 API 需要认证。
+- 管理员用户名和密码通过 1Panel compose 环境变量配置。
+- 公共链接使用 `PUBLIC_PATH_PREFIX` 和配置文件 token。
+- Token 用加密安全随机性生成。
+- 支持每个配置文件的 token 重置。
+- 支持全局公共路径前缀重置。
+- URL 方案限制为 `http` 和 `https`。
+- DNS 解析结果根据阻止的 IP 范围检查，验证的 IP 为实际连接固定（DNS 重绑定安全）。
+- IPv4 嵌入的 IPv6 地址（IPv4 映射、NAT64、6to4）被解包并根据 IPv4 阻止列表重新检查。
+- 重定向目标在跟随前检查。
+- 强制请求超时、重定向限制和响应大小限制；大小限制计数字节流，而不是 `Content-Length`。
+- 获取的 YAML 用别名扩展和嵌套深度限制解析。
+- `subscription-userinfo` 在存储或回显前进行格式验证。
+- 凭据以恒定时间比较。
+- 无宽松 CORS 层；管理 API 仅同源，在状态更改请求上验证 `Origin` 作为纵深防御。
+- 管理请求正文有大小限制（溢出时 `413`），管理员提交的 YAML 使用与机场内容相同的解析限制。
+- 机场 URL 在日志和响应中屏蔽。
+- 公共端点对无效访问返回通用 `404`，始终执行 token 查找并恒定时间比较以避免路径前缀的时序泄露。
+- 缓存防止公共请求重复获取机场 URL，每个配置文件的单发锁防止陈旧缓存刷新踩踏。
+- 用于限流的客户端 IP 从受信任的反向代理跳数派生，而不是客户端可欺骗的头。

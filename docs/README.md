@@ -1,27 +1,16 @@
-# Documentation
+# 文档
 
-This directory stores project documentation, packaging notes, and release
-materials for Mihomo Subscription Manager.
+此目录存储 Mihomo 订阅管理器的项目文档、打包说明和发布材料。
 
-These are the maintenance-phase reference docs for the implemented service.
-(The development-phase planning docs `plan.md` and `technical-roadmap.md` were
-removed once the design was implemented; their durable content was folded into
-the docs below — the environment-variable table into `1panel-app.md` and the
-converter's top-level-key handling into `api-design.md`.)
+这些是已实现服务的维护阶段参考文档。（开发阶段规划文档 `plan.md` 和 `technical-roadmap.md` 在设计实现后被移除；其持久内容已并入下面的文档——环境变量表并入 `1panel-app.md`，转换器的顶级键处理并入 `api-design.md`。）
 
-## Documents
+## 文档列表
 
-- `api-design.md`: API request/response contracts, authentication behavior, and
-  the converter's top-level-key handling.
-- `data-model.md`: SQLite schema, indexes, and migration notes.
-- `security-design.md`: Security goals, public link design, SSRF protection,
-  authentication, and abuse-control notes.
-- `1panel-app.md`: 1Panel local app packaging, the authoritative environment
-  variable table, and validation notes.
-- `release.md`: Image build, tag, and publish steps.
-- `changelog.md`: Changelog template and notable project changes.
+- `api-design.md`：API 请求/响应契约、认证行为和转换器的顶级键处理。
+- `data-model.md`：SQLite 模式、索引和迁移说明。
+- `security-design.md`：安全目标、公共链接设计、SSRF 保护、认证和滥用控制说明。
+- `1panel-app.md`：1Panel 本地应用打包、权威环境变量表和验证说明。
+- `release.md`：镜像构建、标签和发布步骤。
+- `changelog.md`：变更日志模板和显著项目变更。
 
-The documented design is implemented (backend + SPA) and released: the `0.1.8`
-1Panel app package with its full install form is complete (`1panel-app.md`), and
-the image is published to Docker Hub (`release.md`). Implementation trade-offs
-and per-version changes are tracked in `changelog.md`.
+文档化的设计已实现（后端 + SPA）并发布：`0.2.0` 1Panel 应用包及其完整安装表单已完成（`1panel-app.md`），镜像已发布到 Docker Hub（`release.md`）。实现权衡和每版本变更记录在 `changelog.md` 中。
