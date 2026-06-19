@@ -1,7 +1,7 @@
 # 发布流程
 
-> **状态:0.2.0 应用包已就绪。** 服务、多阶段镜像构建与 1Panel 应用包安装表单
-> 均已完成(`apps/mihomo-subscription/0.2.0/`)。镜像策略:**发布到 Docker Hub**
+> **状态:0.2.1 应用包已就绪。** 服务、多阶段镜像构建与 1Panel 应用包安装表单
+> 均已完成(`apps/mihomo-subscription/0.2.1/`)。镜像策略:**发布到 Docker Hub**
 > (`quinlanhoo/mihomo-subscription`,多架构 amd64+arm64),1Panel 主机直接
 > `docker pull`,无需在主机上同步源码或本地构建;离线/内网环境可改用文末的
 > 本地构建备选流程。
@@ -25,8 +25,8 @@ cargo test
 # 校验 1Panel YAML
 ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
   apps/mihomo-subscription/data.yml \
-  apps/mihomo-subscription/0.2.0/data.yml \
-  apps/mihomo-subscription/0.2.0/docker-compose.yml
+  apps/mihomo-subscription/0.2.1/data.yml \
+  apps/mihomo-subscription/0.2.1/docker-compose.yml
 ```
 
 人工确认:
@@ -51,7 +51,7 @@ ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f); puts "OK #{f}" }' \
 1Panel 主机安装时直接 `docker pull`,无需同步源码或本地构建。
 
 ```bash
-VERSION=0.2.0
+VERSION=0.2.1
 NS=quinlanhoo
 
 # 登录 Docker Hub(建议用 Personal Access Token,非 TTY 用 --password-stdin)
@@ -83,8 +83,8 @@ curl -fsS http://localhost:8080/health
 每个版本新增一个版本目录,保留旧版本目录不删除:
 
 ```bash
-VERSION=0.2.1
-PREV=0.2.0
+VERSION=0.2.2
+PREV=0.2.1
 cp -R apps/mihomo-subscription/${PREV} apps/mihomo-subscription/${VERSION}
 ```
 
@@ -138,7 +138,7 @@ gh release create v${VERSION} \
 并把该版本 compose 的 `image` 字段临时改成本地 tag。
 
 ```bash
-VERSION=0.2.0
+VERSION=0.2.1
 
 # 在 1Panel 主机上构建,镜像名需与 compose 的 image 字段一致
 docker build -t mihomo-subscription:${VERSION} .

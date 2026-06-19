@@ -1,6 +1,6 @@
 # 1Panel 应用打包
 
-> **状态：包已完成（0.2.0）。** `0.2.0` 应用包暴露了完整的安装表单——管理员凭据、
+> **状态：包已完成（0.2.1）。** `0.2.1` 应用包暴露了完整的安装表单——管理员凭据、
 > 公共源/路径前缀、获取/缓存/代理调优和 `SECURE_COOKIES` 覆盖——compose 文件将它们
 > 全部传递给服务。下面的环境变量表是权威参考；安装表单、compose 和代码保持一致。
 
@@ -24,7 +24,7 @@ apps/mihomo-subscription/
     docker-compose.yml
     data/
   ...               # 其余历史版本目录,保留不删
-  0.2.0/            # 当前版本
+  0.2.1/            # 当前版本
     data.yml
     docker-compose.yml
     data/
@@ -72,7 +72,7 @@ https://sub.example.com/<public-path-prefix>/api/sub/<token>
 
 ## 验证检查清单
 
-此检查清单描述发布所需的包状态。`0.2.0` 包满足以下每一项。
+此检查清单描述发布所需的包状态。`0.2.1` 包满足以下每一项。
 
 - 根 `data.yml` 包含应用元数据。
 - 版本 `data.yml` 包含 `additionalProperties.formFields`。

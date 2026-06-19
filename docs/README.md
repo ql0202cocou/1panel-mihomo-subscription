@@ -13,4 +13,4 @@
 - `release.md`：镜像构建、标签和发布步骤。
 - `changelog.md`：变更日志模板和显著项目变更。
 
-文档化的设计已实现（后端 + SPA）并发布：`0.2.0` 1Panel 应用包及其完整安装表单已完成（`1panel-app.md`），镜像已发布到 Docker Hub（`release.md`）。实现权衡和每版本变更记录在 `changelog.md` 中。
+文档化的设计已实现（后端 + SPA）并发布：`0.2.1` 1Panel 应用包及其完整安装表单已完成（`1panel-app.md`），镜像已发布到 Docker Hub（`release.md`）。实现权衡和每版本变更记录在 `changelog.md` 中。
