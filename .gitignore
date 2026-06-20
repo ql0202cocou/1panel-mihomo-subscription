@@ -4,3 +4,6 @@ target/
 
 # Local-only Claude Code project guide (kept out of version control by request).
 CLAUDE.md
+
+# Local-only scratch / audit notes (not for the public repo).
+plan-*.md
