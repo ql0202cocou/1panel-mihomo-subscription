@@ -98,19 +98,6 @@ const RULE_TYPES = [
   // Fallback
   "MATCH",
 ];
-// Types whose match resolves an IP and thus accept the `no-resolve` modifier.
-const IP_TYPES = new Set([
-  "IP-CIDR",
-  "IP-CIDR6",
-  "IP-SUFFIX",
-  "IP-ASN",
-  "GEOIP",
-  "SRC-GEOIP",
-  "SRC-IP-ASN",
-  "SRC-IP-CIDR",
-  "SRC-IP-SUFFIX",
-  "RULE-SET",
-]);
 // Per-type payload example, shown as the content-input placeholder (à la Clash
 // Verge). Helps the admin enter the right shape without docs.
 const RULE_EXAMPLES: Record<string, string> = {
@@ -422,7 +409,10 @@ function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
   const { t } = useTranslation();
   const upperType = model.type.trim().toUpperCase();
   const isMatch = upperType === "MATCH";
-  const showNoResolve = IP_TYPES.has(upperType);
+  // `no-resolve` is offered for every rule type (except MATCH, which has no
+  // payload). Mihomo only acts on it for IP-resolving rules and ignores it
+  // elsewhere, but we don't gate the toggle so the full editable set is visible.
+  const showNoResolve = !isMatch;
 
   function contentInput() {
     if (upperType === "RULE-SET") {
@@ -479,7 +469,7 @@ function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
           {contentInput()}
         </div>
       )}
-      {showNoResolve && !isMatch && (
+      {showNoResolve && (
         <Space size={8}>
           <Switch
             size="small"
