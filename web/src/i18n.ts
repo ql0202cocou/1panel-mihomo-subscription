@@ -30,8 +30,9 @@ const zh = {
     },
     detail: {
       hostedLink: "托管订阅",
-      copy: "复制链接",
+      copy: "复制订阅",
       copied: "已复制",
+      copyFailed: "复制失败,请手动复制",
       qrcode: "二维码",
       back: "返回列表",
       resetToken: "重置 token",
@@ -48,7 +49,6 @@ const zh = {
       edit: "编辑",
     },
     source: {
-      title: "原始订阅",
       type: "来源类型",
       url: "订阅 URL(脱敏)",
       newUrl: "更换订阅 URL",

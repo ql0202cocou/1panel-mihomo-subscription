@@ -75,8 +75,7 @@ export default function ProfileDetail() {
 
       <HostedLink detail={detail} onReset={reload} />
 
-      <BasicInfo detail={detail} onSaved={reload} />
-      <SourceInfo detail={detail} onRefresh={generate} onSaved={reload} refreshing={generating} />
+      <BasicInfo detail={detail} onRefresh={generate} onSaved={reload} refreshing={generating} />
       <NodesCard
         profileId={detail.id}
         profileName={detail.name}
@@ -125,8 +124,17 @@ function HostedLink({ detail, onReset }: { detail: Detail; onReset: () => void }
 
   async function resetToken() {
     await api(`/api/profiles/${detail.id}/reset-token`, { method: "POST" });
-    message.success(t("detail.copied"));
+    message.success(t("detail.generateSuccess"));
     onReset();
+  }
+
+  async function copyUrl() {
+    try {
+      await navigator.clipboard.writeText(detail.subscription_url);
+      message.success(t("detail.copied"));
+    } catch {
+      message.error(t("detail.copyFailed"));
+    }
   }
 
   return (
@@ -135,78 +143,25 @@ function HostedLink({ detail, onReset }: { detail: Detail; onReset: () => void }
         <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
           {t("detail.alwaysLive")}
         </Typography.Paragraph>
-        <Typography.Text copyable code>
-          {detail.subscription_url}
-        </Typography.Text>
-        <Space align="start" size="large">
-          <QRCode value={detail.subscription_url} size={128} />
+        <Typography.Text code>{detail.subscription_url}</Typography.Text>
+        <Space>
+          <Button type="primary" onClick={copyUrl}>
+            {t("detail.copy")}
+          </Button>
           <Popconfirm title={t("detail.resetTokenConfirm")} onConfirm={resetToken}>
             <Button danger>{t("detail.resetToken")}</Button>
           </Popconfirm>
         </Space>
+        <QRCode value={detail.subscription_url} size={128} />
       </Space>
     </Card>
   );
 }
 
-function BasicInfo({ detail, onSaved }: { detail: Detail; onSaved: () => void }) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [form] = Form.useForm();
-
-  async function save(values: { name: string; enabled: boolean; source_type: SourceType }) {
-    await api(`/api/profiles/${detail.id}`, {
-      method: "PUT",
-      body: JSON.stringify(values),
-    });
-    setOpen(false);
-    onSaved();
-  }
-
-  return (
-    <Card
-      title={t("basic.title")}
-      extra={
-        <Button
-          onClick={() => {
-            form.setFieldsValue({
-              name: detail.name,
-              enabled: detail.enabled,
-              source_type: detail.source_type,
-            });
-            setOpen(true);
-          }}
-        >
-          {t("basic.edit")}
-        </Button>
-      }
-    >
-      <Descriptions column={1}>
-        <Descriptions.Item label={t("basic.name")}>{detail.name}</Descriptions.Item>
-        <Descriptions.Item label={t("basic.enabled")}>
-          {detail.enabled ? "✓" : "—"}
-        </Descriptions.Item>
-        <Descriptions.Item label={t("basic.outputType")}>{detail.output_type}</Descriptions.Item>
-      </Descriptions>
-
-      <Modal title={t("basic.title")} open={open} onCancel={() => setOpen(false)} onOk={() => form.submit()}>
-        <Form form={form} layout="vertical" onFinish={save}>
-          <Form.Item name="name" label={t("basic.name")} rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="source_type" label={t("source.type")}>
-            <Select options={SOURCE_TYPES.map((s) => ({ value: s, label: s }))} />
-          </Form.Item>
-          <Form.Item name="enabled" label={t("basic.enabled")} valuePropName="checked">
-            <Switch />
-          </Form.Item>
-        </Form>
-      </Modal>
-    </Card>
-  );
-}
-
-function SourceInfo({
+// Merged 基础信息 + 原始订阅 card: profile basics (name/enabled/output type) and
+// the provider source (type/url/last-fetch) in one place, with edit / change-URL
+// / refresh actions.
+function BasicInfo({
   detail,
   onRefresh,
   onSaved,
@@ -218,25 +173,48 @@ function SourceInfo({
   refreshing: boolean;
 }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [urlOpen, setUrlOpen] = useState(false);
   const [url, setUrl] = useState("");
+  const [form] = Form.useForm();
 
-  async function save() {
+  async function saveBasic(values: { name: string; enabled: boolean; source_type: SourceType }) {
+    await api(`/api/profiles/${detail.id}`, {
+      method: "PUT",
+      body: JSON.stringify(values),
+    });
+    setEditOpen(false);
+    onSaved();
+  }
+
+  async function saveUrl() {
     await api(`/api/profiles/${detail.id}`, {
       method: "PUT",
       body: JSON.stringify({ source_url: url }),
     });
-    setOpen(false);
+    setUrlOpen(false);
     setUrl("");
     onSaved();
   }
 
   return (
     <Card
-      title={t("source.title")}
+      title={t("basic.title")}
       extra={
         <Space>
-          <Button onClick={() => setOpen(true)}>{t("source.newUrl")}</Button>
+          <Button
+            onClick={() => {
+              form.setFieldsValue({
+                name: detail.name,
+                enabled: detail.enabled,
+                source_type: detail.source_type,
+              });
+              setEditOpen(true);
+            }}
+          >
+            {t("basic.edit")}
+          </Button>
+          <Button onClick={() => setUrlOpen(true)}>{t("source.newUrl")}</Button>
           <Button type="primary" loading={refreshing} onClick={onRefresh}>
             {t("source.refresh")}
           </Button>
@@ -244,14 +222,45 @@ function SourceInfo({
       }
     >
       <Descriptions column={1}>
+        <Descriptions.Item label={t("basic.name")}>{detail.name}</Descriptions.Item>
+        <Descriptions.Item label={t("basic.enabled")}>
+          {detail.enabled ? "✓" : "—"}
+        </Descriptions.Item>
+        <Descriptions.Item label={t("basic.outputType")}>{detail.output_type}</Descriptions.Item>
         <Descriptions.Item label={t("source.type")}>{detail.source_type}</Descriptions.Item>
         <Descriptions.Item label={t("source.url")}>{detail.source_url_masked}</Descriptions.Item>
         <Descriptions.Item label={t("source.lastFetch")}>
-          {detail.last_fetch_status ? `${detail.last_fetch_status} · ${detail.last_fetch_at}` : t("source.never")}
+          {detail.last_fetch_status
+            ? `${detail.last_fetch_status} · ${detail.last_fetch_at}`
+            : t("source.never")}
         </Descriptions.Item>
       </Descriptions>
 
-      <Modal title={t("source.newUrl")} open={open} onCancel={() => setOpen(false)} onOk={save}>
+      <Modal
+        title={t("basic.edit")}
+        open={editOpen}
+        onCancel={() => setEditOpen(false)}
+        onOk={() => form.submit()}
+      >
+        <Form form={form} layout="vertical" onFinish={saveBasic}>
+          <Form.Item name="name" label={t("basic.name")} rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="source_type" label={t("source.type")}>
+            <Select options={SOURCE_TYPES.map((s) => ({ value: s, label: s }))} />
+          </Form.Item>
+          <Form.Item name="enabled" label={t("basic.enabled")} valuePropName="checked">
+            <Switch />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("source.newUrl")}
+        open={urlOpen}
+        onCancel={() => setUrlOpen(false)}
+        onOk={saveUrl}
+      >
         <Typography.Paragraph type="secondary">{t("source.urlHint")}</Typography.Paragraph>
         <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." />
       </Modal>
