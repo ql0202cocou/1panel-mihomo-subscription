@@ -52,52 +52,49 @@ interface Props {
   onSaved: () => void;
 }
 
-// Common Mihomo rule types (free text still allowed in the selector). `MATCH`
-// (the fallback) is a normal rule here: it takes only a policy and is
+// Every Mihomo rule type, organized into categories so the add/edit selector is
+// browsable (not one flat list). Free text is still allowed in the selector, so
+// a type Mihomo adds later can be typed in without a code change. `MATCH` (the
+// fallback) is a normal rule here: it takes only a policy and is
 // added/edited/reordered/deleted like any other rule (it should stay last to be
 // effective, but that's left to the admin's ordering).
-const RULE_TYPES = [
-  // Domain
-  "DOMAIN-SUFFIX",
-  "DOMAIN",
-  "DOMAIN-KEYWORD",
-  "DOMAIN-REGEX",
-  "GEOSITE",
-  // IP
-  "IP-CIDR",
-  "IP-CIDR6",
-  "IP-SUFFIX",
-  "IP-ASN",
-  "GEOIP",
-  "SRC-GEOIP",
-  "SRC-IP-ASN",
-  "SRC-IP-CIDR",
-  "SRC-IP-SUFFIX",
-  // Port
-  "DST-PORT",
-  "SRC-PORT",
-  "IN-PORT",
-  // Process
-  "PROCESS-NAME",
-  "PROCESS-PATH",
-  "PROCESS-NAME-REGEX",
-  "PROCESS-PATH-REGEX",
-  // Inbound / misc
-  "IN-TYPE",
-  "IN-USER",
-  "IN-NAME",
-  "UID",
-  "NETWORK",
-  "DSCP",
-  "RULE-SET",
-  // Logical / nested
-  "AND",
-  "OR",
-  "NOT",
-  "SUB-RULE",
-  // Fallback
-  "MATCH",
+const RULE_TYPE_GROUPS: { key: string; types: string[] }[] = [
+  { key: "domain", types: ["DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-REGEX", "GEOSITE"] },
+  {
+    key: "ip",
+    types: [
+      "IP-CIDR",
+      "IP-CIDR6",
+      "IP-SUFFIX",
+      "IP-ASN",
+      "GEOIP",
+      "SRC-GEOIP",
+      "SRC-IP-ASN",
+      "SRC-IP-CIDR",
+      "SRC-IP-SUFFIX",
+    ],
+  },
+  { key: "port", types: ["DST-PORT", "SRC-PORT", "IN-PORT"] },
+  {
+    key: "process",
+    types: ["PROCESS-NAME", "PROCESS-PATH", "PROCESS-NAME-REGEX", "PROCESS-PATH-REGEX"],
+  },
+  {
+    key: "inbound",
+    types: ["IN-TYPE", "IN-USER", "IN-NAME", "UID", "NETWORK", "DSCP", "RULE-SET"],
+  },
+  { key: "logical", types: ["AND", "OR", "NOT", "SUB-RULE"] },
+  { key: "fallback", types: ["MATCH"] },
 ];
+
+// Free-text-allowed enum suggestions for types whose payload is a small fixed
+// set (kept as AutoComplete, never a hard Select, so an unlisted-but-valid value
+// still works).
+const NETWORK_OPTIONS = ["tcp", "udp"];
+const IN_TYPE_OPTIONS = ["HTTP", "HTTPS", "SOCKS", "SOCKS4", "SOCKS5", "MIXED", "REDIR", "TPROXY", "TUN"];
+// Logical/nested types whose payload is itself one or more `(TYPE,payload)`
+// sub-conditions — edited in a multi-line box rather than a single field.
+const LOGICAL_TYPES = new Set(["AND", "OR", "NOT", "SUB-RULE"]);
 // Per-type payload example, shown as the content-input placeholder (à la Clash
 // Verge). Helps the admin enter the right shape without docs.
 const RULE_EXAMPLES: Record<string, string> = {
@@ -401,50 +398,107 @@ interface ComposerProps {
 }
 
 // The structured rule fields (type · content · no-resolve · policy), rendered
-// vertically inside the add/edit modal. The content input adapts to the selected
-// rule type (à la Clash Verge): NETWORK picks tcp/udp, RULE-SET is a free-typed
-// rule-set name (referencing the provider's own rule-providers — we don't host
-// custom ones), everything else is a free text field with a per-type example.
+// vertically inside the add/edit modal. Both the type selector and the content
+// input adapt to the full Mihomo rule set: the type is picked from a grouped,
+// searchable list (Domain / IP / Port / Process / Inbound / Logical / Fallback)
+// that still accepts a free-typed custom type; the content field is type-aware —
+// NETWORK / IN-TYPE pick from an enum, RULE-SET is a rule-set name (the
+// provider's own rule-providers — we don't host custom ones), logical/nested
+// AND/OR/NOT/SUB-RULE get a multi-line builder, MATCH takes no payload, and the
+// rest are example-seeded inputs labelled per type.
 function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
   const { t } = useTranslation();
   const upperType = model.type.trim().toUpperCase();
   const isMatch = upperType === "MATCH";
+  const isLogical = LOGICAL_TYPES.has(upperType);
   // `no-resolve` is offered for every rule type (except MATCH, which has no
   // payload). Mihomo only acts on it for IP-resolving rules and ignores it
   // elsewhere, but we don't gate the toggle so the full editable set is visible.
   const showNoResolve = !isMatch;
 
-  function contentInput() {
+  // Grouped type options for the selector; leaf values are literal Mihomo
+  // strings, group labels go through i18n.
+  const typeOptions = RULE_TYPE_GROUPS.map((g) => ({
+    label: t(`rules.typeGroups.${g.key}`),
+    options: g.types.map((v) => ({ value: v })),
+  }));
+
+  // The content field label, content input, and optional hint, all chosen by the
+  // selected rule type.
+  function contentBlock() {
+    if (upperType === "NETWORK") {
+      return {
+        label: t("rules.networkLabel"),
+        input: (
+          <AutoComplete
+            style={{ width: "100%" }}
+            options={NETWORK_OPTIONS.map((value) => ({ value }))}
+            value={model.payload}
+            onChange={(payload) => onChange({ ...model, payload })}
+            placeholder="tcp / udp"
+          />
+        ),
+      };
+    }
+    if (upperType === "IN-TYPE") {
+      return {
+        label: t("rules.inTypeLabel"),
+        input: (
+          <AutoComplete
+            style={{ width: "100%" }}
+            options={IN_TYPE_OPTIONS.map((value) => ({ value }))}
+            value={model.payload}
+            onChange={(payload) => onChange({ ...model, payload })}
+            placeholder="HTTP / SOCKS5 / TUN ..."
+            filterOption={(input, opt) =>
+              String(opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
+            }
+          />
+        ),
+      };
+    }
     if (upperType === "RULE-SET") {
-      return (
+      return {
+        label: t("rules.ruleSetLabel"),
+        input: (
+          <Input
+            style={{ width: "100%" }}
+            value={model.payload}
+            onChange={(e) => onChange({ ...model, payload: e.target.value })}
+            placeholder={t("rules.ruleSetPayloadHint")}
+          />
+        ),
+      };
+    }
+    if (isLogical) {
+      return {
+        label: t("rules.payload"),
+        hint: t("rules.logicalHint"),
+        input: (
+          <Input.TextArea
+            style={{ width: "100%" }}
+            autoSize={{ minRows: 2, maxRows: 6 }}
+            value={model.payload}
+            onChange={(e) => onChange({ ...model, payload: e.target.value })}
+            placeholder={RULE_EXAMPLES[upperType] ?? "(DOMAIN,example.com),(NETWORK,tcp)"}
+          />
+        ),
+      };
+    }
+    return {
+      label: t("rules.payload"),
+      input: (
         <Input
           style={{ width: "100%" }}
           value={model.payload}
           onChange={(e) => onChange({ ...model, payload: e.target.value })}
-          placeholder={t("rules.ruleSetPayloadHint")}
+          placeholder={RULE_EXAMPLES[upperType] ?? t("rules.payload")}
         />
-      );
-    }
-    if (upperType === "NETWORK") {
-      return (
-        <AutoComplete
-          style={{ width: "100%" }}
-          options={[{ value: "tcp" }, { value: "udp" }]}
-          value={model.payload}
-          onChange={(payload) => onChange({ ...model, payload })}
-          placeholder="tcp / udp"
-        />
-      );
-    }
-    return (
-      <Input
-        style={{ width: "100%" }}
-        value={model.payload}
-        onChange={(e) => onChange({ ...model, payload: e.target.value })}
-        placeholder={RULE_EXAMPLES[upperType] ?? t("rules.payload")}
-      />
-    );
+      ),
+    };
   }
+
+  const content = contentBlock();
 
   return (
     <Space direction="vertical" style={{ width: "100%" }} size="middle">
@@ -452,12 +506,14 @@ function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
         <Typography.Text type="secondary">{t("rules.ruleType")}</Typography.Text>
         <AutoComplete
           style={{ width: "100%" }}
-          options={RULE_TYPES.map((v) => ({ value: v }))}
+          options={typeOptions}
           value={model.type}
           onChange={(type) => onChange({ ...model, type })}
           placeholder={t("rules.ruleType")}
           filterOption={(input, opt) =>
-            (opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
+            String((opt as { value?: string })?.value ?? "")
+              .toLowerCase()
+              .includes(input.toLowerCase())
           }
         />
       </div>
@@ -465,8 +521,13 @@ function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
         <Typography.Text type="secondary">{t("rules.matchHint")}</Typography.Text>
       ) : (
         <div>
-          <Typography.Text type="secondary">{t("rules.payload")}</Typography.Text>
-          {contentInput()}
+          <Typography.Text type="secondary">{content.label}</Typography.Text>
+          {content.input}
+          {content.hint && (
+            <Typography.Text type="secondary" style={{ display: "block", marginTop: 4 }}>
+              {content.hint}
+            </Typography.Text>
+          )}
         </div>
       )}
       {showNoResolve && (
