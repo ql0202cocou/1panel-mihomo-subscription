@@ -47,6 +47,13 @@
 
 ## [Unreleased]
 
+## [0.3.0-a2] - 2026-06-26
+
+### 变更
+
+- 登录页:副标题由「Mihomo 订阅管理后台」改为「管理后台」;移除页顶
+  「SELF-HOSTED · MIHOMO / CLASH SUBSCRIPTION MANAGER」标语。前端改动。
+
 ## [0.3.0-a1] - 2026-06-26
 
 ### 变更

@@ -36,14 +36,13 @@ export default function Login() {
 
   return (
     <div className="login-screen">
-      <div className="login-caption">SELF-HOSTED · MIHOMO / CLASH SUBSCRIPTION MANAGER</div>
       <form className="login-card" onSubmit={onSubmit}>
         <div className="login-head">
           <span className="login-logo">
             <DeploymentUnitOutlined />
           </span>
           <span className="login-title">{t("login.title")}</span>
-          <span className="login-sub">Mihomo {t("app.subtitle")}</span>
+          <span className="login-sub">{t("app.title")}</span>
         </div>
 
         {error && (
