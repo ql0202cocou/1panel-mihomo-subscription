@@ -47,6 +47,28 @@
 
 ## [Unreleased]
 
+## [0.3.0-a3] - 2026-06-27
+
+### 新增
+
+- 「规则托管」全局规则集托管:新增跨订阅复用的全局规则集库,面板把每个规则集托管为永久链接
+  `/<prefix>/r/<name>/<behavior>.<format>`,订阅以 `RULE-SET,<name>` 引用即可自动套用。这是以新的
+  「面板自托管」模型**重新引入** 0.2.3 移除的规则集功能(旧的是 per-profile 且仅注入条目)。
+  - 两种来源:**手动**(管理员录入 payload,面板托管)与**远程镜像**(面板按间隔懒拉取上游规则集
+    并以稳定链接二次托管,屏蔽上游波动;关闭「本地缓存托管」则订阅直接引用上游 URL)。远程支持
+    `yaml`/`text`/`mrs`(二进制),手动支持 `yaml`/`text`。
+  - 后端:新增 `rule_sets` 全局表(迁移 `0008_rule_sets.sql`,`name` 唯一)+ 模块 `src/rule_sets.rs`
+    (`GET/POST /api/rule-sets`、`PUT/DELETE /api/rule-sets/:id`、`PUT /api/rule-sets/order`)+ 公开托管
+    端点 `GET /:prefix/r/:name/:file`(无鉴权,按 IP 限流,统一 404)。转换器在被 `RULE-SET` 规则引用
+    时,把对应规则集注入输出 `rule-providers:`(指向托管链接,同名覆盖机场条目),未引用不注入。
+    远程镜像复用 SSRF 安全的拉取器(新增 `fetch_bytes` 字节路径以支持二进制 `mrs`)+ single-flight
+    懒刷新 + 缓存兜底;`cached_body` 为 BLOB。
+  - 前端:新增「规则托管」侧栏入口与页面(规则集卡片列表含远程状态/镜像来源 + 拖拽排序 + 新建/编辑
+    弹窗:名称、behavior、format、手动 payload 或 远程 URL/间隔/缓存开关、托管链接预览);详情页规则
+    弹窗的 `RULE-SET` 内容改为从全局规则集名下拉(仍可自由输入),并新增「导入托管规则」弹窗——勾选
+    多个托管规则集 + 选引用策略,一次性以 `RULE-SET` 规则引用进当前订阅(已引用的标记并禁用)。
+  - 链接按名公开、与订阅共用 `public_path_prefix`(重置公共路径同样使其失效)。
+
 ## [0.3.0-a2] - 2026-06-26
 
 ### 变更

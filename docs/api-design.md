@@ -59,6 +59,9 @@ GET  /api/auth/session -> 200 {username} | 401
 | GET / POST | `/api/global-nodes` | 是 | 全局自定义节点池(跨订阅共享,自动追加到每条配置) |
 | PUT / DELETE | `/api/global-nodes/:id` | 是 | 单个全局节点 |
 | PUT | `/api/global-nodes/order` | 是 | 全局自定义块顺序;立即重排所有配置缓存 |
+| GET / POST | `/api/rule-sets` | 是 | 全局规则集库(面板托管,跨订阅以 `RULE-SET` 引用) |
+| PUT / DELETE | `/api/rule-sets/:id` | 是 | 单个规则集 |
+| PUT | `/api/rule-sets/order` | 是 | 规则集库显示顺序(仅展示序,不动缓存) |
 | GET / POST | `/api/profiles/:id/groups` | 是 | 自定义分组 |
 | PUT / DELETE | `/api/profiles/:id/groups/:group_id` | 是 | 单个分组 |
 | POST | `/api/profiles/:id/import-provider-groups` | 是 | 导入机场 `proxy-groups` 为可编辑自定义分组(实时,跳过同名/不支持类型) |
@@ -68,6 +71,7 @@ GET  /api/auth/session -> 200 {username} | 401
 | GET | `/api/settings` | 是 | 应用设置 |
 | POST | `/api/settings/reset-public-path` | 是 | 重置公共路径前缀 |
 | GET | `/:public_path_prefix/api/sub/:token` | 否 | 公开订阅下载 |
+| GET | `/:public_path_prefix/r/:name/:file` | 否 | 公开规则集托管(`:file` = `<behavior>.<format>`) |
 
 ## Profile 资源
 
@@ -107,6 +111,25 @@ POST /api/profiles/:id/groups { name, group_type, members, options?, enabled? }
 - 节点 `content` 保存时结构校验,生成时原样并入**每条配置**输出的 `proxies`;`PUT` 同体整体替换。
 - 全局节点为单一共享池:新建落末尾、`name` 全局唯一;增删改在下次生成(公共链接每拉取即重生)
   进入各配置输出,排序见下立即生效。
+
+## 规则集库(规则托管)
+
+```text
+GET    /api/rule-sets                                  # 列表,每项含 count、url(托管链接)、source、remote_url_masked、cache、last_fetch_status
+POST   /api/rule-sets   { name, behavior, source?, format, ... }
+   # name 全局唯一(重名 409)且限 [A-Za-z0-9._-];behavior∈domain/ipcidr/classical;source∈manual(默认)/remote
+   # source=manual: { content }                 format∈yaml/text
+   # source=remote: { url, interval_hours?=24, cache?=true }   format∈yaml/text/mrs;url 须 http(s)
+PUT    /api/rule-sets/:id   { ...同上 }                 # 整体替换;remote 编辑 url 留空则沿用原值(已脱敏不回显)
+DELETE /api/rule-sets/:id
+PUT    /api/rule-sets/order { order: [规则集名] }        # 仅展示序,未列出落末尾;不动缓存
+```
+
+- manual:`content` 为 payload(每行一条),托管端点按 `format` 渲染(`yaml`→`payload:` 列表,`text`
+  逐行)。remote:面板按 `interval_hours` 懒镜像上游(`cache=1` 二次托管;`cache=0` 转换时直接注入上游
+  URL),`mrs` 二进制原样透传。
+- 规则集为全局库,被某配置的 `RULE-SET,<name>` 规则引用时,生成会注入指向托管链接(remote 关缓存时
+  指向上游 URL)的 `rule-providers:` 条目(公共链接每拉取即重生,故增删改即时生效);未被引用不注入。
 
 ## 节点/分组预览与排序
 
@@ -157,15 +180,16 @@ PUT /api/profiles/:id/group-order         { order: [分组名] }              # 
 | `proxies` | 机场块(上游序)+ 自定义块(启用全局节点按 `global_nodes.position` 排),按 `node_section_order` 拼接 |
 | `proxy-groups` | 整体替换为启用的自定义分组(机场分组不透传,需「导入机场分组」),按 `group_order` 重排 |
 | `rules` | 整体替换为用户规则 |
-| `rule-providers` | 机场原样透传(不托管自定义规则集);用户规则可用 `RULE-SET` 引用机场条目名 |
+| `rule-providers` | 机场原样透传;另把被 `RULE-SET` 引用、面板托管的全局规则集合并在上(同名覆盖,指向托管链接) |
 | `proxy-providers` | **剥离**(会让客户端拉取绕过 SSRF/缓存的 URL,可能暴露机场 URL) |
 | 其余(`port`/`dns`/`tun`/`sniffer`…) | 原样透传(新 Mihomo 选项无需改转换器) |
 
 - `import-provider-groups`:实时拉取机场,把 `proxy-groups` 解析为可编辑自定义分组写入
   (`name`/`type`/`proxies`→成员,其余→`options`;跳过同名/不支持类型),返回 `{imported,skipped}`;
   只改 `custom_groups`,需重新生成才进输出;鉴权 + SSRF 同 `provider-rules`。
-- 规则集:不托管自定义 `rule-providers`,只透传机场自带;用户规则可 `RULE-SET,<name>,<policy>`
-  引用机场条目名(早期自定义规则集 CRUD 与 `rule_providers` 表已移除)。
+- 规则集:除透传机场自带 `rule-providers` 外,面板还托管**全局规则集库**(见「规则集库」);
+  `RULE-SET,<name>,<policy>` 既可引用机场条目名,也可引用全局规则集名(后者生成时注入指向托管
+  链接的条目)。
 
 ## 公开订阅端点
 
@@ -184,3 +208,18 @@ GET /:public_path_prefix/api/sub/:token
   `503`)。无「生成配置」按钮(链接始终实时);响应/错误绝不含机场 URL;按 token + 来源 IP 限流。
 
 兼容:早期 `/api/v1/subscriptions*`、`/api/v1/merged` 已移除,无兼容层。
+
+## 公开规则集托管端点
+
+```text
+GET /:public_path_prefix/r/:name/:file
+  -> 200 text/plain | application/octet-stream(mrs)   前缀匹配 + 名存在且启用 + :file=="<behavior>.<format>" + 已托管
+  -> 503             remote 镜像首拉失败且无缓存
+  -> 404             其余一切(统一,含前缀错/名不存在/未启用/文件名不符/remote 关缓存未托管)
+```
+
+- 按名公开、无 token,与订阅端点共用 `public_path_prefix`(重置公共路径同样使其失效)。规则集是
+  规则清单、非私密,按名可枚举可接受;仍按来源 IP 限流。
+- manual:`yaml`→Mihomo `payload:` 列表、`text`→逐行(均忽略空行与 `#` 注释)。remote(`cache=1`):
+  single-flight 懒刷新——缓存超 `interval_hours` 才回源(SSRF 安全字节),失败回退旧缓存、无缓存 `503`;
+  字节原样托管(`mrs` 为 `application/octet-stream`)。remote(`cache=0`)不在此托管,统一 `404`。

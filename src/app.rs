@@ -18,7 +18,7 @@ use crate::auth::{self, AdminAuth, SessionStore};
 use crate::fetch::SubscriptionFetcher;
 use crate::rate_limit::{self, RateLimiter};
 use crate::single_flight::SingleFlight;
-use crate::{generate, global_nodes, profiles, settings};
+use crate::{generate, global_nodes, profiles, rule_sets, settings};
 
 /// 管理请求体大小上限(见 `docs/api-design.md`)。
 const MAX_BODY_BYTES: usize = 1024 * 1024;
@@ -69,6 +69,18 @@ impl AppState {
             token
         )
     }
+
+    /// 拼装一个规则集的永久托管 URL(按名,与订阅共用 public_path_prefix)。
+    pub fn rule_set_url(&self, name: &str, behavior: &str, format: &str) -> String {
+        format!(
+            "{}/{}/r/{}/{}.{}",
+            self.public_base_url.trim_end_matches('/'),
+            self.current_prefix(),
+            name,
+            behavior,
+            format
+        )
+    }
 }
 
 async fn health() -> impl IntoResponse {
@@ -116,6 +128,13 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/global-nodes/:id",
             put(global_nodes::update).delete(global_nodes::delete),
         )
+        // 全局规则集库(「规则配置」):增删改 + 排序。
+        .route("/rule-sets", get(rule_sets::list).post(rule_sets::create))
+        .route("/rule-sets/order", put(rule_sets::set_order))
+        .route(
+            "/rule-sets/:id",
+            put(rule_sets::update).delete(rule_sets::delete),
+        )
         .route(
             "/profiles/:id/groups",
             get(profiles::list_groups).post(profiles::create_group),
@@ -159,6 +178,14 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route(
             "/:public_path_prefix/api/sub/:token",
             get(generate::public_sub).layer(middleware::from_fn_with_state(
+                state.clone(),
+                rate_limit::download,
+            )),
+        )
+        // 公开规则集托管:无鉴权,路径前缀 + 名 + `<behavior>.<format>`,同样按客户端 IP 限流。
+        .route(
+            "/:public_path_prefix/r/:name/:file",
+            get(rule_sets::public_serve).layer(middleware::from_fn_with_state(
                 state.clone(),
                 rate_limit::download,
             )),

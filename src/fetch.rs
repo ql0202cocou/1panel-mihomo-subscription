@@ -26,6 +26,12 @@ pub const DEFAULT_USER_AGENT: &str = "clash.meta/1.0";
 #[async_trait::async_trait]
 pub trait SubscriptionFetcher: Send + Sync {
     async fn fetch(&self, url: &str) -> Result<Fetched, FetchError>;
+
+    /// 拉取原始字节(**不**强制 UTF-8),用于规则集远程镜像——含二进制 `mrs` 规则集。默认实现复用
+    /// `fetch` 的文本体字节(够测试 mock 用);生产 [`HttpFetcher`] 覆盖为真正的字节管线。
+    async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, FetchError> {
+        Ok(self.fetch(url).await?.body.into_bytes())
+    }
 }
 
 /// 真实的 SSRF 保护拉取器,带配置好的超时与大小上限。
@@ -40,6 +46,11 @@ pub struct HttpFetcher {
 impl SubscriptionFetcher for HttpFetcher {
     async fn fetch(&self, url: &str) -> Result<Fetched, FetchError> {
         fetch_subscription(url, self.timeout, self.max_bytes, &self.user_agent).await
+    }
+
+    async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, FetchError> {
+        let (bytes, _) = fetch_raw(url, self.timeout, self.max_bytes, &self.user_agent).await?;
+        Ok(bytes)
     }
 }
 
@@ -85,7 +96,7 @@ impl From<SsrfError> for FetchError {
     }
 }
 
-/// 带完整 SSRF 保护与限制地拉取一个机场订阅。
+/// 带完整 SSRF 保护与限制地拉取一个机场订阅(要求 UTF-8 文本体)。
 ///
 /// `total_timeout` 限制整个请求;`max_bytes` 限制流式读取的响应体。
 pub async fn fetch_subscription(
@@ -94,6 +105,24 @@ pub async fn fetch_subscription(
     max_bytes: usize,
     user_agent: &str,
 ) -> Result<Fetched, FetchError> {
+    let (bytes, subscription_userinfo) =
+        fetch_raw(raw_url, total_timeout, max_bytes, user_agent).await?;
+    let body = String::from_utf8(bytes).map_err(|_| FetchError::BadContentType)?;
+    Ok(Fetched {
+        body,
+        subscription_userinfo,
+    })
+}
+
+/// SSRF 保护的核心拉取循环,返回**原始字节** + 清洗后的 `subscription-userinfo`。文本订阅经
+/// [`fetch_subscription`] 再做 UTF-8 校验;规则集远程镜像(含二进制 `mrs`)用 [`SubscriptionFetcher::fetch_bytes`]
+/// 直接取字节。
+async fn fetch_raw(
+    raw_url: &str,
+    total_timeout: Duration,
+    max_bytes: usize,
+    user_agent: &str,
+) -> Result<(Vec<u8>, Option<String>), FetchError> {
     let mut url = Url::parse(raw_url).map_err(|_| FetchError::Ssrf(SsrfError::Host))?;
 
     for _ in 0..=MAX_REDIRECTS {
@@ -143,11 +172,8 @@ pub async fn fetch_subscription(
             .and_then(|v| v.to_str().ok())
             .and_then(sanitize_userinfo);
 
-        let body = read_limited(resp, max_bytes).await?;
-        return Ok(Fetched {
-            body,
-            subscription_userinfo,
-        });
+        let body = read_limited_bytes(resp, max_bytes).await?;
+        return Ok((body, subscription_userinfo));
     }
 
     Err(FetchError::TooManyRedirects)
@@ -206,7 +232,10 @@ fn reject_binary_content(resp: &reqwest::Response) -> Result<(), FetchError> {
     Ok(())
 }
 
-async fn read_limited(resp: reqwest::Response, max_bytes: usize) -> Result<String, FetchError> {
+async fn read_limited_bytes(
+    resp: reqwest::Response,
+    max_bytes: usize,
+) -> Result<Vec<u8>, FetchError> {
     let mut resp = resp;
     let mut buf: Vec<u8> = Vec::new();
     while let Some(chunk) = resp.chunk().await.map_err(classify_reqwest)? {
@@ -215,7 +244,7 @@ async fn read_limited(resp: reqwest::Response, max_bytes: usize) -> Result<Strin
         }
         buf.extend_from_slice(&chunk);
     }
-    String::from_utf8(buf).map_err(|_| FetchError::BadContentType)
+    Ok(buf)
 }
 
 /// 仅当 `subscription-userinfo` 值是单行且不含控制字符(头注入安全)时才接受,

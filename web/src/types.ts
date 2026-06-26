@@ -74,6 +74,29 @@ export interface ProfileDetail extends ProfileSummary {
   groups: CustomGroup[];
 }
 
+/** 全局规则集(「规则托管」):面板托管,订阅以 RULE-SET 引用。 */
+export interface RuleSet {
+  id: string;
+  name: string;
+  behavior: "domain" | "ipcidr" | "classical";
+  format: "yaml" | "text" | "mrs";
+  source: "manual" | "remote";
+  content: string;
+  enabled: boolean;
+  /** 规则条数(manual=payload 行数;remote=最近成功镜像的行数)。 */
+  count: number;
+  /** 面板托管链接。 */
+  url: string;
+  /** 远程来源 URL(已脱敏);manual 为 null。 */
+  remote_url_masked: string | null;
+  interval_hours: number;
+  /** 远程是否本地缓存二次托管。 */
+  cache: boolean;
+  last_fetch_status: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Settings {
   public_path_prefix: string;
 }

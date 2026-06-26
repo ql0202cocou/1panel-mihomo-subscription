@@ -124,6 +124,48 @@ CREATE INDEX idx_global_nodes_position ON global_nodes (position);
 - 迁移:原各 profile `custom_nodes` 按 `name` 去重(取 `updated_at` 最新)合并进本表(初始
   `position` 全 0,初始序按 name),随后 `DROP TABLE custom_nodes`。
 
+### rule_sets
+
+**全局规则集库(面板托管,跨订阅共享)。** 自 `0008_rule_sets.sql` 起,管理员可在「规则托管」页
+维护命名规则集,面板把每个托管为永久链接 `/<prefix>/r/<name>/<behavior>.<format>`;订阅以
+`RULE-SET,<name>` 引用时,转换器注入指向托管链接的 `rule-providers:` 条目。以新的「面板自托管」
+模型重新引入 0.2.3 移除的规则集(旧 `rule_providers` 是 per-profile 且只注入条目,见迁移
+`0005`/`0006`)。
+
+```sql
+CREATE TABLE rule_sets (
+    id                TEXT    PRIMARY KEY,
+    name              TEXT    NOT NULL UNIQUE,
+    behavior          TEXT    NOT NULL CHECK (behavior IN ('domain', 'ipcidr', 'classical')),
+    format            TEXT    NOT NULL CHECK (format IN ('yaml', 'text', 'mrs')),
+    source            TEXT    NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'remote')),
+    content           TEXT    NOT NULL DEFAULT '',  -- manual payload(每行一条)
+    rule_count        INTEGER NOT NULL DEFAULT 0,   -- 列表展示用,免读 BLOB
+    url               TEXT,                          -- remote 上游 URL
+    interval_hours    INTEGER NOT NULL DEFAULT 24,
+    cache             INTEGER NOT NULL DEFAULT 1,    -- remote 是否本地二次托管
+    cached_body       BLOB,                          -- 镜像字节(text/yaml/mrs 二进制)
+    cached_at         TEXT,
+    last_fetch_status TEXT,
+    enabled           INTEGER NOT NULL DEFAULT 1,
+    position          INTEGER NOT NULL DEFAULT 0,
+    created_at        TEXT    NOT NULL,
+    updated_at        TEXT    NOT NULL
+);
+
+CREATE INDEX idx_rule_sets_position ON rule_sets (position);
+```
+
+- `name` 全局唯一,同时是 URL 路径段与 `RULE-SET` 引用名,故限定 `[A-Za-z0-9._-]`。
+- **manual**:`content` 为 payload(每行一条);托管时 `yaml` 渲染为 `payload:` 列表、`text` 逐行原样;
+  format 限 `yaml`/`text`。
+- **remote**:`url` 为上游;`cache=1` 时面板按 `interval_hours` 懒拉取(每拉取检查新鲜度,过期才回源,
+  SSRF 安全)、把原始字节存入 `cached_body`(BLOB,故二进制 `mrs` 不损坏)并以稳定链接二次托管,失败
+  回退旧缓存;`cache=0` 则不托管,转换时直接注入上游 `url`。`last_fetch_status` 同 profile 拉取标签。
+  更新规则集会清空缓存列(下次拉取重新回源)。
+- `position`:仅「规则托管」页的展示顺序(`ORDER BY position, name`);rule-providers 按引用注入为
+  map,顺序无语义,故排序**不**触发任何缓存重缝。
+
 ### custom_groups
 
 ```sql

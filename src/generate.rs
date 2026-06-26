@@ -20,7 +20,7 @@ use sqlx::FromRow;
 use subtle::ConstantTimeEq;
 
 use crate::app::AppState;
-use crate::converter::{self, ConvertError, ConvertInput, CustomGroup, CustomNode};
+use crate::converter::{self, ConvertError, ConvertInput, CustomGroup, CustomNode, RuleProvider};
 use crate::error::{ApiError, ApiResult};
 use crate::util::now;
 
@@ -269,6 +269,36 @@ async fn convert(
             .await?
             .unwrap_or_default();
 
+    // 被本 profile `RULE-SET` 规则引用、且启用的面板托管规则集 → 注入输出 `rule-providers:`
+    // (`url` 指向面板托管链接)。未被引用的不注入。规则集库通常很小,取全量后在内存里按引用过滤。
+    let refs = converter::ruleset_refs(&rules);
+    let rule_providers: Vec<RuleProvider> = if refs.is_empty() {
+        Vec::new()
+    } else {
+        sqlx::query_as::<_, (String, String, String, String, Option<String>, bool)>(
+            "SELECT name, behavior, format, source, url, cache FROM rule_sets WHERE enabled = 1",
+        )
+        .fetch_all(&state.db)
+        .await?
+        .into_iter()
+        .filter(|(name, ..)| refs.iter().any(|r| r == name))
+        .map(|(name, behavior, format, source, url, cache)| {
+            // remote 且关闭本地缓存托管:直接注入上游 URL;否则指向面板托管链接。
+            let link = if source == "remote" && !cache {
+                url.unwrap_or_default()
+            } else {
+                state.rule_set_url(&name, &behavior, &format)
+            };
+            RuleProvider {
+                url: link,
+                name,
+                behavior,
+                format,
+            }
+        })
+        .collect()
+    };
+
     // 自定义节点是单一全局池(模型 C),追加到每条 profile 的输出,且查询已按自定义块顺序
     // (`position`)取出,故无需 per-profile 的 `node_order`——转换器保持此顺序。
     let nodes = sqlx::query_as::<_, (String, String)>(
@@ -315,6 +345,7 @@ async fn convert(
         node_order: Vec::new(),
         node_section_order,
         group_order,
+        rule_providers,
     }))
 }
 

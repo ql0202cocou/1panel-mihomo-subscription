@@ -31,6 +31,15 @@ pub struct CustomGroup {
     pub options: Option<serde_json::Value>,
 }
 
+/// 一个由面板托管、被本 profile 的 `RULE-SET` 规则引用到的自定义规则集。转换时合并进输出的
+/// `rule-providers:` map(同名覆盖机场条目),`url` 指向面板的托管链接。
+pub struct RuleProvider {
+    pub name: String,
+    pub behavior: String,
+    pub format: String,
+    pub url: String,
+}
+
 pub struct ConvertInput<'a> {
     pub provider_yaml: &'a str,
     pub rules: &'a str,
@@ -46,6 +55,9 @@ pub struct ConvertInput<'a> {
     pub node_section_order: Vec<String>,
     /// proxy-group 的手动顺序(分组名)。此处列出的名字优先按序输出;未列出的保持其默认位置在末尾。
     pub group_order: Vec<String>,
+    /// 被本 profile 的 `RULE-SET` 规则引用到的、由面板托管的自定义规则集。合并进输出的
+    /// `rule-providers:` map(同名覆盖机场透传条目)。未被引用的规则集不注入。
+    pub rule_providers: Vec<RuleProvider>,
 }
 
 #[derive(Debug)]
@@ -132,8 +144,18 @@ pub fn convert(input: ConvertInput) -> Result<String, ConvertError> {
     // proxy-providers:MVP 阶段剥离(SSRF/缓存绕过风险)。
     root.remove(Value::from("proxy-providers"));
 
-    // rule-providers:机场自己的 map 原样透传,使导入的机场 RULE-SET 规则仍能解析。我们不
-    // 托管/管理自定义 rule-providers。
+    // rule-providers:机场自己的 map 原样透传,使导入的机场 RULE-SET 规则仍能解析;另把被本
+    // profile `RULE-SET` 规则引用到的、面板托管的自定义规则集合并在上(同名覆盖机场条目)。
+    if !input.rule_providers.is_empty() {
+        let mut map = match root.get("rule-providers") {
+            Some(Value::Mapping(m)) => m.clone(),
+            _ => Mapping::new(),
+        };
+        for rp in &input.rule_providers {
+            map.insert(Value::from(rp.name.clone()), build_rule_provider(rp));
+        }
+        root.insert(Value::from("rule-providers"), Value::Mapping(map));
+    }
 
     // 其余所有顶层键(dns、tun…)透传。
 
@@ -270,6 +292,41 @@ fn build_group(group: CustomGroup) -> Mapping {
     m
 }
 
+/// rule-provider 默认刷新间隔(秒):客户端按此间隔回面板托管链接拉取规则集内容。
+const RULE_PROVIDER_INTERVAL: i64 = 86400;
+
+/// 构建一个指向面板托管链接的 http 型 rule-provider 条目。
+fn build_rule_provider(rp: &RuleProvider) -> Value {
+    let mut m = Mapping::new();
+    m.insert(Value::from("type"), Value::from("http"));
+    m.insert(Value::from("behavior"), Value::from(rp.behavior.clone()));
+    m.insert(Value::from("format"), Value::from(rp.format.clone()));
+    m.insert(Value::from("url"), Value::from(rp.url.clone()));
+    m.insert(
+        Value::from("path"),
+        Value::from(format!("./ruleset/{}.{}", rp.name, rp.format)),
+    );
+    m.insert(Value::from("interval"), Value::from(RULE_PROVIDER_INTERVAL));
+    Value::Mapping(m)
+}
+
+/// 提取 rules 文本中 `RULE-SET` 规则引用的规则集名(去重、保序)。供 generate 决定要把哪些
+/// 面板托管的规则集注入输出的 `rule-providers:`。
+pub fn ruleset_refs(rules: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for (_, line) in rule_lines(rules) {
+        let mut parts = line.split(',').map(str::trim);
+        if parts.next().map(|k| k.eq_ignore_ascii_case("RULE-SET")) == Some(true) {
+            if let Some(name) = parts.next() {
+                if !name.is_empty() && !out.iter().any(|n| n == name) {
+                    out.push(name.to_string());
+                }
+            }
+        }
+    }
+    out
+}
+
 /// 遍历非空、非注释的规则行,带其 1-based 行号(按原始文本编号,使消息与编辑器一致)。
 fn rule_lines(rules: &str) -> impl Iterator<Item = (usize, &str)> {
     rules.lines().enumerate().filter_map(|(i, raw)| {
@@ -334,6 +391,7 @@ rules:
             node_order: Vec::new(),
             node_section_order: Vec::new(),
             group_order: Vec::new(),
+            rule_providers: Vec::new(),
         }
     }
 
@@ -498,6 +556,7 @@ rules:
             node_order: Vec::new(),
             node_section_order: Vec::new(),
             group_order: Vec::new(),
+            rule_providers: Vec::new(),
         };
         assert!(matches!(convert(bad), Err(ConvertError::ProviderParse)));
     }

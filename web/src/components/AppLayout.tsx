@@ -5,6 +5,7 @@ import {
   ClusterOutlined,
   ControlOutlined,
   DeploymentUnitOutlined,
+  FilterOutlined,
   FolderOutlined,
   LogoutOutlined,
 } from "@ant-design/icons";
@@ -42,6 +43,13 @@ export default function AppLayout() {
       label: t("nav.nodes"),
       icon: <ClusterOutlined />,
       match: (p) => p.startsWith("/nodes"),
+    },
+    {
+      key: "rules",
+      path: "/rules",
+      label: t("nav.rules"),
+      icon: <FilterOutlined />,
+      match: (p) => p.startsWith("/rules"),
     },
     {
       key: "settings",

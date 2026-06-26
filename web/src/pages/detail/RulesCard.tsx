@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AutoComplete, Button, Input, Modal, Popconfirm, Switch, Typography, message } from "antd";
+import {
+  AutoComplete,
+  Button,
+  Checkbox,
+  Input,
+  Modal,
+  Popconfirm,
+  Select,
+  Switch,
+  Typography,
+  message,
+} from "antd";
 import {
   ArrowRightOutlined,
   DeleteOutlined,
@@ -25,7 +36,13 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../../api";
-import type { CustomGroup, CustomNode, ProviderRulesResponse, ProxiesResponse } from "../../types";
+import type {
+  CustomGroup,
+  CustomNode,
+  ProviderRulesResponse,
+  ProxiesResponse,
+  RuleSet,
+} from "../../types";
 import { BUILTIN_POLICIES } from "./groupSchema";
 
 interface Props {
@@ -127,7 +144,12 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
   const [editing, setEditing] = useState<EditTarget>(null);
   const [model, setModel] = useState<RuleModel>(EMPTY_RULE);
   const [policies, setPolicies] = useState<string[]>([]);
+  const [ruleSets, setRuleSets] = useState<RuleSet[]>([]);
   const [importing, setImporting] = useState(false);
+  // 「导入托管规则」弹窗:勾选全局规则集 → 以 RULE-SET 引用进本订阅。
+  const [importHostedOpen, setImportHostedOpen] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [importPolicy, setImportPolicy] = useState("DIRECT");
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -156,9 +178,19 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
     }
   }, [profileId]);
 
+  // 全局规则集(供 RULE-SET 内容下拉 + 「导入托管规则」勾选)。
+  const loadRuleSets = useCallback(async () => {
+    try {
+      setRuleSets(await api<RuleSet[]>("/api/rule-sets"));
+    } catch {
+      // 取不到全局规则集不影响自由输入
+    }
+  }, []);
+
   useEffect(() => {
     void loadPolicies();
-  }, [loadPolicies, generatedAt]);
+    void loadRuleSets();
+  }, [loadPolicies, loadRuleSets, generatedAt]);
 
   // 保存规则 + 钉底的 MATCH(始终在最后)。
   const persist = useCallback(
@@ -267,6 +299,47 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
     [policies, nodes, groups],
   );
 
+  const ruleSetNames = useMemo(() => ruleSets.map((r) => r.name), [ruleSets]);
+
+  // 当前规则里已被 RULE-SET 引用的规则集名(导入弹窗据此标记「已引用」)。
+  const referenced = useMemo(() => {
+    const set = new Set<string>();
+    for (const line of rules) {
+      const parts = line.split(",").map((p) => p.trim());
+      if (parts[0]?.toUpperCase() === "RULE-SET" && parts[1]) set.add(parts[1]);
+    }
+    return set;
+  }, [rules]);
+
+  function openImportHosted() {
+    setPicked(new Set());
+    setImportPolicy("DIRECT");
+    setImportHostedOpen(true);
+  }
+
+  function togglePick(name: string, checked: boolean) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(name);
+      else next.delete(name);
+      return next;
+    });
+  }
+
+  async function doImportHosted() {
+    const names = ruleSets
+      .map((r) => r.name)
+      .filter((n) => picked.has(n) && !referenced.has(n));
+    setImportHostedOpen(false);
+    if (names.length === 0) {
+      message.info(t("rules.importNone"));
+      return;
+    }
+    const lines = names.map((n) => `RULE-SET,${n},${importPolicy}`);
+    await persist([...rules, ...lines], matchLine);
+    message.success(t("rules.importHostedDone", { count: names.length }));
+  }
+
   const ruleErrors = errors.filter((e) => /rules line/.test(e));
   const total = rules.length + (matchLine ? 1 : 0);
 
@@ -277,6 +350,7 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
           {t("rules.title")} <span className="row-sub">{t("rules.count", { count: total })}</span>
         </span>
         <div className="dcard-actions">
+          <Button onClick={openImportHosted}>{t("rules.importHosted")}</Button>
           <Popconfirm title={t("rules.importConfirm")} onConfirm={importProviderRules}>
             <Button loading={importing}>{t("rules.importProvider")}</Button>
           </Popconfirm>
@@ -329,7 +403,65 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
         cancelText={t("common.cancel")}
         destroyOnClose
       >
-        <RuleComposer model={model} onChange={setModel} policyOptions={policyOptions} />
+        <RuleComposer
+          model={model}
+          onChange={setModel}
+          policyOptions={policyOptions}
+          ruleSetOptions={ruleSetNames.map((value) => ({ value }))}
+        />
+      </Modal>
+
+      <Modal
+        open={importHostedOpen}
+        title={t("rules.importHosted")}
+        onOk={doImportHosted}
+        onCancel={() => setImportHostedOpen(false)}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        width={520}
+        destroyOnClose
+      >
+        <p className="rules-import-desc">{t("rules.importHostedDesc")}</p>
+        {ruleSets.length === 0 ? (
+          <div className="empty-line">{t("rules.importHostedEmpty")}</div>
+        ) : (
+          <div className="rules-import-list">
+            {ruleSets.map((rs) => {
+              const already = referenced.has(rs.name);
+              return (
+                <label key={rs.name} className="rules-import-item">
+                  <Checkbox
+                    checked={already || picked.has(rs.name)}
+                    disabled={already}
+                    onChange={(e) => togglePick(rs.name, e.target.checked)}
+                  />
+                  <div className="rules-import-main">
+                    <div className="rules-import-name">
+                      {rs.name}
+                      {already && (
+                        <span className="rules-import-tag">{t("rules.importHostedAlready")}</span>
+                      )}
+                    </div>
+                    <div className="rules-import-url">{rs.url}</div>
+                  </div>
+                  <span className="tag-mono">{rs.behavior}</span>
+                  <span className="rules-import-count">{rs.count}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        <div className="rules-import-policy">
+          <Typography.Text type="secondary">{t("rules.importHostedPolicy")}</Typography.Text>
+          <Select
+            style={{ width: "100%" }}
+            value={importPolicy}
+            onChange={setImportPolicy}
+            showSearch
+            options={policyOptions.map((o) => ({ value: o.value, label: o.value }))}
+          />
+          <div className="rules-import-hint">{t("rules.importHostedPolicyHint")}</div>
+        </div>
       </Modal>
     </div>
   );
@@ -415,9 +547,10 @@ interface ComposerProps {
   model: RuleModel;
   onChange: (m: RuleModel) => void;
   policyOptions: { value: string }[];
+  ruleSetOptions: { value: string }[];
 }
 
-function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
+function RuleComposer({ model, onChange, policyOptions, ruleSetOptions }: ComposerProps) {
   const { t } = useTranslation();
   const upperType = model.type.trim().toUpperCase();
   const isMatch = upperType === "MATCH";
@@ -465,11 +598,16 @@ function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
       return {
         label: t("rules.ruleSetLabel"),
         input: (
-          <Input
+          // 从全局规则集库选名(「规则托管」),仍允许自由输入以兼容机场自带规则集名。
+          <AutoComplete
             style={{ width: "100%" }}
+            options={ruleSetOptions}
             value={model.payload}
-            onChange={(e) => onChange({ ...model, payload: e.target.value })}
+            onChange={(payload) => onChange({ ...model, payload })}
             placeholder={t("rules.ruleSetPayloadHint")}
+            filterOption={(input, opt) =>
+              String(opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
+            }
           />
         ),
       };

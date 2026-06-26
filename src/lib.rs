@@ -14,6 +14,7 @@ pub mod mask;
 pub mod net;
 pub mod profiles;
 pub mod rate_limit;
+pub mod rule_sets;
 pub mod settings;
 pub mod single_flight;
 pub mod ssrf;

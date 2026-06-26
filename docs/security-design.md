@@ -17,6 +17,9 @@ https://<PUBLIC_BASE_URL>/<PUBLIC_PATH_PREFIX>/api/sub/<profile_token>
   库 ID 或机场 URL。
 - 放行 = 前缀匹配 **且** token 存在 **且** 配置启用;否则一律 `404`(不透露哪步失败)。
 - **防时序侧信道**:无论前缀是否匹配都执行 token 查找,前缀与 token 均**恒定时间**比较。
+- **规则集托管** `…/<PREFIX>/r/<name>/<behavior>.<format>` 共用同一前缀(重置前缀同样使其失效),
+  但**按名公开、无 token**:规则集是规则清单、非私密,按名可枚举可接受;仍按源 IP 限流。`name`
+  限 `[A-Za-z0-9._-]`,杜绝路径穿越。
 
 ## Token 轮换
 
@@ -35,8 +38,9 @@ https://<PUBLIC_BASE_URL>/<PUBLIC_PATH_PREFIX>/api/sub/<profile_token>
 
 ## SSRF 保护
 
-**所有**出站获取(generate / preview / 公共端点 + provider-rules / import-provider-groups)走
-单一保护获取器。
+**所有**出站获取(generate / preview / 公共端点 + provider-rules / import-provider-groups +
+规则集远程镜像)走单一保护获取器。规则集远程镜像复用同一获取器的字节路径(`fetch_bytes`,为二进制
+`mrs` 不强制 UTF-8),享受同样的 IP 钉定 / 重定向逐跳重查 / 超时 / 大小限制。
 
 - 仅 `http` / `https`;拒空主机、内嵌凭据、`localhost` 回环名、阻止段裸 IP。
 - 解析域名 → 检查解析 IP → **连接时固定该 IP**(防 DNS 重绑定 TOCTOU),非请求时重解析;
