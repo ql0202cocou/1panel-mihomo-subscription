@@ -33,18 +33,6 @@ async fn seed_profile_with_children(pool: &SqlitePool, profile_id: &str) {
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO custom_nodes (id, profile_id, name, node_type, content, created_at, updated_at)
-         VALUES (?, ?, 'n', 'ss', '{}', ?, ?)",
-    )
-    .bind(uuid::Uuid::new_v4().to_string())
-    .bind(profile_id)
-    .bind(now)
-    .bind(now)
-    .execute(pool)
-    .await
-    .unwrap();
-
-    sqlx::query(
         "INSERT INTO custom_groups (id, profile_id, name, group_type, members, created_at, updated_at)
          VALUES (?, ?, 'g', 'select', '[\"DIRECT\"]', ?, ?)",
     )
@@ -84,12 +72,7 @@ async fn delete_profile_cascades_to_all_children() {
 
     seed_profile_with_children(&pool, &profile_id).await;
 
-    for table in [
-        "rulesets",
-        "custom_nodes",
-        "custom_groups",
-        "generated_cache",
-    ] {
+    for table in ["rulesets", "custom_groups", "generated_cache"] {
         assert_eq!(count(&pool, table, &profile_id).await, 1, "seed {table}");
     }
 
@@ -99,12 +82,7 @@ async fn delete_profile_cascades_to_all_children() {
         .await
         .unwrap();
 
-    for table in [
-        "rulesets",
-        "custom_nodes",
-        "custom_groups",
-        "generated_cache",
-    ] {
+    for table in ["rulesets", "custom_groups", "generated_cache"] {
         assert_eq!(
             count(&pool, table, &profile_id).await,
             0,

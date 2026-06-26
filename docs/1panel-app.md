@@ -1,49 +1,24 @@
 # 1Panel 应用打包
 
-> **状态：包已完成（0.2.1）。** `0.2.1` 应用包暴露了完整的安装表单——管理员凭据、
-> 公共源/路径前缀、获取/缓存/代理调优和 `SECURE_COOKIES` 覆盖——compose 文件将它们
-> 全部传递给服务。下面的环境变量表是权威参考；安装表单、compose 和代码保持一致。
-
-1Panel 应用包位于：
-
-```text
-apps/mihomo-subscription
-```
-
-旨在遵循官方 1Panel 应用包布局，同时保持为个人/本地应用包。
+> 应用包在 `apps/mihomo-subscription`,遵循官方 1Panel 布局。安装表单暴露完整参数(管理员
+> 凭据、公共源/前缀、获取/缓存/代理调优、`SECURE_COOKIES`),compose 全部传给服务。**下方
+> env 表是权威参考**——安装表单、compose、代码三者必须一致。
 
 ## 结构
 
 ```text
 apps/mihomo-subscription/
-  data.yml
-  README.md
-  logo.png
-  0.1.0/            # 历史版本（不完整；早于完整安装表单）
-    data.yml
-    docker-compose.yml
-    data/
-  ...               # 其余历史版本目录,保留不删
-  0.2.1/            # 当前版本
-    data.yml
-    docker-compose.yml
-    data/
+  data.yml  README.md  logo.png            # logo 当前为占位符,公开分发前替换
+  0.1.0/ ...                               # 历史版本目录,保留不删
+  <当前版本>/ { data.yml, docker-compose.yml, data/ }
 ```
 
-## 本地安装路径
+每版本新增一个版本目录(保留旧的)。本地安装:复制目录到 1Panel 主机
+`/opt/1panel/resource/apps/local/mihomo-subscription`,再在应用商店刷新列表。
 
-将应用包目录复制到 1Panel 主机：
+## 环境变量(权威表)
 
-```bash
-/opt/1panel/resource/apps/local/mihomo-subscription
-```
-
-然后打开 1Panel 应用商店并刷新应用列表。
-
-## 环境变量
-
-此表是权威列表。1Panel 安装表单（`apps/mihomo-subscription/<version>/data.yml`）、
-compose 文件和服务代码必须保持一致。"已打包"标记当前包已暴露的内容。
+安装表单(`<version>/data.yml` 的 `formFields`)、compose、代码必须一致。「已打包」= 当前包已暴露。
 
 | 变量 | 来源 | 默认值 | 已打包 | 用途 |
 |------|------|--------|--------|------|
@@ -63,51 +38,22 @@ compose 文件和服务代码必须保持一致。"已打包"标记当前包已�
 | `DATA_DIR` | Compose（固定） | `/data` | 是 | SQLite 数据目录 |
 | `WEB_DIR` | Dockerfile（内部） | `/app/web/dist` | 不适用 | Axum 提供的构建 SPA 资产目录。烘焙到镜像中；不是用户/安装字段——为完整性列出 |
 
-`PUBLIC_BASE_URL` 应仅存储外部可达的源。随机的 `PUBLIC_PATH_PREFIX` 在生成永久链接时
-前置在 token 化的订阅端点之前：
+`PUBLIC_BASE_URL` 仅存外部可达源;随机 `PUBLIC_PATH_PREFIX` 前置在 token 化端点前:
+`https://sub.example.com/<public-path-prefix>/api/sub/<token>`。
 
-```text
-https://sub.example.com/<public-path-prefix>/api/sub/<token>
-```
+## 打包要求
 
-## 验证检查清单
+- 根 `data.yml` 含应用元数据;版本 `data.yml` 含 `additionalProperties.formFields`,暴露
+  `ADMIN_USERNAME`/`ADMIN_PASSWORD` 及上表其余安装参数。
+- `docker-compose.yml`:用 `${CONTAINER_NAME}`;Web 端口表单字段用 `PANEL_APP_PORT_HTTP`;每个
+  表单变量作 env 传入;连外部 `1panel-network`;数据从 `./data` 挂载;镜像引用
+  `quinlanhoo/mihomo-subscription:<version>`(多架构 amd64+arm64,安装时主机拉取;离线本地构建
+  见 `release.md`)。
 
-此检查清单描述发布所需的包状态。`0.2.1` 包满足以下每一项。
+## 登录与反向代理
 
-- 根 `data.yml` 包含应用元数据。
-- 版本 `data.yml` 包含 `additionalProperties.formFields`。
-- 版本 `data.yml` 暴露管理登录的 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 安装字段。
-- 版本 `data.yml` 暴露上表中的其余安装参数（`PUBLIC_BASE_URL`、`PUBLIC_PATH_PREFIX`、`FETCH_TIMEOUT_SECONDS`、`MAX_SUBSCRIPTION_SIZE_MB`、`CACHE_TTL_MINUTES`、`TRUSTED_PROXY_HOPS`、`SECURE_COOKIES`）。
-- `docker-compose.yml` 使用 `${CONTAINER_NAME}`。
-- `docker-compose.yml` 将每个安装表单变量作为环境变量传递（管理员凭据、公共源/前缀、获取/缓存/代理调优和 `SECURE_COOKIES`）。
-- Web 端口表单字段使用 `PANEL_APP_PORT_HTTP`。
-- 服务连接到外部 `1panel-network`。
-- 持久数据从 `./data` 挂载。
-- 镜像引用匹配发布的 Docker Hub 镜像（`quinlanhoo/mihomo-subscription:<version>`，多架构 amd64+arm64，安装时由 1Panel 主机拉取；见 `docs/release.md` 的离线本地构建回退）。
-- `logo.png` 存在（当前是生成的占位符；在公共分发前替换为真实设计）。
-
-## 登录配置
-
-管理 Web UI 必须在用户查看或更改订阅配置之前要求登录。
-
-通过 1Panel 应用安装表单配置凭据，并通过 compose 环境变量传递给服务：
-
-```yaml
-environment:
-  - ADMIN_USERNAME=${ADMIN_USERNAME}
-  - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-```
-
-这些凭据仅保护管理 UI 和管理 API。生成的订阅链接保持公共，但仍需随机公共路径前缀和每个配置文件的 token。
-
-## 反向代理主机头
-
-管理 API 在状态更改请求上验证 `Origin` 头与请求 `Host`（CSRF 纵深防御）。
-因此，应用前面的反向代理必须保留原始 Host——对于 nginx/OpenResty：
-
-```nginx
-proxy_set_header Host $host;
-```
-
-如果代理将 `Host` 重写为后端地址，浏览器 `Origin` 和 `Host` 将不一致，
-每个登录/POST/PUT/DELETE 都返回 `403`。
+- 凭据经表单写入 compose env(`ADMIN_USERNAME`/`ADMIN_PASSWORD`),仅保护管理 UI/API;公共
+  链接仍需随机路径前缀 + per-profile token。
+- 管理 API 在状态变更请求校验 `Origin` 与 `Host`(CSRF 纵深防御),故代理须保留原始 Host
+  (nginx/OpenResty:`proxy_set_header Host $host;`)。若代理把 `Host` 改写为后端地址,
+  `Origin`/`Host` 不一致,每个登录/POST/PUT/DELETE 返回 `403`。

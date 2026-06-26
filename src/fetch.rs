@@ -1,10 +1,8 @@
-//! SSRF-protected provider fetch.
+//! 受 SSRF 保护的机场拉取。
 //!
-//! For every URL — and every redirect hop — this validates the URL, resolves
-//! the host, checks the resolved IP against the blocklist, and pins reqwest to
-//! that exact validated IP so a later DNS answer cannot redirect the
-//! connection (DNS-rebinding safe). The response body is read with a streamed
-//! byte cap rather than trusting `Content-Length`. See `docs/security-design.md`.
+//! 对每个 URL——以及每一跳重定向——都会校验 URL、解析主机、把解析出的 IP 对照阻止列表检查,
+//! 并把 reqwest 固定到那个已校验的确切 IP,使后来的 DNS 应答无法改向连接(DNS 重绑定安全)。
+//! 响应体按流式字节上限读取,而非信任 `Content-Length`。见 `docs/security-design.md`。
 
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -19,25 +17,22 @@ use crate::ssrf::{self, SsrfError};
 const MAX_REDIRECTS: usize = 3;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
 
-/// Default `User-Agent` for provider fetches. Many airport panels (SSPanel,
-/// V2board, …) gate the subscription on a Clash-family UA and return `403`/`401`
-/// — or a non-YAML page — to unknown clients. `clash.meta` both matches the
-/// common `/clash/i` check and signals Meta support so panels serve Mihomo YAML.
-/// Overridable via `FETCH_USER_AGENT`.
+/// 机场拉取的默认 `User-Agent`。许多机场面板(SSPanel、V2board…)以 Clash 家族 UA 作为订阅门槛,
+/// 对未知客户端返回 `403`/`401`——或一个非 YAML 页面。`clash.meta` 既匹配常见的 `/clash/i` 检查,
+/// 又表明 Meta 支持,使面板下发 Mihomo YAML。可经 `FETCH_USER_AGENT` 覆盖。
 pub const DEFAULT_USER_AGENT: &str = "clash.meta/1.0";
 
-/// Abstraction over the provider fetch so the generate/public paths can be
-/// tested without real network access. Production uses [`HttpFetcher`].
+/// 对机场拉取的抽象,使 generate/public 路径无需真实网络即可测试。生产用 [`HttpFetcher`]。
 #[async_trait::async_trait]
 pub trait SubscriptionFetcher: Send + Sync {
     async fn fetch(&self, url: &str) -> Result<Fetched, FetchError>;
 }
 
-/// The real SSRF-protected fetcher with configured timeout and size cap.
+/// 真实的 SSRF 保护拉取器,带配置好的超时与大小上限。
 pub struct HttpFetcher {
     pub timeout: Duration,
     pub max_bytes: usize,
-    /// `User-Agent` sent on provider requests (see [`DEFAULT_USER_AGENT`]).
+    /// 机场请求发送的 `User-Agent`(见 [`DEFAULT_USER_AGENT`])。
     pub user_agent: String,
 }
 
@@ -48,11 +43,11 @@ impl SubscriptionFetcher for HttpFetcher {
     }
 }
 
-/// A successful provider fetch.
+/// 一次成功的机场拉取。
 #[derive(Debug, Clone)]
 pub struct Fetched {
     pub body: String,
-    /// Sanitized `subscription-userinfo` header, if present and well-formed.
+    /// 已清洗的 `subscription-userinfo` 头(存在且格式良好时)。
     pub subscription_userinfo: Option<String>,
 }
 
@@ -69,7 +64,7 @@ pub enum FetchError {
 }
 
 impl FetchError {
-    /// Map to a `last_fetch_status` label (see `docs/data-model.md`).
+    /// 映射为 `last_fetch_status` 标签(见 `docs/data-model.md`)。
     pub fn status_label(&self) -> String {
         match self {
             FetchError::Ssrf(_) => "ssrf_rejected".to_string(),
@@ -90,10 +85,9 @@ impl From<SsrfError> for FetchError {
     }
 }
 
-/// Fetch a provider subscription with full SSRF protection and limits.
+/// 带完整 SSRF 保护与限制地拉取一个机场订阅。
 ///
-/// `total_timeout` bounds the whole request; `max_bytes` caps the streamed
-/// response body.
+/// `total_timeout` 限制整个请求;`max_bytes` 限制流式读取的响应体。
 pub async fn fetch_subscription(
     raw_url: &str,
     total_timeout: Duration,
@@ -110,9 +104,9 @@ pub async fn fetch_subscription(
         let client = reqwest::Client::builder()
             .connect_timeout(CONNECT_TIMEOUT)
             .timeout(total_timeout)
-            .user_agent(user_agent) // many panels gate the subscription on a Clash-family UA
-            .redirect(Policy::none()) // we follow redirects manually to re-validate each hop
-            .resolve(host, addr) // pin the validated IP
+            .user_agent(user_agent) // 许多面板以 Clash 家族 UA 作为订阅门槛
+            .redirect(Policy::none()) // 手动跟随重定向,以便逐跳重新校验
+            .resolve(host, addr) // 固定到已校验的 IP
             .build()
             .map_err(|_| FetchError::Network)?;
 
@@ -131,8 +125,7 @@ pub async fn fetch_subscription(
                 .get(LOCATION)
                 .and_then(|v| v.to_str().ok())
                 .ok_or(FetchError::Network)?;
-            // Resolve relative redirects against the current URL, then loop to
-            // re-validate the new target.
+            // 相对重定向按当前 URL 解析,然后回到循环重新校验新目标。
             url = url
                 .join(location)
                 .map_err(|_| FetchError::Ssrf(SsrfError::Host))?;
@@ -160,7 +153,7 @@ pub async fn fetch_subscription(
     Err(FetchError::TooManyRedirects)
 }
 
-/// Resolve the URL host to a single validated, connectable socket address.
+/// 把 URL 主机解析为单个已校验、可连接的 socket 地址。
 async fn resolve_validated(url: &Url) -> Result<SocketAddr, FetchError> {
     let port = url.port_or_known_default().unwrap_or(80);
     match url.host().ok_or(FetchError::Ssrf(SsrfError::Host))? {
@@ -225,8 +218,8 @@ async fn read_limited(resp: reqwest::Response, max_bytes: usize) -> Result<Strin
     String::from_utf8(buf).map_err(|_| FetchError::BadContentType)
 }
 
-/// Accept a `subscription-userinfo` value only if it is a single line free of
-/// control characters (header-injection safe), per `docs/security-design.md`.
+/// 仅当 `subscription-userinfo` 值是单行且不含控制字符(头注入安全)时才接受,
+/// 见 `docs/security-design.md`。
 fn sanitize_userinfo(value: &str) -> Option<String> {
     if value.is_empty() || value.chars().any(|c| c.is_control()) {
         None
@@ -249,7 +242,7 @@ mod tests {
 
     #[test]
     fn default_user_agent_is_clash_compatible() {
-        // Panels commonly gate on a case-insensitive `clash` match; keep it so.
+        // 面板常以不区分大小写的 `clash` 匹配作门槛;保持如此。
         assert!(DEFAULT_USER_AGENT.to_ascii_lowercase().contains("clash"));
     }
 

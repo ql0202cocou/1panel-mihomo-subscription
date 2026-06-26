@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    // Any 401 from the API clears the session; RequireAuth then redirects.
+    // API 返回任何 401 都清空会话;随后由 RequireAuth 负责跳转。
     setUnauthorizedHandler(() => setUser(null));
     void refresh();
     return () => setUnauthorizedHandler(null);

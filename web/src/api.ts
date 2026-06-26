@@ -1,5 +1,5 @@
-// Minimal API client. Management calls are same-origin JSON; a 401 triggers the
-// registered unauthorized handler so the SPA can redirect to login.
+// 极简 API 客户端。管理接口走同源 JSON;遇到 401 时触发注册的未授权回调,
+// 让 SPA 跳转到登录页。
 
 export interface ApiError {
   status: number;
@@ -30,7 +30,7 @@ export async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
     try {
       body = await res.json();
     } catch {
-      // non-JSON error body; keep the status only
+      // 错误体不是 JSON;只保留状态码
     }
     throw { status: res.status, ...(body.error ?? {}) } as ApiError;
   }

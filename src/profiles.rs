@@ -1,6 +1,5 @@
-//! Profile management: profile CRUD plus rules, custom nodes, and custom
-//! groups. Conversion (generate/preview/public endpoint) is implemented
-//! separately. Contracts follow `docs/api-design.md`.
+//! 配置管理:profile CRUD,加规则与自定义分组。转换(generate/preview/公开端点)单独实现。
+//! 契约遵循 `docs/api-design.md`。
 
 use std::sync::Arc;
 
@@ -24,7 +23,7 @@ use crate::yaml;
 const SOURCE_TYPES: [&str; 4] = ["mihomo", "clash", "surge", "loon"];
 const GROUP_TYPES: [&str; 5] = ["select", "url-test", "fallback", "load-balance", "relay"];
 
-// ─── DB row types ─────────────────────────────────────────────────────────────
+// ─── DB 行类型 ─────────────────────────────────────────────────────────────────
 
 #[derive(FromRow)]
 struct ProfileRow {
@@ -71,7 +70,7 @@ struct RulesetRow {
     updated_at: String,
 }
 
-// ─── Response types ───────────────────────────────────────────────────────────
+// ─── 响应类型 ──────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct ProfileSummary {
@@ -169,7 +168,7 @@ fn group_response(row: GroupRow) -> GroupResponse {
     }
 }
 
-// ─── Profile CRUD ─────────────────────────────────────────────────────────────
+// ─── Profile CRUD ──────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 pub struct CreateProfile {
@@ -183,17 +182,14 @@ pub struct CreateProfile {
 pub struct UpdateProfile {
     name: Option<String>,
     source_type: Option<String>,
-    /// Write-only: absent or empty keeps the stored URL unchanged.
+    /// 只写:缺失或为空则保持已存 URL 不变。
     source_url: Option<String>,
     enabled: Option<bool>,
 }
 
-/// Validate a provider URL at write time. This is defense in depth and a better
-/// error experience — the authoritative SSRF check still runs at fetch time with
-/// DNS resolution and IP pinning (`src/fetch.rs`). Static parts are checked here:
-/// scheme, embedded credentials, loopback names, and blocked literal IPs.
-/// Hostname-only URLs pass (no DNS lookup happens at write time). Messages are
-/// generic per error kind so the raw URL is never echoed.
+/// 写入时校验机场 URL。这是纵深防御,也带来更好的错误体验——权威的 SSRF 检查仍在拉取时带 DNS
+/// 解析与 IP 固定地运行(`src/fetch.rs`)。这里检查静态部分:scheme、内嵌凭据、回环名、被阻止的
+/// 字面 IP。仅含主机名的 URL 通过(写入时不做 DNS 查找)。消息按错误种类泛化,故原始 URL 永不回显。
 fn validate_source_url(raw: &str) -> ApiResult<()> {
     let url = url::Url::parse(raw)
         .map_err(|_| ApiError::BadRequest("source_url is not a valid URL".into()))?;
@@ -270,7 +266,7 @@ pub async fn create(
     .execute(&mut *tx)
     .await?;
 
-    // Start each profile with an empty ruleset (1—1, replaced via PUT).
+    // 每个 profile 以空规则集起步(1—1,经 PUT 替换)。
     sqlx::query("INSERT INTO rulesets (id, profile_id, content, updated_at) VALUES (?, ?, '', ?)")
         .bind(uuid::Uuid::new_v4().to_string())
         .bind(&id)
@@ -305,11 +301,12 @@ async fn detail(state: &AppState, row: ProfileRow) -> ApiResult<ProfileDetail> {
         updated_at: r.updated_at,
     });
 
+    // 自定义节点是单一全局池(模型 C),追加到每条 profile 的输出;此处只读暴露(各 profile
+    // 一致),让详情页与分组/规则建议仍能看到节点名。编辑与排序在全局 `/api/global-nodes` 端点。
     let nodes = sqlx::query_as::<_, NodeRow>(
         "SELECT id, name, node_type, content, enabled, created_at, updated_at
-         FROM custom_nodes WHERE profile_id = ? ORDER BY created_at ASC",
+         FROM global_nodes ORDER BY position ASC, name ASC",
     )
-    .bind(&profile_id)
     .fetch_all(&state.db)
     .await?
     .into_iter()
@@ -349,7 +346,7 @@ pub async fn update(
             "source_type must be one of {SOURCE_TYPES:?}"
         )));
     }
-    // Write-only URL: keep the stored value unless a non-empty one is provided.
+    // 只写 URL:除非提供非空值,否则保持已存值。
     let source_url = match body.source_url {
         Some(u) if !u.trim().is_empty() => {
             let trimmed = u.trim();
@@ -415,7 +412,7 @@ pub async fn reset_token(
     }))
 }
 
-// ─── Rules ────────────────────────────────────────────────────────────────────
+// ─── 规则 ──────────────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 pub struct PutRules {
@@ -435,25 +432,18 @@ pub async fn put_rules(
         .execute(&state.db)
         .await?;
 
-    // Rules are fully user-defined (provider-independent), so reflect the edit in
-    // the served subscription immediately by re-stitching the cached output.
+    // 规则完全由用户定义(与机场无关),故通过就地重缝缓存输出,使编辑立即反映到所服务的订阅。
     resync_served_cache(&state, &id).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
-// ─── Custom nodes ─────────────────────────────────────────────────────────────
+// ─── 代理预览 & 节点/分组排序 ─────────────────────────────────────────────────
+//
+// 自定义节点的增删改现在归全局 `/api/global-nodes` 池(`src/global_nodes.rs`);profile 只持有
+// section/分组的排序,以及从自身生成缓存解析出的只读代理预览。
 
-#[derive(Deserialize)]
-pub struct NodeBody {
-    name: String,
-    node_type: String,
-    content: String,
-    enabled: Option<bool>,
-}
-
-/// A provider/custom proxy as it appears in the generated output, surfaced for
-/// the "node preview" card. Read-only; the frontend marks which names are
-/// editable custom nodes by cross-referencing the custom-node list.
+/// 生成输出中呈现的一个机场/自定义代理,供「节点预览」卡片使用。只读;前端通过与自定义节点列表
+/// 交叉比对来标记哪些名字是可编辑的自定义节点。
 #[derive(Serialize)]
 struct ProxyPreview {
     name: String,
@@ -463,25 +453,20 @@ struct ProxyPreview {
 
 #[derive(Serialize)]
 struct ProxiesResponse {
-    /// Whether a generated cache exists yet (provider nodes are parsed from it).
+    /// 是否已存在生成缓存(机场节点从中解析)。
     generated: bool,
     generated_at: Option<String>,
-    /// All output proxies in order (provider block + custom block per
-    /// `node_section_order`). The frontend splits provider vs custom by the
-    /// custom-node name set.
+    /// 全部输出代理的有序列表(机场块 + 自定义块,按 `node_section_order`)。前端按自定义节点
+    /// 名集合区分机场与自定义。
     proxies: Vec<ProxyPreview>,
-    /// Order of the two node blocks (`["provider","custom"]` by default), so the
-    /// node preview renders the block order even before the first generate.
+    /// 两个节点块的顺序(默认 `["provider","custom"]`),使节点预览在首次生成前也能渲染块顺序。
     node_section_order: Vec<String>,
-    /// Proxy-groups in the generated output (name + type), for the group
-    /// preview and for member suggestions.
+    /// 生成输出中的 proxy-groups(name + type),供分组预览与成员建议使用。
     groups: Vec<ProxyPreview>,
 }
 
-/// List every proxy in the latest generated output (provider proxies + merged
-/// custom nodes). Parsed from `generated_cache.output_yaml`; returns
-/// `generated: false` with an empty list when the profile has never been
-/// generated.
+/// 列出最近一次生成输出中的全部代理(机场代理 + 并入的自定义节点)。从
+/// `generated_cache.output_yaml` 解析;profile 从未生成过时返回 `generated: false` 与空列表。
 pub async fn list_proxies(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -506,9 +491,8 @@ pub async fn list_proxies(
         }));
     };
 
-    // The output is trusted (we produced it) and already grouped/ordered (any
-    // order edit re-stitches the cache via `resync_cache`), so return it as-is.
-    // Parse through the bounded parser anyway; degrade gracefully on any surprise.
+    // 输出是可信的(我们自己产生)且已分块/排序(任何排序编辑都经 `resync_cache` 重缝缓存),
+    // 故原样返回。仍走限界解析器解析;遇到任何意外时优雅降级。
     let (proxies, groups) = yaml::parse_limited(&output_yaml)
         .ok()
         .map(|v| {
@@ -528,8 +512,7 @@ pub async fn list_proxies(
     }))
 }
 
-/// Extract `name` + `type` previews from a top-level sequence (`proxies` or
-/// `proxy-groups`) of the generated output.
+/// 从生成输出的某顶层序列(`proxies` 或 `proxy-groups`)提取 `name` + `type` 预览。
 fn extract_previews(root: &serde_yaml::Value, key: &str) -> Vec<ProxyPreview> {
     match root.get(key) {
         Some(serde_yaml::Value::Sequence(items)) => items
@@ -548,21 +531,18 @@ fn extract_previews(root: &serde_yaml::Value, key: &str) -> Vec<ProxyPreview> {
     }
 }
 
-/// Which manual-ordering column a request targets. Maps to a fixed column name
-/// so the SQL is never built from caller input.
+/// 请求针对哪一列手动排序。映射到固定列名,使 SQL 永不由调用方输入拼接。
 #[derive(Clone, Copy)]
 enum OrderKind {
-    Node,
     Group,
-    /// The two node blocks' order (`node_section_order`): provider / custom.
+    /// 两个节点块的顺序(`node_section_order`):provider / custom。
     Section,
 }
 
-/// Read a profile's persisted manual order (proxy or proxy-group names).
-/// Missing/NULL or malformed JSON yields an empty list (= default order).
+/// 读取 profile 持久化的手动顺序(proxy-group 或 section 名)。缺失/NULL 或异常 JSON 返回空列表
+/// (= 默认顺序)。
 async fn load_order(state: &AppState, profile_id: &str, kind: OrderKind) -> ApiResult<Vec<String>> {
     let sql = match kind {
-        OrderKind::Node => "SELECT node_order FROM profiles WHERE id = ?",
         OrderKind::Group => "SELECT group_order FROM profiles WHERE id = ?",
         OrderKind::Section => "SELECT node_section_order FROM profiles WHERE id = ?",
     };
@@ -575,7 +555,7 @@ async fn load_order(state: &AppState, profile_id: &str, kind: OrderKind) -> ApiR
         .unwrap_or_default())
 }
 
-/// The saved node-section order, or the default `["provider","custom"]`.
+/// 已保存的 node-section 顺序,或默认 `["provider","custom"]`。
 async fn section_order(state: &AppState, profile_id: &str) -> ApiResult<Vec<String>> {
     let saved = load_order(state, profile_id, OrderKind::Section).await?;
     Ok(if saved.is_empty() {
@@ -587,18 +567,15 @@ async fn section_order(state: &AppState, profile_id: &str) -> ApiResult<Vec<Stri
 
 #[derive(Deserialize)]
 pub struct OrderBody {
-    /// Ordered names (provider + custom). Names not present in the profile are
-    /// ignored at generation; an empty array clears the manual order.
+    /// 有序的名字(provider + custom)。profile 中不存在的名字在生成时忽略;空数组清除手动顺序。
     order: Vec<String>,
 }
 
-/// Bounds to keep a single profile's persisted order small and the request
-/// cheap to validate. A profile realistically has well under this many entries.
+/// 用于把单个 profile 的持久化顺序保持得小、请求校验便宜的上界。现实中 profile 的条目数远低于此。
 const MAX_ORDER_ENTRIES: usize = 5_000;
 const MAX_ORDER_NAME_LEN: usize = 256;
 
-/// Validate and persist a manual ordering for the given column. Drives both the
-/// generated output (applied on next generate) and the preview list.
+/// 为给定列校验并持久化一个手动顺序。同时驱动生成输出(在下次生成时应用)与预览列表。
 async fn set_order(
     state: &AppState,
     id: &str,
@@ -618,7 +595,7 @@ async fn set_order(
         )));
     }
 
-    // Empty list clears the manual order (back to default); store NULL.
+    // 空列表清除手动顺序(回到默认);存 NULL。
     let stored = if body.order.is_empty() {
         None
     } else {
@@ -629,7 +606,6 @@ async fn set_order(
     };
 
     let sql = match kind {
-        OrderKind::Node => "UPDATE profiles SET node_order = ?, updated_at = ? WHERE id = ?",
         OrderKind::Group => "UPDATE profiles SET group_order = ?, updated_at = ? WHERE id = ?",
         OrderKind::Section => {
             "UPDATE profiles SET node_section_order = ?, updated_at = ? WHERE id = ?"
@@ -642,31 +618,20 @@ async fn set_order(
         .execute(&state.db)
         .await?;
 
-    // Apply the new order to the served subscription immediately by re-stitching
-    // the cached output (no provider re-fetch); best-effort.
+    // 通过就地重缝缓存输出(不重拉机场)把新顺序立即应用到所服务的订阅;尽力而为。
     resync_served_cache(state, id).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Re-stitch the generated cache so an order/rule change is served right away.
-/// Best-effort: a failure leaves the saved change to take effect on next
-/// generate, so it must not fail the originating request.
+/// 重缝生成缓存,使排序/规则改动立刻被服务。尽力而为:失败时让已保存的改动在下次生成时生效,
+/// 故它绝不能让发起请求失败。
 async fn resync_served_cache(state: &AppState, id: &str) {
     if crate::generate::resync_cache(state, id).await.is_err() {
         tracing::warn!(profile = %id, "failed to resync served cache after edit");
     }
 }
 
-/// `PUT /api/profiles/:id/node-order` — persist a manual proxy ordering.
-pub async fn set_node_order(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(body): Json<OrderBody>,
-) -> ApiResult<impl IntoResponse> {
-    set_order(&state, &id, OrderKind::Node, body).await
-}
-
-/// `PUT /api/profiles/:id/group-order` — persist a manual proxy-group ordering.
+/// `PUT /api/profiles/:id/group-order` —— 持久化一个手动 proxy-group 顺序。
 pub async fn set_group_order(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -675,8 +640,8 @@ pub async fn set_group_order(
     set_order(&state, &id, OrderKind::Group, body).await
 }
 
-/// `PUT /api/profiles/:id/node-section-order` — persist the order of the two node
-/// blocks. The body must be exactly a permutation of `["provider","custom"]`.
+/// `PUT /api/profiles/:id/node-section-order` —— 持久化两个节点块的顺序。请求体必须恰是
+/// `["provider","custom"]` 的一个排列。
 pub async fn set_node_section_order(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -693,115 +658,7 @@ pub async fn set_node_section_order(
     set_order(&state, &id, OrderKind::Section, body).await
 }
 
-fn validate_node(body: &NodeBody) -> ApiResult<()> {
-    if body.name.trim().is_empty() || body.node_type.trim().is_empty() {
-        return Err(ApiError::BadRequest(
-            "name and node_type are required".into(),
-        ));
-    }
-    // Node content must be a single valid Mihomo proxy mapping.
-    yaml::parse_mapping(&body.content)
-        .map_err(|_| ApiError::BadRequest("content must be a valid YAML proxy mapping".into()))?;
-    Ok(())
-}
-
-pub async fn list_nodes(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-) -> ApiResult<impl IntoResponse> {
-    let _ = load_profile_row(&state, &id).await?;
-    let nodes: Vec<NodeResponse> = sqlx::query_as::<_, NodeRow>(
-        "SELECT id, name, node_type, content, enabled, created_at, updated_at
-         FROM custom_nodes WHERE profile_id = ? ORDER BY created_at ASC",
-    )
-    .bind(&id)
-    .fetch_all(&state.db)
-    .await?
-    .into_iter()
-    .map(node_response)
-    .collect();
-    Ok(Json(nodes))
-}
-
-pub async fn create_node(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(body): Json<NodeBody>,
-) -> ApiResult<impl IntoResponse> {
-    let _ = load_profile_row(&state, &id).await?;
-    validate_node(&body)?;
-    let node_id = uuid::Uuid::new_v4().to_string();
-    let ts = now();
-    sqlx::query(
-        "INSERT INTO custom_nodes (id, profile_id, name, node_type, content, enabled, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(&node_id)
-    .bind(&id)
-    .bind(body.name.trim())
-    .bind(&body.node_type)
-    .bind(&body.content)
-    .bind(body.enabled.unwrap_or(true))
-    .bind(&ts)
-    .bind(&ts)
-    .execute(&state.db)
-    .await?;
-    let row = fetch_node(&state, &id, &node_id).await?;
-    Ok((StatusCode::CREATED, Json(node_response(row))))
-}
-
-pub async fn update_node(
-    State(state): State<Arc<AppState>>,
-    Path((id, node_id)): Path<(String, String)>,
-    Json(body): Json<NodeBody>,
-) -> ApiResult<impl IntoResponse> {
-    let _ = fetch_node(&state, &id, &node_id).await?;
-    validate_node(&body)?;
-    sqlx::query(
-        "UPDATE custom_nodes SET name = ?, node_type = ?, content = ?, enabled = ?, updated_at = ?
-         WHERE id = ? AND profile_id = ?",
-    )
-    .bind(body.name.trim())
-    .bind(&body.node_type)
-    .bind(&body.content)
-    .bind(body.enabled.unwrap_or(true))
-    .bind(now())
-    .bind(&node_id)
-    .bind(&id)
-    .execute(&state.db)
-    .await?;
-    let row = fetch_node(&state, &id, &node_id).await?;
-    Ok(Json(node_response(row)))
-}
-
-pub async fn delete_node(
-    State(state): State<Arc<AppState>>,
-    Path((id, node_id)): Path<(String, String)>,
-) -> ApiResult<impl IntoResponse> {
-    let result = sqlx::query("DELETE FROM custom_nodes WHERE id = ? AND profile_id = ?")
-        .bind(&node_id)
-        .bind(&id)
-        .execute(&state.db)
-        .await?;
-    if result.rows_affected() == 0 {
-        return Err(ApiError::NotFound);
-    }
-    Ok(StatusCode::NO_CONTENT)
-}
-
-async fn fetch_node(state: &AppState, profile_id: &str, node_id: &str) -> ApiResult<NodeRow> {
-    sqlx::query_as::<_, NodeRow>(
-        "SELECT id, name, node_type, content, enabled, created_at, updated_at
-         FROM custom_nodes WHERE id = ? AND profile_id = ?",
-    )
-    .bind(node_id)
-    .bind(profile_id)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or(ApiError::NotFound)
-}
-
-// ─── Custom groups ────────────────────────────────────────────────────────────
+// ─── 自定义分组 ────────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 pub struct GroupBody {
@@ -878,15 +735,13 @@ pub async fn create_group(
 #[derive(Serialize)]
 pub struct ImportGroupsResponse {
     imported: usize,
-    /// Skipped because the name already exists or the type is unsupported.
+    /// 因同名已存在或类型不支持而跳过的数量。
     skipped: usize,
 }
 
-/// `POST /api/profiles/:id/import-provider-groups` — fetch the provider
-/// subscription and import its `proxy-groups` as editable custom groups (the
-/// converter otherwise replaces provider groups, like rules). Skips groups whose
-/// name already exists or whose type is unsupported. Live, SSRF-protected fetch
-/// (same as `provider-rules`); not cached. Takes effect after the next generate.
+/// `POST /api/profiles/:id/import-provider-groups` —— 拉取机场订阅,把其 `proxy-groups` 导入为
+/// 可编辑的自定义分组(否则转换器会像对规则那样替换机场分组)。跳过同名已存在或类型不支持的分组。
+/// 实时、SSRF 保护的拉取(同 `provider-rules`);不缓存。在下次生成后生效。
 pub async fn import_provider_groups(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -945,9 +800,8 @@ pub async fn import_provider_groups(
     Ok(Json(ImportGroupsResponse { imported, skipped }))
 }
 
-/// Parse a provider `proxy-groups` entry into a custom group `(name, type,
-/// members, options)`. Returns `None` for entries missing a name/type or with an
-/// unsupported type. `options` collects every key except name/type/proxies.
+/// 把一个机场 `proxy-groups` 条目解析为自定义分组 `(name, type, members, options)`。条目缺 name/type
+/// 或类型不支持时返回 `None`。`options` 收集除 name/type/proxies 之外的每个键。
 fn parse_provider_group(
     item: &serde_yaml::Value,
 ) -> Option<(String, String, Vec<String>, Option<JsonValue>)> {

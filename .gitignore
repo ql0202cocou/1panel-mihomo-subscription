@@ -7,3 +7,10 @@ CLAUDE.md
 
 # Local-only scratch / audit notes (not for the public repo).
 plan-*.md
+
+# Local design references (redesign brief + HTML prototypes) — not for the public repo.
+Design/
+web-redesign-brief.md
+
+# macOS junk
+.DS_Store

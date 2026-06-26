@@ -1,7 +1,6 @@
-//! mihomo-subscription library crate.
+//! mihomo-subscription 库 crate。
 //!
-//! Exposes the building blocks of the service so integration tests under
-//! `tests/` can exercise them directly. See `docs/` for the target design.
+//! 暴露服务的各个构建块,使 `tests/` 下的集成测试能直接驱动它们。目标设计见 `docs/`。
 
 pub mod app;
 pub mod auth;
@@ -10,6 +9,7 @@ pub mod db;
 pub mod error;
 pub mod fetch;
 pub mod generate;
+pub mod global_nodes;
 pub mod mask;
 pub mod net;
 pub mod profiles;

@@ -1,8 +1,7 @@
-//! Per-key single-flight locks.
+//! 按 key 的 single-flight 锁。
 //!
-//! Used so concurrent public requests for the same profile coalesce into one
-//! provider refresh instead of stampeding the upstream (see
-//! `docs/security-design.md`).
+//! 用于让针对同一 profile 的并发公开请求合并为一次机场刷新,而非踩踏上游
+//! (见 `docs/security-design.md`)。
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -19,8 +18,8 @@ impl SingleFlight {
         Self::default()
     }
 
-    /// Get the async lock for `key`, creating it on first use. Hold the
-    /// returned guard across the refresh so only one runs per key at a time.
+    /// 取 `key` 对应的异步锁,首次使用时创建。在整个刷新期间持有返回的 guard,
+    /// 使每个 key 同一时刻只有一个刷新在跑。
     pub fn lock_for(&self, key: &str) -> Arc<AsyncMutex<()>> {
         let mut map = self.locks.lock().unwrap();
         map.entry(key.to_string()).or_default().clone()

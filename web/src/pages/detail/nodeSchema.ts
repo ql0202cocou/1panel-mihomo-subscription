@@ -1,24 +1,23 @@
-// Structured-editor schema for custom proxy nodes. Each node's stored `content`
-// is a full Mihomo proxy YAML mapping; the editor exposes the common fields per
-// type as typed inputs (including nested option blocks like REALITY / ws-opts /
-// grpc-opts) and lets every other key be edited as an advanced key/value row, so
-// an admin never has to hand-write YAML for the usual cases.
+// 自定义代理节点的结构化编辑器 schema。每个节点存储的 `content` 是一份完整的
+// Mihomo 代理 YAML 映射;编辑器按类型把常用字段暴露为带类型的输入框(含 REALITY /
+// ws-opts / grpc-opts 等嵌套选项块),其余 key 一律用高级键值行编辑,这样常规场景下
+// 管理员永远不必手写 YAML。
 
 export type FieldKind = "text" | "password" | "number" | "switch" | "select" | "tags";
 
 export interface FieldDef {
   key: string;
   kind: FieldKind;
-  /** Suggestions for `select`/`tags` fields (free text still allowed). */
+  /** `select`/`tags` 字段的候选建议(仍允许自由输入)。 */
   options?: string[];
   placeholder?: string;
-  /** Show this field only when the predicate holds against the current fields. */
+  /** 仅当谓词对当前字段成立时才显示该字段。 */
   showWhen?: (fields: Record<string, unknown>) => boolean;
 }
 
-/** A nested option object (e.g. `reality-opts`) edited as a titled sub-section. */
+/** 一个嵌套选项对象(如 `reality-opts`),作为带标题的子区块编辑。 */
 export interface GroupDef {
-  /** The proxy key holding the nested object. */
+  /** 持有该嵌套对象的代理 key。 */
   key: string;
   fields: FieldDef[];
   showWhen?: (fields: Record<string, unknown>) => boolean;
@@ -29,14 +28,14 @@ interface TypeSchema {
   groups?: GroupDef[];
 }
 
-// ─── Predicates for conditional display ──────────────────────────────────────
+// ─── 条件显示用的谓词 ─────────────────────────────────────────────────────────
 const tlsOn = (f: Record<string, unknown>) => f.tls === true;
 const networkIs =
   (...nets: string[]) =>
   (f: Record<string, unknown>) =>
     nets.includes(String(f.network ?? "tcp"));
 
-/** Proxy types offered as suggestions in the type selector (free text allowed). */
+/** 类型选择器里作为建议的代理类型(允许自由输入)。 */
 export const NODE_TYPES = [
   "ss",
   "ssr",
@@ -52,7 +51,7 @@ export const NODE_TYPES = [
   "snell",
 ];
 
-/** Fields shown for every type, before the type-specific ones. */
+/** 所有类型都显示的字段,排在类型专属字段之前。 */
 export const BASE_FIELDS: FieldDef[] = [
   { key: "server", kind: "text", placeholder: "example.com / 1.2.3.4" },
   { key: "port", kind: "number" },
@@ -70,7 +69,7 @@ const NETWORKS = ["tcp", "ws", "grpc", "h2", "http"];
 const FINGERPRINTS = ["chrome", "firefox", "safari", "ios", "android", "edge", "random"];
 const ALPN = ["h2", "http/1.1", "h3"];
 
-// Transport option blocks shared by vmess/vless/trojan.
+// vmess/vless/trojan 共用的传输层选项块。
 const WS_OPTS: GroupDef = {
   key: "ws-opts",
   showWhen: networkIs("ws"),
@@ -84,7 +83,7 @@ const GRPC_OPTS: GroupDef = {
   showWhen: networkIs("grpc"),
   fields: [{ key: "grpc-service-name", kind: "text" }],
 };
-// REALITY: TLS with a server-provided public key + short id.
+// REALITY:基于服务端提供的 public-key + short-id 的 TLS。
 const REALITY_OPTS: GroupDef = {
   key: "reality-opts",
   showWhen: tlsOn,
@@ -94,7 +93,7 @@ const REALITY_OPTS: GroupDef = {
   ],
 };
 
-/** Type-specific common fields + nested groups. Anything else falls to KV. */
+/** 各类型专属的常用字段 + 嵌套分组。其余一律落到高级键值。 */
 const TYPE_SCHEMA: Record<string, TypeSchema> = {
   ss: {
     fields: [
@@ -130,7 +129,7 @@ const TYPE_SCHEMA: Record<string, TypeSchema> = {
       { key: "skip-cert-verify", kind: "switch", showWhen: tlsOn },
       { key: "client-fingerprint", kind: "select", options: FINGERPRINTS, showWhen: tlsOn },
     ],
-    // REALITY shown when TLS is on; ws/grpc shown by network.
+    // 开启 TLS 时显示 REALITY;ws/grpc 按 network 显示。
     groups: [REALITY_OPTS, WS_OPTS, GRPC_OPTS],
   },
   trojan: {
@@ -184,17 +183,17 @@ const TYPE_SCHEMA: Record<string, TypeSchema> = {
   },
 };
 
-/** Common fields (base + type-specific) for a given proxy type. */
+/** 给定代理类型的常用字段(基础 + 类型专属)。 */
 export function commonFields(type: string): FieldDef[] {
   return [...BASE_FIELDS, ...(TYPE_SCHEMA[type]?.fields ?? [])];
 }
 
-/** Nested option groups (reality-opts, ws-opts, …) for a given proxy type. */
+/** 给定代理类型的嵌套选项分组(reality-opts、ws-opts…)。 */
 export function groupsFor(type: string): GroupDef[] {
   return TYPE_SCHEMA[type]?.groups ?? [];
 }
 
-/** Keys owned by dedicated inputs/groups (so advanced KV can exclude them). */
+/** 由专属输入框/分组管理的 key(高级键值据此排除它们)。 */
 export function commonKeys(type: string): Set<string> {
   return new Set([
     "name",

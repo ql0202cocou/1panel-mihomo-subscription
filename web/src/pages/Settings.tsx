@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { Button, Card, Input, Modal, Space, Typography, message } from "antd";
+import { Button, Input, Modal, Segmented, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import type { Settings as SettingsData } from "../types";
+import { useTheme, type ThemeMode } from "../theme";
+import "./Settings.css";
 
 export default function Settings() {
   const { t } = useTranslation();
+  const { mode, setMode } = useTheme();
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -29,19 +32,34 @@ export default function Settings() {
   }
 
   return (
-    <Space direction="vertical" size="large" style={{ width: "100%" }}>
-      <Typography.Title level={3} style={{ margin: 0 }}>
-        {t("settings.title")}
-      </Typography.Title>
+    <div className="page-settings">
+      <div className="settings-help">{t("settings.help")}</div>
 
-      <Card title={t("settings.publicPathPrefix")}>
-        <Space direction="vertical" style={{ width: "100%" }}>
-          <Typography.Text code>{settings?.public_path_prefix}</Typography.Text>
+      <div className="settings-card">
+        <div className="settings-card-title">{t("settings.publicPathPrefix")}</div>
+        <div className="settings-card-desc">{t("settings.publicPathDesc")}</div>
+        <div className="settings-row">
+          <span className="code-box">{settings?.public_path_prefix}</span>
           <Button danger onClick={() => setConfirming(true)}>
             {t("settings.resetPublicPath")}
           </Button>
-        </Space>
-      </Card>
+        </div>
+      </div>
+
+      <div className="settings-card">
+        <div className="settings-card-title">{t("settings.appearance")}</div>
+        <div className="settings-row">
+          <span className="settings-row-label">{t("settings.themeLabel")}</span>
+          <Segmented
+            value={mode}
+            onChange={(v) => setMode(v as ThemeMode)}
+            options={[
+              { label: t("theme.light"), value: "light" },
+              { label: t("theme.dark"), value: "dark" },
+            ]}
+          />
+        </div>
+      </div>
 
       <Modal
         title={t("settings.resetPublicPath")}
@@ -52,15 +70,13 @@ export default function Settings() {
         okText={t("common.ok")}
         cancelText={t("common.cancel")}
       >
-        <Space direction="vertical" style={{ width: "100%" }}>
-          <Typography.Paragraph>{t("settings.resetWarning")}</Typography.Paragraph>
-          <Input
-            value={confirmText}
-            onChange={(e) => setConfirmText(e.target.value)}
-            placeholder={t("settings.confirmWord")}
-          />
-        </Space>
+        <p style={{ marginTop: 0 }}>{t("settings.resetWarning")}</p>
+        <Input
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder={t("settings.confirmWord")}
+        />
       </Modal>
-    </Space>
+    </div>
   );
 }

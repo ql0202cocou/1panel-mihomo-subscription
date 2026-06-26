@@ -1,8 +1,6 @@
-//! Admin authentication: constant-time credential check, in-memory sessions,
-//! session-cookie handlers, and the auth / Origin middleware.
+//! 管理员认证:恒定时间凭据校验、内存会话、会话 cookie 处理器,以及 auth / Origin 中间件。
 //!
-//! Behavior follows `docs/security-design.md` (Admin Authentication, CORS and
-//! CSRF) and `docs/api-design.md` (Authentication).
+//! 行为遵循 `docs/security-design.md`(管理员认证、CORS 与 CSRF)与 `docs/api-design.md`(认证)。
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -24,14 +22,13 @@ use subtle::ConstantTimeEq;
 use crate::app::AppState;
 
 const SESSION_COOKIE: &str = "session";
-/// Idle session lifetime, per `docs/security-design.md` (default 7 days).
+/// 会话空闲生命周期,见 `docs/security-design.md`(默认 7 天)。
 pub const SESSION_IDLE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
-// ─── Credentials ──────────────────────────────────────────────────────────────
+// ─── 凭据 ──────────────────────────────────────────────────────────────────────
 
-/// Holds the admin username and a fixed-size digest of the credential pair.
-/// Verification hashes the submitted pair and compares digests in constant
-/// time, so neither the result nor the input length leaks via timing.
+/// 持有管理员用户名与凭据对的定长摘要。校验时对提交的凭据对做哈希,并恒定时间比较摘要,
+/// 故结果与输入长度都不会经由时序泄露。
 #[derive(Clone)]
 pub struct AdminAuth {
     username: String,
@@ -59,16 +56,15 @@ impl AdminAuth {
 fn credential_digest(username: &str, password: &str) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(username.as_bytes());
-    hasher.update([0u8]); // separator so (user, pass) pairs can't be confused
+    hasher.update([0u8]); // 分隔符,使 (user, pass) 对不会混淆
     hasher.update(password.as_bytes());
     hasher.finalize().into()
 }
 
-// ─── Session store ────────────────────────────────────────────────────────────
+// ─── 会话存储 ──────────────────────────────────────────────────────────────────
 
-/// In-memory session store keyed by a random session ID. Sessions are dropped
-/// on restart (acceptable for a single-instance self-hosted app) and expire
-/// after a bounded idle time, refreshed on each authenticated request.
+/// 以随机会话 ID 为 key 的内存会话存储。会话在重启时丢弃(单实例自托管应用可接受),并在有限的
+/// 空闲时间后过期,每次已认证请求都会刷新。
 #[derive(Clone)]
 pub struct SessionStore {
     inner: Arc<Mutex<HashMap<String, Instant>>>,
@@ -83,24 +79,21 @@ impl SessionStore {
         }
     }
 
-    /// Create a new session and return its ID (256 bits of CSPRNG entropy).
+    /// 创建新会话并返回其 ID(256 位 CSPRNG 熵)。
     pub fn create(&self) -> String {
         let mut bytes = [0u8; 32];
         rand::rngs::OsRng.fill_bytes(&mut bytes);
         let id = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
         let mut map = self.inner.lock().unwrap();
-        // Sweep expired sessions on creation. Without this, idle/expired entries
-        // linger until the same ID is validated again (which never happens for
-        // an abandoned session), so the map could only grow. Creation is the
-        // sole growth point, so sweeping here bounds it.
+        // 创建时清扫过期会话。否则空闲/过期条目会一直滞留,直到同一 ID 再次被校验(对被遗弃的
+        // 会话永不会发生),map 只增不减。创建是唯一的增长点,故在此清扫即可限制它。
         let idle = self.idle;
         map.retain(|_, last_seen| last_seen.elapsed() <= idle);
         map.insert(id.clone(), Instant::now());
         id
     }
 
-    /// Return true if the session exists and is within the idle window,
-    /// refreshing its last-seen time. Expired sessions are removed.
+    /// 会话存在且在空闲窗口内则返回 true,并刷新其 last-seen 时间。过期会话会被移除。
     pub fn validate(&self, id: &str) -> bool {
         let mut map = self.inner.lock().unwrap();
         match map.get(id) {
@@ -126,7 +119,7 @@ impl SessionStore {
     }
 }
 
-// ─── Handlers ─────────────────────────────────────────────────────────────────
+// ─── 处理器 ────────────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
@@ -140,7 +133,7 @@ pub struct SessionResponse {
 }
 
 pub async fn login(State(state): State<Arc<AppState>>, Json(body): Json<LoginRequest>) -> Response {
-    // NOTE: login-failure rate limiting is added in the rate-limit task (#8).
+    // 注:登录失败限流由 rate-limit 任务(#8)添加。
     if state.admin.verify(&body.username, &body.password) {
         let id = state.sessions.create();
         let cookie = build_cookie(&id, state.secure_cookies, SESSION_IDLE.as_secs());
@@ -159,16 +152,16 @@ pub async fn logout(State(state): State<Arc<AppState>>, req: Request) -> Respons
 }
 
 pub async fn session(State(state): State<Arc<AppState>>) -> Response {
-    // Reaches here only past `require_session`, so a session is valid.
+    // 只有过了 `require_session` 才会到这里,故会话有效。
     Json(SessionResponse {
         username: state.admin.username().to_string(),
     })
     .into_response()
 }
 
-// ─── Middleware ───────────────────────────────────────────────────────────────
+// ─── 中间件 ────────────────────────────────────────────────────────────────────
 
-/// Require a valid session cookie; otherwise `401`.
+/// 要求有效的会话 cookie;否则 `401`。
 pub async fn require_session(
     State(state): State<Arc<AppState>>,
     req: Request,
@@ -180,10 +173,8 @@ pub async fn require_session(
     }
 }
 
-/// Defense in depth against CSRF: when a state-changing request carries an
-/// `Origin` header, it must match the request `Host`. Same-origin SPA requests
-/// satisfy this; cross-site form posts do not. Requests without `Origin` are
-/// left to the `SameSite=Lax` cookie attribute.
+/// 针对 CSRF 的纵深防御:状态变更请求带 `Origin` 头时,它必须匹配请求的 `Host`。同源 SPA 请求
+/// 满足此条件;跨站表单提交不满足。无 `Origin` 的请求交由 `SameSite=Lax` cookie 属性兜底。
 pub async fn check_origin(req: Request, next: Next) -> Response {
     let state_changing = matches!(
         *req.method(),
@@ -207,7 +198,7 @@ fn origin_matches_host(origin: Option<&str>, host: Option<&str>) -> bool {
     }
 }
 
-// ─── Cookie helpers ───────────────────────────────────────────────────────────
+// ─── Cookie 辅助 ───────────────────────────────────────────────────────────────
 
 fn build_cookie(value: &str, secure: bool, max_age: u64) -> String {
     let mut cookie =

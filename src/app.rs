@@ -1,5 +1,4 @@
-//! Application state and HTTP router assembly, shared by the binary and the
-//! integration tests.
+//! 应用状态与 HTTP 路由组装,供二进制与集成测试共用。
 
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -19,36 +18,36 @@ use crate::auth::{self, AdminAuth, SessionStore};
 use crate::fetch::SubscriptionFetcher;
 use crate::rate_limit::{self, RateLimiter};
 use crate::single_flight::SingleFlight;
-use crate::{generate, profiles, settings};
+use crate::{generate, global_nodes, profiles, settings};
 
-/// Maximum management request body size (see `docs/api-design.md`).
+/// 管理请求体大小上限(见 `docs/api-design.md`)。
 const MAX_BODY_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: SqlitePool,
-    /// Externally reachable origin used to assemble hosted links.
+    /// 外部可达的源,用于拼装托管链接。
     pub public_base_url: String,
-    /// The global public path prefix. Held behind a lock because
-    /// reset-public-path updates it at runtime (see `docs/security-design.md`).
+    /// 全局公共路径前缀。用锁持有,因为 reset-public-path 会在运行时更新它
+    /// (见 `docs/security-design.md`)。
     pub public_path_prefix: Arc<RwLock<String>>,
     pub admin: AdminAuth,
     pub sessions: SessionStore,
-    /// Set the `Secure` cookie attribute (true when served behind HTTPS).
+    /// 是否设置 `Secure` cookie 属性(HTTPS 提供时为 true)。
     pub secure_cookies: bool,
-    /// Directory of the built SPA assets to serve.
+    /// 要提供的已构建 SPA 资产目录。
     pub web_dir: String,
-    /// Provider fetcher (real SSRF-protected client in production).
+    /// 机场获取器(生产中是真实的 SSRF 保护客户端)。
     pub fetcher: Arc<dyn SubscriptionFetcher>,
-    /// Generated-cache TTL.
+    /// 生成缓存的 TTL。
     pub cache_ttl: Duration,
-    /// Per-profile refresh coalescing.
+    /// per-profile 的刷新合并。
     pub single_flight: SingleFlight,
-    /// Reverse-proxy hops to trust when deriving the client IP.
+    /// 推导客户端 IP 时信任的反向代理跳数。
     pub trusted_proxy_hops: usize,
-    /// Login attempt limiter (keyed by client IP).
+    /// 登录尝试限流器(按客户端 IP)。
     pub login_limiter: Arc<RateLimiter>,
-    /// Public download limiter (keyed by client IP; throttles enumeration).
+    /// 公开下载限流器(按客户端 IP;抑制枚举)。
     pub download_limiter: Arc<RateLimiter>,
 }
 
@@ -61,7 +60,7 @@ impl AppState {
         *self.public_path_prefix.write().unwrap() = prefix;
     }
 
-    /// Assemble a profile's permanent subscription URL.
+    /// 拼装一条 profile 的永久订阅 URL。
     pub fn subscription_url(&self, token: &str) -> String {
         format!(
             "{}/{}/api/sub/{}",
@@ -73,17 +72,15 @@ impl AppState {
 }
 
 async fn health() -> impl IntoResponse {
-    // Intentionally minimal: no version, to avoid unauthenticated disclosure.
+    // 有意保持最小:不含版本,避免未认证泄露。
     Json(serde_json::json!({"status": "ok"}))
 }
 
-/// Build the full application router.
+/// 构建完整的应用路由。
 ///
-/// Layering: `/health` and the login endpoint are public; every other `/api`
-/// route requires a valid session. The management API has no CORS layer (it is
-/// same-origin) but does enforce an `Origin` check on state-changing requests
-/// and a request body size limit. Unmatched paths fall through to the SPA with
-/// an `index.html` fallback.
+/// 分层:`/health` 与登录端点公开;其余每条 `/api` 路由都需要有效会话。管理 API 无 CORS 层
+/// (它同源),但对状态变更请求强制 `Origin` 校验,并限制请求体大小。未匹配的路径落到 SPA,
+/// 以 `index.html` 兜底。
 pub fn build_router(state: Arc<AppState>) -> Router {
     let protected = Router::new()
         .route("/auth/logout", post(auth::logout))
@@ -104,19 +101,20 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         )
         .route("/profiles/:id/rules", put(profiles::put_rules))
         .route("/profiles/:id/proxies", get(profiles::list_proxies))
-        .route("/profiles/:id/node-order", put(profiles::set_node_order))
         .route(
             "/profiles/:id/node-section-order",
             put(profiles::set_node_section_order),
         )
         .route("/profiles/:id/group-order", put(profiles::set_group_order))
+        // 全局自定义节点(跨订阅池):增删改 + 排序。
         .route(
-            "/profiles/:id/nodes",
-            get(profiles::list_nodes).post(profiles::create_node),
+            "/global-nodes",
+            get(global_nodes::list).post(global_nodes::create),
         )
+        .route("/global-nodes/order", put(global_nodes::set_order))
         .route(
-            "/profiles/:id/nodes/:node_id",
-            put(profiles::update_node).delete(profiles::delete_node),
+            "/global-nodes/:id",
+            put(global_nodes::update).delete(global_nodes::delete),
         )
         .route(
             "/profiles/:id/groups",
@@ -157,8 +155,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(health))
         .nest("/api", api)
-        // Public subscription download: no auth, path prefix + token, but
-        // rate-limited by client IP + path.
+        // 公开订阅下载:无鉴权,路径前缀 + token,但按客户端 IP + 路径限流。
         .route(
             "/:public_path_prefix/api/sub/:token",
             get(generate::public_sub).layer(middleware::from_fn_with_state(

@@ -1,21 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  Button,
-  Empty,
-  Form,
-  Input,
-  List,
-  Modal,
-  Select,
-  Space,
-  Tag,
-  Typography,
-  message,
-} from "antd";
+import { Button, Form, Input, Modal, Select, message } from "antd";
+import { CopyOutlined, PlusOutlined, RightOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../api";
 import type { ProfileSummary, SourceType } from "../types";
+import "./ProfileList.css";
 
 const SOURCE_TYPES: SourceType[] = ["mihomo", "clash", "surge", "loon"];
 
@@ -53,58 +43,91 @@ export default function ProfileList() {
       form.resetFields();
       await load();
     } catch (e) {
-      const err = e as ApiError;
-      message.error(err.message ?? "创建失败");
+      message.error((e as ApiError).message ?? "创建失败");
     }
   }
 
+  async function copyLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      message.success(t("detail.copied"));
+    } catch {
+      message.error(t("detail.copyFailed"));
+    }
+  }
+
+  const metrics = useMemo(() => {
+    const total = profiles.length;
+    const enabled = profiles.filter((p) => p.enabled).length;
+    // 拉取异常:有拉取记录且非 success(从未拉取的 null 不计为异常)。
+    const errored = profiles.filter(
+      (p) => p.last_fetch_status && p.last_fetch_status !== "success",
+    ).length;
+    return { total, enabled, errored };
+  }, [profiles]);
+
   return (
-    <Space direction="vertical" size="large" style={{ width: "100%" }}>
-      <Space style={{ justifyContent: "space-between", width: "100%" }}>
-        <Typography.Title level={3} style={{ margin: 0 }}>
-          {t("profiles.title")}
-        </Typography.Title>
-        <Button type="primary" onClick={() => setCreating(true)}>
+    <div className="page-list">
+      <div className="list-subhead">
+        <span className="list-help">{t("profiles.help")}</span>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          style={{ height: 38 }}
+          onClick={() => setCreating(true)}
+        >
           {t("profiles.create")}
         </Button>
-      </Space>
+      </div>
 
-      {!loading && profiles.length === 0 ? (
-        <Empty description={t("profiles.empty")} />
+      <div className="metrics">
+        <div className="metric">
+          <div className="metric-label">{t("profiles.metricTotal")}</div>
+          <div className="metric-value">{metrics.total}</div>
+        </div>
+        <div className="metric">
+          <div className="metric-label">
+            <span className="metric-dot" style={{ background: "var(--success)" }} />
+            {t("profiles.metricEnabled")}
+          </div>
+          <div className="metric-value" style={{ color: "var(--success)" }}>
+            {metrics.enabled}
+          </div>
+        </div>
+        <div className="metric">
+          <div className="metric-label">
+            <span className="metric-dot" style={{ background: "var(--danger)" }} />
+            {t("profiles.metricError")}
+          </div>
+          <div className="metric-value" style={{ color: "var(--danger)" }}>
+            {metrics.errored}
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="profiles">
+          {[0, 1, 2].map((i) => (
+            <div className="profile-bar" key={i}>
+              <div className="profile-main">
+                <div className="shimmer" style={{ height: 16, width: 140 }} />
+                <div className="shimmer" style={{ height: 12, width: "60%", marginTop: 8 }} />
+              </div>
+              <div className="skeleton-right">
+                <div className="shimmer" style={{ height: 32, width: 96 }} />
+                <div className="shimmer" style={{ height: 32, width: 72 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : profiles.length === 0 ? (
+        <div className="list-empty">{t("profiles.empty")}</div>
       ) : (
-        <List
-          loading={loading}
-          bordered
-          dataSource={profiles}
-          renderItem={(p) => (
-            <List.Item
-              actions={[
-                <Link key="open" to={`/profiles/${p.id}`}>
-                  {t("profiles.open")}
-                </Link>,
-              ]}
-            >
-              <List.Item.Meta
-                title={p.name}
-                description={
-                  <Space>
-                    <Tag>{p.source_type}</Tag>
-                    {p.enabled ? (
-                      <Tag color="green">{t("profiles.enabled")}</Tag>
-                    ) : (
-                      <Tag>{t("profiles.disabled")}</Tag>
-                    )}
-                    {p.last_fetch_status && (
-                      <span>
-                        {t("profiles.lastFetch")}: {p.last_fetch_status}
-                      </span>
-                    )}
-                  </Space>
-                }
-              />
-            </List.Item>
-          )}
-        />
+        <div className="profiles">
+          {profiles.map((p) => (
+            <ProfileBar key={p.id} profile={p} onCopy={() => copyLink(p.subscription_url)} />
+          ))}
+        </div>
       )}
 
       <Modal
@@ -114,6 +137,7 @@ export default function ProfileList() {
         onOk={() => form.submit()}
         okText={t("common.create")}
         cancelText={t("common.cancel")}
+        destroyOnClose
       >
         <Form form={form} layout="vertical" onFinish={onCreate}>
           <Form.Item name="name" label={t("profiles.name")} rules={[{ required: true }]}>
@@ -136,6 +160,44 @@ export default function ProfileList() {
           </Form.Item>
         </Form>
       </Modal>
-    </Space>
+    </div>
+  );
+}
+
+function ProfileBar({
+  profile,
+  onCopy,
+}: {
+  profile: ProfileSummary;
+  onCopy: () => void;
+}) {
+  const { t } = useTranslation();
+  const status = profile.last_fetch_status;
+  const { label, cls } = !status
+    ? { label: t("profiles.fetchNever"), cls: "status-never" }
+    : status === "success"
+      ? { label: t("profiles.fetchOk"), cls: "status-ok" }
+      : { label: t("profiles.fetchFail"), cls: "status-fail" };
+
+  return (
+    <div className="profile-bar">
+      <div className="profile-main">
+        <div className="profile-name-row">
+          <span className="profile-name">{profile.name}</span>
+          <span className={`profile-status ${cls}`}>{label}</span>
+        </div>
+        <div className="profile-url">{profile.source_url_masked}</div>
+      </div>
+      <div className="profile-actions">
+        <button className="btn-ghost" onClick={onCopy}>
+          <CopyOutlined />
+          {t("profiles.copyLink")}
+        </button>
+        <Link to={`/profiles/${profile.id}`} className="btn-manage">
+          {t("profiles.open")}
+          <RightOutlined style={{ fontSize: 11 }} />
+        </Link>
+      </div>
+    </div>
   );
 }

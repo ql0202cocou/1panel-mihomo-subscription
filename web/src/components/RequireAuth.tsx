@@ -3,7 +3,7 @@ import { Spin } from "antd";
 import type { ReactNode } from "react";
 import { useAuth } from "../auth";
 
-/// Gate protected routes; redirect to /login preserving the attempted path.
+/// 守卫受保护路由;未登录时跳转 /login 并保留原本要访问的路径。
 export default function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const location = useLocation();

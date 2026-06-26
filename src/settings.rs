@@ -1,4 +1,4 @@
-//! Application settings: read settings and reset the global public path prefix.
+//! 应用设置:读取设置,以及重置全局公共路径前缀。
 
 use std::sync::Arc;
 
@@ -20,8 +20,8 @@ pub async fn get(State(state): State<Arc<AppState>>) -> ApiResult<impl IntoRespo
     }))
 }
 
-/// Reset the global public path prefix. Every profile's hosted link changes at
-/// once, invalidating all old links (see `docs/security-design.md`).
+/// 重置全局公共路径前缀。所有 profile 的托管链接一次性改变,使全部旧链接失效
+/// (见 `docs/security-design.md`)。
 pub async fn reset_public_path(State(state): State<Arc<AppState>>) -> ApiResult<impl IntoResponse> {
     let prefix = random_path_prefix();
     sqlx::query("UPDATE app_settings SET public_path_prefix = ?, updated_at = ? WHERE id = 1")

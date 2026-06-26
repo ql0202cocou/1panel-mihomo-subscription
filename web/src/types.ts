@@ -41,7 +41,7 @@ export interface CustomNode {
   updated_at: string;
 }
 
-/** A proxy as it appears in the generated output (provider or custom). */
+/** 生成结果中出现的一个代理(来自机场或自定义)。 */
 export interface ProxyPreview {
   name: string;
   type: string;
@@ -51,9 +51,9 @@ export interface ProxiesResponse {
   generated: boolean;
   generated_at: string | null;
   proxies: ProxyPreview[];
-  /** Order of the two node blocks, e.g. ["provider","custom"]. */
+  /** 两个节点区块的顺序,如 ["provider","custom"]。 */
   node_section_order: string[];
-  /** Provider proxy-groups (name + type) from the latest generated output. */
+  /** 最近一次生成结果中的机场代理组(名称 + 类型)。 */
   groups: ProxyPreview[];
 }
 

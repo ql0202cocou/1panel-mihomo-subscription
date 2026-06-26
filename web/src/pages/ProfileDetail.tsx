@@ -1,27 +1,31 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  Alert,
   Button,
-  Card,
-  Descriptions,
   Form,
   Input,
   Modal,
   Popconfirm,
   QRCode,
   Select,
-  Space,
+  Spin,
   Switch,
-  Typography,
+  Tabs,
   message,
 } from "antd";
+import {
+  CopyOutlined,
+  LeftOutlined,
+  LinkOutlined,
+  ReloadOutlined,
+} from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../api";
 import type { ProfileDetail as Detail, SourceType } from "../types";
 import NodesCard from "./detail/NodesCard";
 import GroupsCard from "./detail/GroupsCard";
 import RulesCard from "./detail/RulesCard";
+import "./detail/detail.css";
 
 const SOURCE_TYPES: SourceType[] = ["mihomo", "clash", "surge", "loon"];
 
@@ -52,70 +56,102 @@ export default function ProfileDetail() {
       await reload();
     } catch (e) {
       const err = e as ApiError;
-      if (err.details && err.details.length > 0) {
-        setGenErrors(err.details);
-      } else {
-        message.error(err.message ?? t("detail.generateFailed"));
-      }
+      if (err.details && err.details.length > 0) setGenErrors(err.details);
+      else message.error(err.message ?? t("detail.generateFailed"));
     } finally {
       setGenerating(false);
     }
   }
 
+  // 生成错误分流:规则行级错误(`rules line …`)交给「规则」tab 内的 RulesCard 就地展示,
+  // 其余非规则类错误在页面顶部以 banner 列出。
   const nonRuleErrors = genErrors.filter((e) => !/rules line/.test(e));
 
+  const tabs = [
+    {
+      key: "basic",
+      label: t("basic.title"),
+      children: (
+        <BasicInfo detail={detail} onRefresh={generate} onSaved={reload} refreshing={generating} />
+      ),
+    },
+    {
+      key: "nodes",
+      label: t("detail.tabNodes"),
+      children: (
+        <NodesCard
+          profileId={detail.id}
+          profileName={detail.name}
+          nodes={detail.nodes}
+          generatedAt={detail.last_generated_at}
+          onChange={reload}
+        />
+      ),
+    },
+    {
+      key: "groups",
+      label: t("detail.tabGroups"),
+      children: (
+        <GroupsCard
+          profileId={detail.id}
+          groups={detail.groups}
+          nodes={detail.nodes}
+          generatedAt={detail.last_generated_at}
+          onChange={reload}
+        />
+      ),
+    },
+    {
+      key: "rules",
+      label: t("detail.tabRules"),
+      children: (
+        <RulesCard
+          profileId={detail.id}
+          initial={detail.rules?.content ?? ""}
+          nodes={detail.nodes}
+          groups={detail.groups}
+          generatedAt={detail.last_generated_at}
+          errors={genErrors}
+          onSaved={reload}
+        />
+      ),
+    },
+    {
+      key: "preview",
+      label: t("preview.title"),
+      children: <PreviewCard profileId={detail.id} />,
+    },
+  ];
+
   return (
-    <Space direction="vertical" size="large" style={{ width: "100%" }}>
-      <Space style={{ justifyContent: "space-between", width: "100%" }}>
-        <Typography.Title level={3} style={{ margin: 0 }}>
-          {detail.name}
-        </Typography.Title>
-        <Link to="/">{t("detail.back")}</Link>
-      </Space>
+    <div className="page-detail">
+      <Link to="/" className="detail-back">
+        <LeftOutlined style={{ fontSize: 11 }} />
+        {t("detail.back")}
+      </Link>
+      <div className="detail-head">
+        <span className="detail-name">{detail.name}</span>
+        <span className={`pill ${detail.enabled ? "pill-success" : "pill-muted"}`}>
+          {detail.enabled ? t("profiles.enabled") : t("profiles.disabled")}
+        </span>
+      </div>
+      <div className="detail-context">{t("detail.context")}</div>
 
       <HostedLink detail={detail} onReset={reload} />
 
-      <BasicInfo detail={detail} onRefresh={generate} onSaved={reload} refreshing={generating} />
-      <NodesCard
-        profileId={detail.id}
-        profileName={detail.name}
-        nodes={detail.nodes}
-        generatedAt={detail.last_generated_at}
-        onChange={reload}
-      />
-      <GroupsCard
-        profileId={detail.id}
-        groups={detail.groups}
-        nodes={detail.nodes}
-        generatedAt={detail.last_generated_at}
-        onChange={reload}
-      />
-      <RulesCard
-        profileId={detail.id}
-        initial={detail.rules?.content ?? ""}
-        nodes={detail.nodes}
-        groups={detail.groups}
-        generatedAt={detail.last_generated_at}
-        errors={genErrors}
-        onSaved={reload}
-      />
-      <PreviewCard profileId={detail.id} />
-
       {nonRuleErrors.length > 0 && (
-        <Alert
-          type="error"
-          showIcon
-          message={t("detail.generateFailed")}
-          description={
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {nonRuleErrors.map((e, i) => (
-                <li key={i}>{e}</li>
-              ))}
-            </ul>
-          }
-        />
+        <div className="warn-banner error" style={{ marginBottom: 16 }}>
+          {t("detail.generateFailed")}:
+          <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+            {nonRuleErrors.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+          </ul>
+        </div>
       )}
-    </Space>
+
+      <Tabs items={tabs} />
+    </div>
   );
 }
 
@@ -138,29 +174,34 @@ function HostedLink({ detail, onReset }: { detail: Detail; onReset: () => void }
   }
 
   return (
-    <Card title={t("detail.hostedLink")}>
-      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-        <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
-          {t("detail.alwaysLive")}
-        </Typography.Paragraph>
-        <Typography.Text code>{detail.subscription_url}</Typography.Text>
-        <Space>
-          <Button type="primary" onClick={copyUrl}>
+    <div className="hero">
+      <div className="hero-main">
+        <div className="hero-title">
+          <LinkOutlined />
+          {t("detail.hostedLink")}
+          <span className="pill pill-primary">{t("detail.live")}</span>
+        </div>
+        <p className="hero-desc">{t("detail.alwaysLive")}</p>
+        <div className="hero-url">{detail.subscription_url}</div>
+        <div className="hero-actions">
+          <Button type="primary" icon={<CopyOutlined />} onClick={copyUrl}>
             {t("detail.copy")}
           </Button>
           <Popconfirm title={t("detail.resetTokenConfirm")} onConfirm={resetToken}>
             <Button danger>{t("detail.resetToken")}</Button>
           </Popconfirm>
-        </Space>
-        <QRCode value={detail.subscription_url} size={128} />
-      </Space>
-    </Card>
+        </div>
+      </div>
+      <div className="hero-qr">
+        <div className="hero-qr-frame">
+          <QRCode value={detail.subscription_url} size={116} bordered={false} />
+        </div>
+        <span className="hero-qr-cap">{t("detail.scan")}</span>
+      </div>
+    </div>
   );
 }
 
-// Merged 基础信息 + 原始订阅 card: profile basics (name/enabled/output type) and
-// the provider source (type/url/last-fetch) in one place, with edit / change-URL
-// / refresh actions.
 function BasicInfo({
   detail,
   onRefresh,
@@ -179,10 +220,7 @@ function BasicInfo({
   const [form] = Form.useForm();
 
   async function saveBasic(values: { name: string; enabled: boolean; source_type: SourceType }) {
-    await api(`/api/profiles/${detail.id}`, {
-      method: "PUT",
-      body: JSON.stringify(values),
-    });
+    await api(`/api/profiles/${detail.id}`, { method: "PUT", body: JSON.stringify(values) });
     setEditOpen(false);
     onSaved();
   }
@@ -197,11 +235,25 @@ function BasicInfo({
     onSaved();
   }
 
+  const rows: [string, string, boolean?][] = [
+    [t("basic.name"), detail.name],
+    [t("basic.enabled"), detail.enabled ? "✓" : "—"],
+    [t("basic.outputType"), detail.output_type, true],
+    [t("source.type"), detail.source_type, true],
+    [t("source.url"), detail.source_url_masked, true],
+    [
+      t("source.lastFetch"),
+      detail.last_fetch_status
+        ? `${detail.last_fetch_status} · ${detail.last_fetch_at ?? ""}`
+        : t("source.never"),
+    ],
+  ];
+
   return (
-    <Card
-      title={t("basic.title")}
-      extra={
-        <Space>
+    <div className="dcard">
+      <div className="dcard-head">
+        <span className="dcard-title">{t("basic.title")}</span>
+        <div className="dcard-actions">
           <Button
             onClick={() => {
               form.setFieldsValue({
@@ -215,32 +267,28 @@ function BasicInfo({
             {t("basic.edit")}
           </Button>
           <Button onClick={() => setUrlOpen(true)}>{t("source.newUrl")}</Button>
-          <Button type="primary" loading={refreshing} onClick={onRefresh}>
+          <Button type="primary" icon={<ReloadOutlined />} loading={refreshing} onClick={onRefresh}>
             {t("source.refresh")}
           </Button>
-        </Space>
-      }
-    >
-      <Descriptions column={1}>
-        <Descriptions.Item label={t("basic.name")}>{detail.name}</Descriptions.Item>
-        <Descriptions.Item label={t("basic.enabled")}>
-          {detail.enabled ? "✓" : "—"}
-        </Descriptions.Item>
-        <Descriptions.Item label={t("basic.outputType")}>{detail.output_type}</Descriptions.Item>
-        <Descriptions.Item label={t("source.type")}>{detail.source_type}</Descriptions.Item>
-        <Descriptions.Item label={t("source.url")}>{detail.source_url_masked}</Descriptions.Item>
-        <Descriptions.Item label={t("source.lastFetch")}>
-          {detail.last_fetch_status
-            ? `${detail.last_fetch_status} · ${detail.last_fetch_at}`
-            : t("source.never")}
-        </Descriptions.Item>
-      </Descriptions>
+        </div>
+      </div>
+
+      <div className="kv">
+        {rows.map(([k, v, mono]) => (
+          <div className="kv-row" key={k}>
+            <div className="kv-key">{k}</div>
+            <div className={`kv-val${mono ? " mono" : ""}`}>{v}</div>
+          </div>
+        ))}
+      </div>
 
       <Modal
         title={t("basic.edit")}
         open={editOpen}
         onCancel={() => setEditOpen(false)}
         onOk={() => form.submit()}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
       >
         <Form form={form} layout="vertical" onFinish={saveBasic}>
           <Form.Item name="name" label={t("basic.name")} rules={[{ required: true }]}>
@@ -260,11 +308,13 @@ function BasicInfo({
         open={urlOpen}
         onCancel={() => setUrlOpen(false)}
         onOk={saveUrl}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
       >
-        <Typography.Paragraph type="secondary">{t("source.urlHint")}</Typography.Paragraph>
+        <p style={{ marginTop: 0, color: "var(--text-3)" }}>{t("source.urlHint")}</p>
         <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." />
       </Modal>
-    </Card>
+    </div>
   );
 }
 
@@ -276,8 +326,7 @@ function PreviewCard({ profileId }: { profileId: string }) {
   async function load() {
     setLoading(true);
     try {
-      const text = await api<string>(`/api/profiles/${profileId}/preview`);
-      setYaml(text);
+      setYaml(await api<string>(`/api/profiles/${profileId}/preview`));
     } catch (e) {
       message.error((e as ApiError).message ?? t("detail.generateFailed"));
     } finally {
@@ -286,19 +335,23 @@ function PreviewCard({ profileId }: { profileId: string }) {
   }
 
   return (
-    <Card
-      title={t("preview.title")}
-      extra={
-        <Button onClick={load} loading={loading}>
+    <div className="dcard">
+      <div className="dcard-head">
+        <span className="dcard-title">{t("preview.title")}</span>
+        <Button type="primary" onClick={load} loading={loading}>
           {t("preview.load")}
         </Button>
-      }
-    >
-      {yaml ? (
-        <pre style={{ maxHeight: 320, overflow: "auto", margin: 0 }}>{yaml}</pre>
+      </div>
+      {loading ? (
+        <div className="preview-loading">
+          <Spin />
+          {t("preview.loading")}
+        </div>
+      ) : yaml ? (
+        <pre className="preview-pre">{yaml}</pre>
       ) : (
-        <Typography.Text type="secondary">{t("preview.load")}</Typography.Text>
+        <div className="empty-line">{t("preview.load")}</div>
       )}
-    </Card>
+    </div>
   );
 }

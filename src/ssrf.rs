@@ -1,8 +1,7 @@
-//! SSRF protection: pure URL and IP validation.
+//! SSRF 防护:纯粹的 URL 与 IP 校验。
 //!
-//! Implements the rules in `docs/security-design.md`. This module is
-//! network-free and fully table-tested; the actual pinned fetch lives in
-//! `fetch.rs` and calls into here for every URL and every redirect hop.
+//! 实现 `docs/security-design.md` 的规则。本模块不涉网络、且用表驱动充分测试;真正的固定 IP
+//! 拉取在 `fetch.rs`,它对每个 URL、每一跳重定向都调用这里。
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::OnceLock;
@@ -12,19 +11,19 @@ use url::{Host, Url};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SsrfError {
-    /// Scheme is not http/https.
+    /// scheme 不是 http/https。
     Scheme,
-    /// Missing or empty host.
+    /// 缺失或为空的 host。
     Host,
-    /// Credentials embedded in the URL.
+    /// URL 中内嵌了凭据。
     Credentials,
-    /// Hostname is a loopback name (e.g. localhost).
+    /// 主机名是回环名(如 localhost)。
     BlockedHost,
-    /// Resolved or literal IP falls in a blocked range.
+    /// 解析出的或字面 IP 落在被阻止的范围内。
     BlockedIp,
 }
 
-/// IPv4 ranges that must never be the connect target (see security-design.md).
+/// 绝不能作为连接目标的 IPv4 范围(见 security-design.md)。
 const BLOCKED_V4: &[&str] = &[
     "0.0.0.0/8",
     "10.0.0.0/8",
@@ -43,8 +42,7 @@ const BLOCKED_V4: &[&str] = &[
     "240.0.0.0/4",
 ];
 
-/// IPv6 ranges blocked outright. The IPv4-embedding ranges (IPv4-mapped,
-/// NAT64, 6to4) are handled separately by unwrapping the embedded IPv4.
+/// 直接阻止的 IPv6 范围。IPv4 内嵌范围(IPv4 映射、NAT64、6to4)单独通过解包内嵌 IPv4 处理。
 const BLOCKED_V6: &[&str] = &["::/128", "::1/128", "fc00::/7", "fe80::/10", "ff00::/8"];
 
 fn blocked_nets() -> &'static Vec<IpNet> {
@@ -58,8 +56,7 @@ fn blocked_nets() -> &'static Vec<IpNet> {
     })
 }
 
-/// Validate the static parts of a URL (scheme, credentials, host name). IP
-/// reachability is checked separately via [`is_blocked_ip`] after resolution.
+/// 校验 URL 的静态部分(scheme、凭据、主机名)。IP 可达性在解析后经 [`is_blocked_ip`] 单独检查。
 pub fn validate_url(url: &Url) -> Result<(), SsrfError> {
     if !matches!(url.scheme(), "http" | "https") {
         return Err(SsrfError::Scheme);
@@ -78,7 +75,7 @@ pub fn validate_url(url: &Url) -> Result<(), SsrfError> {
                 Ok(())
             }
         }
-        // A bare-IP host is validated here so blocked literals never resolve.
+        // 裸 IP 主机在此校验,使被阻止的字面 IP 永不进入解析。
         Some(Host::Ipv4(ip)) => reject_if_blocked(IpAddr::V4(ip)),
         Some(Host::Ipv6(ip)) => reject_if_blocked(IpAddr::V6(ip)),
     }
@@ -92,9 +89,8 @@ fn reject_if_blocked(ip: IpAddr) -> Result<(), SsrfError> {
     }
 }
 
-/// True if connecting to `ip` is forbidden. For IPv6 that embeds an IPv4
-/// address, the embedded IPv4 is extracted and checked against the IPv4
-/// blocklist (closing the `::ffff:127.0.0.1` / NAT64 / 6to4 bypasses).
+/// 连接到 `ip` 是否被禁止。对内嵌 IPv4 的 IPv6,会提取内嵌 IPv4 并对照 IPv4 阻止列表检查
+/// (堵住 `::ffff:127.0.0.1` / NAT64 / 6to4 绕过)。
 pub fn is_blocked_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => is_blocked_v4(v4),
@@ -115,18 +111,18 @@ fn is_blocked_v4(ip: Ipv4Addr) -> bool {
         .any(|net| net.contains(&IpAddr::V4(ip)))
 }
 
-/// Extract an embedded IPv4 address from IPv4-mapped (`::ffff:0:0/96`),
-/// NAT64 (`64:ff9b::/96`), or 6to4 (`2002::/16`) IPv6 addresses.
+/// 从 IPv4 映射(`::ffff:0:0/96`)、NAT64(`64:ff9b::/96`)或 6to4(`2002::/16`)的 IPv6
+/// 地址中提取内嵌的 IPv4 地址。
 fn embedded_ipv4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
     if let Some(v4) = ip.to_ipv4_mapped() {
         return Some(v4);
     }
     let o = ip.octets();
-    // NAT64 well-known prefix 64:ff9b::/96.
+    // NAT64 周知前缀 64:ff9b::/96。
     if o[0] == 0x00 && o[1] == 0x64 && o[2] == 0xff && o[3] == 0x9b && o[4..12] == [0u8; 8] {
         return Some(Ipv4Addr::new(o[12], o[13], o[14], o[15]));
     }
-    // 6to4 2002::/16 carries the IPv4 in octets 2..6.
+    // 6to4 2002::/16 在第 2..6 字节携带 IPv4。
     if o[0] == 0x20 && o[1] == 0x02 {
         return Some(Ipv4Addr::new(o[2], o[3], o[4], o[5]));
     }

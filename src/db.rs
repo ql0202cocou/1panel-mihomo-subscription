@@ -1,11 +1,9 @@
-//! Database setup: connection pool, migrations, and app-settings seeding.
+//! 数据库初始化:连接池、迁移,以及 app-settings 的种子。
 //!
-//! Per `docs/data-model.md`, `foreign_keys` and `busy_timeout` are
-//! per-connection pragmas. They are configured on `SqliteConnectOptions`, which
-//! SQLx issues on *every* physical connection it opens — the idiomatic
-//! equivalent of an after-connect hook — so `ON DELETE CASCADE` cannot be
-//! silently disabled on some pooled connections. `journal_mode = WAL` is set
-//! once and persists with the database file.
+//! 按 `docs/data-model.md`,`foreign_keys` 与 `busy_timeout` 是每连接 pragma。它们配置在
+//! `SqliteConnectOptions` 上,SQLx 会对它打开的 *每个* 物理连接下发——等价于 after-connect 钩子
+//! 的惯用做法——故 `ON DELETE CASCADE` 不会在池中某些连接上被静默禁用。`journal_mode = WAL`
+//! 只设一次,随数据库文件持久化。
 
 use std::time::Duration;
 
@@ -16,7 +14,7 @@ use sqlx::sqlite::{
 };
 use uuid::Uuid;
 
-/// Build the canonical per-connection options for a database file path.
+/// 为数据库文件路径构建规范的每连接选项。
 pub fn connect_options(path: &str) -> SqliteConnectOptions {
     SqliteConnectOptions::new()
         .filename(path)
@@ -27,7 +25,7 @@ pub fn connect_options(path: &str) -> SqliteConnectOptions {
         .foreign_keys(true)
 }
 
-/// Open a pool from the given options and run pending migrations.
+/// 用给定选项打开连接池并运行待执行的迁移。
 pub async fn connect_with(options: SqliteConnectOptions) -> Result<SqlitePool> {
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
@@ -37,15 +35,13 @@ pub async fn connect_with(options: SqliteConnectOptions) -> Result<SqlitePool> {
     Ok(pool)
 }
 
-/// Open a pool for a database file at `path` and run pending migrations.
+/// 为 `path` 处的数据库文件打开连接池并运行待执行的迁移。
 pub async fn connect(path: &str) -> Result<SqlitePool> {
     connect_with(connect_options(path)).await
 }
 
-/// Ensure the single `app_settings` row exists and return the public path
-/// prefix. On first startup the prefix is seeded from `env_seed` when present
-/// and non-empty, otherwise a random URL-safe value is generated. Subsequent
-/// startups return the persisted value (which may have been reset at runtime).
+/// 确保单行 `app_settings` 存在并返回公共路径前缀。首次启动时:`env_seed` 存在且非空则用它做种子,
+/// 否则生成随机的 URL-safe 值。之后的启动返回已持久化的值(可能在运行时被重置过)。
 pub async fn seed_public_path_prefix(
     pool: &SqlitePool,
     env_seed: Option<String>,
@@ -70,8 +66,7 @@ pub async fn seed_public_path_prefix(
     Ok(prefix)
 }
 
-/// A random URL-safe path segment (22 chars), within the 16-24 char range
-/// recommended in `docs/security-design.md`.
+/// 随机 URL-safe 路径段(22 字符),落在 `docs/security-design.md` 推荐的 16-24 字符区间内。
 fn random_path_prefix() -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(Uuid::new_v4().into_bytes())
 }

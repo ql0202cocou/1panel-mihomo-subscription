@@ -1,12 +1,9 @@
-//! Generation, preview, and the public subscription endpoint.
+//! 生成、预览,以及公开订阅端点。
 //!
-//! `generate` (also the source-card manual refresh) fetches the provider,
-//! converts, persists the cache, and updates `last_fetch_*`. `preview` is the
-//! read-only counterpart (no cache write, no `last_fetch_*` change). The public
-//! endpoint serves fresh cache, refreshes under a per-profile single-flight
-//! lock, falls back to stale cache on refresh failure, and returns a uniform
-//! `404` for invalid access or a generic `503` when no cache exists and the
-//! fetch fails. See `docs/api-design.md` and `docs/security-design.md`.
+//! `generate`(也是源卡片的手动刷新)拉取机场、转换、持久化缓存,并更新 `last_fetch_*`。
+//! `preview` 是只读对应物(不写缓存、不改 `last_fetch_*`)。公开端点提供新鲜缓存,在 per-profile
+//! single-flight 锁下刷新,刷新失败时回退到陈旧缓存,对无效访问返回统一 `404`、无缓存且拉取失败时
+//! 返回通用 `503`。见 `docs/api-design.md` 与 `docs/security-design.md`。
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -29,7 +26,7 @@ use crate::util::now;
 
 const UPDATE_INTERVAL_HOURS: u32 = 24;
 
-// ─── Shared row/input types ─────────────────────────────────────────────────
+// ─── 共享行/输入类型 ────────────────────────────────────────────────────────
 
 #[derive(FromRow, Clone)]
 struct ProfileCore {
@@ -54,13 +51,13 @@ struct Built {
     generated_at: String,
 }
 
-/// Outcome of a refresh attempt, used to choose the public response.
+/// 一次刷新尝试的结果,用于选择公开响应。
 enum BuildError {
     Validation(Vec<String>),
     Upstream(String),
 }
 
-// ─── Handlers ─────────────────────────────────────────────────────────────────
+// ─── 处理器 ────────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct GenerateResponse {
@@ -68,7 +65,7 @@ pub struct GenerateResponse {
     generated_at: String,
 }
 
-/// `POST /api/profiles/:id/generate` — validate, fetch, convert, persist.
+/// `POST /api/profiles/:id/generate` —— 校验、拉取、转换、持久化。
 pub async fn generate(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -88,9 +85,8 @@ pub async fn generate(
     }))
 }
 
-/// `GET /api/profiles/:id/preview` — read-only generated YAML. Returns fresh
-/// cache if present, otherwise generates live without persisting or touching
-/// `last_fetch_*`.
+/// `GET /api/profiles/:id/preview` —— 只读的生成 YAML。有新鲜缓存则返回,否则实时生成、不持久化、
+/// 不触碰 `last_fetch_*`。
 pub async fn preview(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -103,7 +99,7 @@ pub async fn preview(
         }
     }
 
-    // Live generation; do not persist and do not update last_fetch_*.
+    // 实时生成;不持久化、不更新 last_fetch_*。
     let fetched = state
         .fetcher
         .fetch(&profile.source_url)
@@ -120,10 +116,9 @@ struct ProviderRules {
     rules: Vec<String>,
 }
 
-/// `GET /api/profiles/:id/provider-rules` — fetch the provider subscription and
-/// return its `rules` lines, so the admin can seed the rule editor with the
-/// airport's own rules (which the converter otherwise replaces). Live,
-/// SSRF-protected fetch; not cached and does not touch `last_fetch_*`.
+/// `GET /api/profiles/:id/provider-rules` —— 拉取机场订阅并返回其 `rules` 行,使管理员能用机场
+/// 自带的规则预填规则编辑器(否则转换器会替换它们)。实时、SSRF 保护的拉取;不缓存,也不触碰
+/// `last_fetch_*`。
 pub async fn provider_rules(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -146,14 +141,13 @@ pub async fn provider_rules(
     Ok(Json(ProviderRules { rules }).into_response())
 }
 
-/// `GET /:public_path_prefix/api/sub/:token` — public subscription download.
+/// `GET /:public_path_prefix/api/sub/:token` —— 公开订阅下载。
 pub async fn public_sub(
     State(state): State<Arc<AppState>>,
     Path((prefix, token)): Path<(String, String)>,
 ) -> Response {
-    // Always perform the token lookup regardless of whether the prefix matched,
-    // and compare the prefix in constant time, so response timing cannot
-    // confirm the path prefix independently (see security-design.md).
+    // 无论前缀是否匹配都执行 token 查找,并恒定时间比较前缀,使响应时序无法单独确认路径前缀
+    // (见 security-design.md)。
     let prefix_ok: bool = prefix
         .as_bytes()
         .ct_eq(state.current_prefix().as_bytes())
@@ -172,7 +166,7 @@ pub async fn public_sub(
     }
 }
 
-// ─── Public serve/refresh with single-flight ────────────────────────────────
+// ─── 公开 serve/refresh(带 single-flight）──────────────────────────────────
 
 struct Served {
     yaml: String,
@@ -180,17 +174,15 @@ struct Served {
 }
 
 async fn serve_or_refresh(state: &AppState, profile: &ProfileCore) -> Option<Served> {
-    // Every pull re-fetches the provider so the client always gets the latest
-    // nodes; the cache is only a fallback when the provider fetch fails.
+    // 每次拉取都重拉机场,使客户端总能拿到最新节点;缓存仅在机场拉取失败时作兜底。
     let arrived = now();
 
-    // Coalesce concurrent pulls of this profile into one provider fetch.
+    // 把该 profile 的并发拉取合并为一次机场拉取。
     let lock = state.single_flight.lock_for(&profile.id);
     let _guard = lock.lock().await;
 
-    // If another request in this batch already refreshed while we waited for the
-    // lock (cache regenerated at/after we arrived), serve that instead of
-    // re-fetching — this is what bounds bursts to a single upstream fetch.
+    // 若本批里另一个请求在我们等锁期间已刷新过(缓存在我们到达时或之后被重生),就提供它而非
+    // 再次拉取——这正是把突发限制为单次上游拉取的关键。
     let stale = load_cache(state, &profile.id).await.ok().flatten();
     if let Some(cache) = &stale {
         if generated_since(&cache.generated_at, &arrived) {
@@ -212,7 +204,7 @@ async fn serve_or_refresh(state: &AppState, profile: &ProfileCore) -> Option<Ser
             if let BuildError::Upstream(label) = &err {
                 let _ = update_last_fetch(state, &profile.id, label).await;
             }
-            // Serve stale cache if we have it; otherwise signal 503.
+            // 有陈旧缓存就提供;否则给出 503。
             match stale {
                 Some(cache) => {
                     tracing::warn!(profile = %profile.id, "refresh failed; serving stale cache");
@@ -233,10 +225,9 @@ impl From<CacheRow> for Served {
     }
 }
 
-// ─── Core fetch + convert ───────────────────────────────────────────────────
+// ─── 核心 拉取 + 转换 ──────────────────────────────────────────────────────────
 
-/// Fetch the provider and convert. On a successful fetch, updates
-/// `last_fetch_*` to `success`; on fetch failure, records the status label.
+/// 拉取机场并转换。拉取成功时把 `last_fetch_*` 更新为 `success`;拉取失败时记录状态标签。
 async fn fetch_and_convert(state: &AppState, profile: &ProfileCore) -> Result<Built, BuildError> {
     let fetched = match state.fetcher.fetch(&profile.source_url).await {
         Ok(f) => f,
@@ -265,8 +256,7 @@ async fn fetch_and_convert(state: &AppState, profile: &ProfileCore) -> Result<Bu
     })
 }
 
-/// Load convert inputs from the DB and run the converter. The outer
-/// `ApiResult` is for DB errors; the inner `Result` is the converter outcome.
+/// 从 DB 装载转换输入并运行转换器。外层 `ApiResult` 表示 DB 错误;内层 `Result` 是转换器结果。
 async fn convert(
     state: &AppState,
     profile_id: &str,
@@ -279,10 +269,11 @@ async fn convert(
             .await?
             .unwrap_or_default();
 
+    // 自定义节点是单一全局池(模型 C),追加到每条 profile 的输出,且查询已按自定义块顺序
+    // (`position`)取出,故无需 per-profile 的 `node_order`——转换器保持此顺序。
     let nodes = sqlx::query_as::<_, (String, String)>(
-        "SELECT name, content FROM custom_nodes WHERE profile_id = ? AND enabled = 1 ORDER BY created_at",
+        "SELECT name, content FROM global_nodes WHERE enabled = 1 ORDER BY position, name",
     )
-    .bind(profile_id)
     .fetch_all(&state.db)
     .await?
     .into_iter()
@@ -304,31 +295,30 @@ async fn convert(
     })
     .collect();
 
-    // Manual ordering (NULL/garbage -> empty -> default): custom-node order,
-    // node-section order (provider/custom blocks), proxy-group order.
-    let (node_order, node_section_order, group_order) =
-        sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>)>(
-            "SELECT node_order, node_section_order, group_order FROM profiles WHERE id = ?",
-        )
-        .bind(profile_id)
-        .fetch_optional(&state.db)
-        .await?
-        .map(|(n, s, g)| (parse_order(n), parse_order(s), parse_order(g)))
-        .unwrap_or_default();
+    // per-profile 的手动排序(NULL/异常 -> 空 -> 默认):两个节点块的先后(机场/自定义)与
+    // proxy-group 顺序。自定义块的内部顺序是全局的(`global_nodes.position`),上面的查询已应用,
+    // 故这里 `node_order` 为空。
+    let (node_section_order, group_order) = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+        "SELECT node_section_order, group_order FROM profiles WHERE id = ?",
+    )
+    .bind(profile_id)
+    .fetch_optional(&state.db)
+    .await?
+    .map(|(s, g)| (parse_order(s), parse_order(g)))
+    .unwrap_or_default();
 
     Ok(converter::convert(ConvertInput {
         provider_yaml,
         rules: &rules,
         nodes,
         groups,
-        node_order,
+        node_order: Vec::new(),
         node_section_order,
         group_order,
     }))
 }
 
-/// Parse a stored `node_order`/`group_order` JSON array; NULL or malformed
-/// values yield an empty list (= default order).
+/// 解析存储的 `node_order`/`group_order` JSON 数组;NULL 或异常值返回空列表(= 默认顺序)。
 fn parse_order(stored: Option<String>) -> Vec<String> {
     stored
         .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
@@ -342,7 +332,7 @@ fn map_convert_err(e: ConvertError) -> ApiError {
     }
 }
 
-// ─── DB helpers ─────────────────────────────────────────────────────────────
+// ─── DB 辅助 ───────────────────────────────────────────────────────────────────
 
 async fn load_core(state: &AppState, id: &str) -> ApiResult<Option<ProfileCore>> {
     Ok(sqlx::query_as::<_, ProfileCore>(
@@ -389,33 +379,26 @@ async fn persist_cache(state: &AppState, profile_id: &str, built: &Built) -> Api
     .execute(&state.db)
     .await?;
 
-    // Snapshot the output's proxy/group name order so it stays stable across
-    // provider refreshes: a node/group that still exists keeps its slot (its
-    // info is refreshed by name from the new provider YAML), and any newly added
-    // provider/custom entry lands at the end. A later manual drag overwrites this
-    // via `set_node_order`/`set_group_order`. Best-effort; never fails generation.
+    // 把输出的 proxy-group 顺序快照回写,使其在机场刷新间保持稳定:仍存在的分组保住其位置,
+    // 新增的落到末尾。之后的手动拖拽会经 `set_group_order` 覆盖本快照。节点顺序是全局的
+    // (`global_nodes.position`),不做 per-profile 快照。尽力而为;绝不让生成失败。
     if snapshot_orders(state, profile_id, &built.yaml)
         .await
         .is_err()
     {
-        tracing::warn!(profile = %profile_id, "failed to snapshot node/group order");
+        tracing::warn!(profile = %profile_id, "failed to snapshot group order");
     }
     Ok(())
 }
 
-/// Persist the output's ordering back into `profiles`: `node_order` is the
-/// **custom** block order (output proxy names that are custom nodes, so newly
-/// added customs persist at the end — the provider block's order is upstream and
-/// never stored), and `group_order` is the proxy-group order. Empty → NULL.
+/// 把输出的 proxy-group 顺序回写到 `profiles.group_order`(新增分组持久化到末尾)。节点顺序是
+/// 全局的(`global_nodes.position`),从不做 per-profile 快照。空 → NULL。
 async fn snapshot_orders(state: &AppState, profile_id: &str, yaml: &str) -> ApiResult<()> {
     let Ok(root) = crate::yaml::parse_limited(yaml) else {
         return Ok(());
     };
-    let custom = custom_node_names(state, profile_id).await?;
-    let node_order = order_json(&root, "proxies", |name| custom.contains(name));
     let group_order = order_json(&root, "proxy-groups", |_| true);
-    sqlx::query("UPDATE profiles SET node_order = ?, group_order = ? WHERE id = ?")
-        .bind(&node_order)
+    sqlx::query("UPDATE profiles SET group_order = ? WHERE id = ?")
         .bind(&group_order)
         .bind(profile_id)
         .execute(&state.db)
@@ -423,14 +406,10 @@ async fn snapshot_orders(state: &AppState, profile_id: &str, yaml: &str) -> ApiR
     Ok(())
 }
 
-/// The set of custom node names for a profile (all of them, enabled or not).
-async fn custom_node_names(
-    state: &AppState,
-    profile_id: &str,
-) -> ApiResult<std::collections::HashSet<String>> {
+/// 全部全局自定义节点名(无论启用与否)的集合,用于在 resync 时从缓存输出中切分出自定义块。
+async fn global_node_names(state: &AppState) -> ApiResult<std::collections::HashSet<String>> {
     Ok(
-        sqlx::query_scalar::<_, String>("SELECT name FROM custom_nodes WHERE profile_id = ?")
-            .bind(profile_id)
+        sqlx::query_scalar::<_, String>("SELECT name FROM global_nodes")
             .fetch_all(&state.db)
             .await?
             .into_iter()
@@ -438,8 +417,16 @@ async fn custom_node_names(
     )
 }
 
-/// Extract the ordered `name` values of a top-level sequence, keeping only those
-/// matching `keep`, serialized as a JSON array, or `None` (→ SQL NULL) when none.
+/// 按自定义块顺序(`position`,再按 `name`)排列的全局自定义节点名,用于在 resync 时重排自定义块。
+async fn global_node_order(state: &AppState) -> ApiResult<Vec<String>> {
+    Ok(sqlx::query_scalar::<_, String>(
+        "SELECT name FROM global_nodes ORDER BY position ASC, name ASC",
+    )
+    .fetch_all(&state.db)
+    .await?)
+}
+
+/// 提取某顶层序列的有序 `name`,仅保留匹配 `keep` 的,序列化为 JSON 数组;无则 `None`(→ SQL NULL)。
 fn order_json(root: &serde_yaml::Value, key: &str, keep: impl Fn(&str) -> bool) -> Option<String> {
     let names: Vec<&str> = match root.get(key) {
         Some(serde_yaml::Value::Sequence(items)) => items
@@ -466,13 +453,10 @@ async fn update_last_fetch(state: &AppState, profile_id: &str, status: &str) -> 
     Ok(())
 }
 
-/// Re-stitch the cached output to reflect the current saved node/group order and
-/// ruleset, **without** re-fetching the provider — so a drag-reorder (or rule
-/// edit) is served by the public link immediately, not only after the next full
-/// generate. Reordering only permutes entries already in the cached output, and
-/// the rules block is fully user-defined (provider-independent), so this is
-/// equivalent to a regenerate for these operations. No-op when nothing has been
-/// generated yet (the order then applies on the first generate).
+/// 就地重缝缓存输出,使其反映当前保存的节点/分组顺序与规则集,**不** 重拉机场——故拖拽排序
+/// (或规则编辑)会被公开链接立即提供,而不必等下一次完整生成。重排只是对缓存输出中已有的条目
+/// 做置换,且规则块完全由用户定义(与机场无关),故对这些操作等价于重新生成。尚未生成过时为
+/// no-op(此时顺序在首次生成时应用)。
 pub async fn resync_cache(state: &AppState, profile_id: &str) -> ApiResult<()> {
     let Some(cache) = load_cache(state, profile_id).await? else {
         return Ok(());
@@ -482,12 +466,11 @@ pub async fn resync_cache(state: &AppState, profile_id: &str) -> ApiResult<()> {
         return Ok(());
     };
 
-    // proxies: rebuild the two blocks from the cached output — split by custom
-    // node name, reorder the custom block by `node_order`, concatenate per
-    // `node_section_order` (provider block keeps its cached/upstream order).
-    let node_order = load_order_col(state, profile_id, "node_order").await?;
+    // proxies:从缓存输出重建两个块——按全局自定义节点名切分,自定义块按全局节点顺序
+    // (`global_nodes.position`)重排,再按 `node_section_order` 拼接(机场块保持其缓存/上游顺序)。
+    let node_order = global_node_order(state).await?;
     let node_section_order = load_order_col(state, profile_id, "node_section_order").await?;
-    let custom = custom_node_names(state, profile_id).await?;
+    let custom = global_node_names(state).await?;
     if let Some(serde_yaml::Value::Sequence(proxies)) = root.get_mut("proxies") {
         let (mut custom_block, provider_block): (Vec<_>, Vec<_>) =
             std::mem::take(proxies).into_iter().partition(|item| {
@@ -503,12 +486,11 @@ pub async fn resync_cache(state: &AppState, profile_id: &str) -> ApiResult<()> {
         *proxies = converter::concat_sections(provider_block, custom_block, &node_section_order);
     }
 
-    // proxy-groups: reorder by the saved group order.
+    // proxy-groups:按保存的分组顺序重排。
     let group_order = load_order_col(state, profile_id, "group_order").await?;
     reorder_seq(&mut root, "proxy-groups", &group_order);
 
-    // Replace the rules block with the current ruleset (order is significant);
-    // mirrors the converter (skip blank/comment lines, keep order).
+    // 用当前规则集替换 rules 块(顺序有意义);与转换器一致(跳过空/注释行,保持顺序)。
     let rules =
         sqlx::query_scalar::<_, String>("SELECT content FROM rulesets WHERE profile_id = ?")
             .bind(profile_id)
@@ -533,8 +515,7 @@ pub async fn resync_cache(state: &AppState, profile_id: &str) -> ApiResult<()> {
         return Ok(());
     }
 
-    // Patch the cached output in place; keep `generated_at` so the provider
-    // refetch cadence is unchanged (content is still the last fetch, reordered).
+    // 就地打补丁更新缓存输出;保留 `generated_at`,使机场重拉节奏不变(内容仍是上次拉取、只是重排)。
     sqlx::query(
         "UPDATE generated_cache SET output_yaml = ?, content_hash = ? WHERE profile_id = ?",
     )
@@ -546,21 +527,34 @@ pub async fn resync_cache(state: &AppState, profile_id: &str) -> ApiResult<()> {
     Ok(())
 }
 
-/// Reorder a top-level `proxies`/`proxy-groups` sequence in place by name.
+/// 按名字就地重排某顶层 `proxies`/`proxy-groups` 序列。
 fn reorder_seq(root: &mut serde_yaml::Mapping, key: &str, order: &[String]) {
     if let Some(serde_yaml::Value::Sequence(seq)) = root.get_mut(key) {
         converter::reorder_by_name(seq, |item| item.get("name").and_then(|v| v.as_str()), order);
     }
 }
 
-/// Read a profile's `node_order`/`group_order` JSON array (NULL/garbage → empty).
+/// 就地重缝每条 profile 的服务缓存。用于全局节点排序之后(它影响所有 profile 的自定义块)。
+/// 逐 profile 尽力而为:某个失败就让该 profile 在下次生成时再吸收新顺序。
+pub async fn resync_all_caches(state: &AppState) {
+    let ids = sqlx::query_scalar::<_, String>("SELECT id FROM profiles")
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+    for id in ids {
+        if resync_cache(state, &id).await.is_err() {
+            tracing::warn!(profile = %id, "failed to resync cache after global-node reorder");
+        }
+    }
+}
+
+/// 读取 profile 的 `node_section_order`/`group_order` JSON 数组(NULL/异常 → 空)。
 async fn load_order_col(
     state: &AppState,
     profile_id: &str,
     column: &str,
 ) -> ApiResult<Vec<String>> {
     let sql = match column {
-        "node_order" => "SELECT node_order FROM profiles WHERE id = ?",
         "node_section_order" => "SELECT node_section_order FROM profiles WHERE id = ?",
         _ => "SELECT group_order FROM profiles WHERE id = ?",
     };
@@ -573,7 +567,7 @@ async fn load_order_col(
         .unwrap_or_default())
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ─── 辅助 ──────────────────────────────────────────────────────────────────────
 
 fn is_fresh(generated_at: &str, ttl: Duration) -> bool {
     let Ok(generated) = chrono::DateTime::parse_from_rfc3339(generated_at) else {
@@ -583,9 +577,8 @@ fn is_fresh(generated_at: &str, ttl: Duration) -> bool {
     age.to_std().map(|a| a < ttl).unwrap_or(false)
 }
 
-/// Whether `generated_at` is at or after `arrived` — i.e. the cache was
-/// (re)generated since this request started waiting, so another concurrent pull
-/// already refreshed it. Unparseable timestamps count as "not since" (re-fetch).
+/// `generated_at` 是否在 `arrived` 当时或之后——即缓存自本请求开始等待以来被(重新)生成过,故
+/// 另一个并发拉取已刷新它。无法解析的时间戳算作「不在其后」(重新拉取)。
 fn generated_since(generated_at: &str, arrived: &str) -> bool {
     match (
         chrono::DateTime::parse_from_rfc3339(generated_at),
@@ -644,8 +637,7 @@ fn build_header_map(pairs: Vec<(header::HeaderName, String)>) -> header::HeaderM
     map
 }
 
-/// Keep filename-safe characters only, so the value can't break the
-/// `Content-Disposition` header or the client's file handling.
+/// 只保留文件名安全的字符,使该值无法破坏 `Content-Disposition` 头或客户端的文件处理。
 fn sanitize_filename(name: &str) -> String {
     let cleaned: String = name
         .chars()

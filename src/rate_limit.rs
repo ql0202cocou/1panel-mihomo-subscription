@@ -1,13 +1,10 @@
-//! In-memory token-bucket rate limiting and the login/download middleware.
+//! 内存令牌桶限流,以及 login/download 中间件。
 //!
-//! A token bucket (rather than a fixed window) smooths traffic and avoids the
-//! ~2x burst a fixed window allows at its boundaries. Each key holds `max`
-//! tokens that refill continuously at `max / window` per second; a request is
-//! allowed when at least one whole token is available.
+//! 令牌桶(而非固定窗口)能平滑流量,避免固定窗口在边界处允许的 ~2 倍突发。每个 key 持有 `max`
+//! 个令牌,以每秒 `max / window` 的速率持续补充;至少有一个完整令牌时才放行请求。
 //!
-//! In-memory limits are acceptable for the single-instance self-hosted MVP
-//! (see `docs/security-design.md`); a shared store would be needed only if the
-//! app later runs multi-instance.
+//! 单实例自托管 MVP 用内存限流即可(见 `docs/security-design.md`);只有应用日后多实例运行时
+//! 才需要共享存储。
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -24,12 +21,12 @@ use axum::{
 use crate::app::AppState;
 use crate::net;
 
-/// A token-bucket rate limiter keyed by an arbitrary string.
+/// 以任意字符串为 key 的令牌桶限流器。
 pub struct RateLimiter {
     inner: Mutex<HashMap<String, Bucket>>,
-    /// Bucket capacity (the burst size and steady-state max per window).
+    /// 桶容量(突发大小,也是每窗口的稳态上限)。
     capacity: f64,
-    /// Tokens added per second.
+    /// 每秒补充的令牌数。
     refill_per_sec: f64,
 }
 
@@ -39,7 +36,7 @@ struct Bucket {
 }
 
 impl RateLimiter {
-    /// `max` requests per `window` (also the burst capacity).
+    /// 每 `window` 允许 `max` 个请求(也是突发容量)。
     pub fn new(max: u32, window: Duration) -> Self {
         let capacity = max as f64;
         let secs = window.as_secs_f64().max(f64::MIN_POSITIVE);
@@ -50,14 +47,13 @@ impl RateLimiter {
         }
     }
 
-    /// Record a hit for `key`; return `true` if a token was available.
+    /// 为 `key` 记一次命中;有可用令牌则返回 `true`。
     pub fn check(&self, key: &str) -> bool {
         let mut map = self.inner.lock().unwrap();
         let now = Instant::now();
 
-        // Opportunistic cleanup to bound memory under many distinct keys. A
-        // fully refilled bucket is indistinguishable from a fresh one, so any
-        // bucket idle for a full window can be dropped without affecting limits.
+        // 机会性清理,以在大量不同 key 下限制内存。已完全补满的桶与新建桶无法区分,故任何空闲
+        // 满一个窗口的桶都可丢弃而不影响限流。
         if map.len() > 10_000 {
             let window_secs = self.capacity / self.refill_per_sec;
             map.retain(|_, b| now.duration_since(b.last).as_secs_f64() < window_secs);
@@ -67,7 +63,7 @@ impl RateLimiter {
             tokens: self.capacity,
             last: now,
         });
-        // Refill for the elapsed time, capped at capacity.
+        // 按流逝时间补充令牌,上限为容量。
         let elapsed = now.duration_since(bucket.last).as_secs_f64();
         bucket.tokens = (bucket.tokens + elapsed * self.refill_per_sec).min(self.capacity);
         bucket.last = now;
@@ -81,7 +77,7 @@ impl RateLimiter {
     }
 }
 
-/// Derive the client IP string for `req` using the app's trusted-proxy config.
+/// 用应用的受信代理配置推导 `req` 的客户端 IP 字符串。
 fn client_ip(state: &AppState, req: &Request) -> String {
     let xff = req
         .headers()
@@ -94,7 +90,7 @@ fn client_ip(state: &AppState, req: &Request) -> String {
     net::client_ip_string(xff, peer, state.trusted_proxy_hops)
 }
 
-/// Limit login attempts by client IP (brute-force control).
+/// 按客户端 IP 限制登录尝试(暴力破解防护)。
 pub async fn login(State(state): State<Arc<AppState>>, req: Request, next: Next) -> Response {
     let key = format!("login:{}", client_ip(&state, &req));
     if !state.login_limiter.check(&key) {
@@ -103,10 +99,9 @@ pub async fn login(State(state): State<Arc<AppState>>, req: Request, next: Next)
     next.run(req).await
 }
 
-/// Limit public subscription requests per client IP, independent of the token
-/// in the path. Keying by IP only (not IP+path) means a client guessing many
-/// distinct tokens shares one budget, so the limiter actually throttles token
-/// enumeration / scanning — and runs before the handler, so 404s count too.
+/// 按客户端 IP 限制公开订阅请求,与路径中的 token 无关。只按 IP(而非 IP+路径)做 key,意味着
+/// 一个客户端猜很多不同 token 时共享同一预算,故限流器真正能抑制 token 枚举/扫描——且在处理器
+/// 之前运行,故 404 也计数。
 pub async fn download(State(state): State<Arc<AppState>>, req: Request, next: Next) -> Response {
     let key = format!("dl:{}", client_ip(&state, &req));
     if !state.download_limiter.check(&key) {

@@ -187,27 +187,15 @@ async fn node_requires_valid_yaml_mapping() {
     let temp = TempDb::new();
     let app = build_router(test_state(&temp).await);
     let cookie = login(&app).await;
-    let id = create_profile(&app, &cookie, "p").await["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
 
-    // A non-mapping content is rejected.
+    // Global custom nodes need no profile. A non-mapping content is rejected.
     let bad = r#"{"name":"n","node_type":"ss","content":"- just\n- a\n- list"}"#;
-    let resp = send(
-        &app,
-        authed("POST", &format!("/api/profiles/{id}/nodes"), &cookie, bad),
-    )
-    .await;
+    let resp = send(&app, authed("POST", "/api/global-nodes", &cookie, bad)).await;
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
     // A valid proxy mapping is accepted.
     let good = r#"{"name":"my-ss","node_type":"ss","content":"name: my-ss\ntype: ss\nserver: 1.2.3.4\nport: 8388"}"#;
-    let resp = send(
-        &app,
-        authed("POST", &format!("/api/profiles/{id}/nodes"), &cookie, good),
-    )
-    .await;
+    let resp = send(&app, authed("POST", "/api/global-nodes", &cookie, good)).await;
     assert_eq!(resp.status(), StatusCode::CREATED);
 }
 

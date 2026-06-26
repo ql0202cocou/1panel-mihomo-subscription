@@ -1,7 +1,6 @@
-// Shared structured-editor widgets used by both the node editor and the group
-// options editor: a typed input driven by a `FieldDef`, and an "advanced" block
-// of free-form key/value rows (scalars get typed inputs; nested objects edit as
-// a small YAML block) so admins never have to hand-write raw config.
+// 节点编辑器和代理组选项编辑器共用的结构化编辑控件:由 `FieldDef` 驱动的带类型
+// 输入框,以及一个「高级」自由键值行区块(标量给类型化输入框;嵌套对象用一小段
+// YAML 编辑),让管理员永远不必手写原始配置。
 
 import { useState } from "react";
 import {
@@ -18,8 +17,34 @@ import {
 import { useTranslation } from "react-i18next";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { FieldDef } from "./nodeSchema";
+import "./modal.css";
 
-/** A typed input for one known field. The label is the caller's responsibility. */
+/** 可点选的类型 chip 行(节点/分组类型选择)。自由输入仍由调用方旁边的控件处理;chip 是快捷选择。 */
+export function TypeChips({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly string[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="type-chips">
+      {options.map((o) => (
+        <span
+          key={o}
+          className={`type-chip${value === o ? " active" : ""}`}
+          onClick={() => onChange(o)}
+        >
+          {o}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** 单个已知字段的带类型输入框。标签由调用方负责。 */
 export function FieldInput({
   def,
   value,
@@ -85,7 +110,7 @@ export function FieldInput({
   }
 }
 
-/** Editable list of advanced key/value rows, kept in document order. */
+/** 可编辑的高级键值行列表,保持文档顺序。 */
 export function AdvancedFields({
   entries,
   onChange,
@@ -134,7 +159,7 @@ export function AdvancedFields({
   );
 }
 
-/** Value editor for an advanced row, typed by the current value's JS type. */
+/** 高级行的值编辑器,按当前值的 JS 类型决定输入形态。 */
 function AdvancedValue({
   value,
   onChange,
@@ -160,7 +185,7 @@ function AdvancedValue({
   );
 }
 
-/** Nested object/array advanced value, edited as a small YAML block. */
+/** 嵌套对象/数组的高级值,用一小段 YAML 编辑。 */
 function ObjectField({
   value,
   onChange,
@@ -179,14 +204,14 @@ function ObjectField({
         try {
           onChange(parseYaml(e.target.value));
         } catch {
-          // Keep the last valid parse while the YAML is mid-edit.
+          // YAML 编辑中途解析失败时,保留上一次有效的解析结果。
         }
       }}
     />
   );
 }
 
-/** Split an object into known (by key) and ordered advanced [key, value] pairs. */
+/** 把对象拆成已知字段(按 key)和有序的高级 [key, value] 对。 */
 export function splitAdvanced(
   obj: Record<string, unknown>,
   known: Set<string>,
@@ -208,14 +233,14 @@ export function isEmptyValue(v: unknown): boolean {
   );
 }
 
-/** Read a possibly dotted path (e.g. `headers.Host`) from a nested object. */
+/** 从嵌套对象里读取可能带点的路径(如 `headers.Host`)。 */
 export function getPath(obj: Record<string, unknown>, path: string): unknown {
   return path.split(".").reduce<unknown>((acc, k) => (isObject(acc) ? acc[k] : undefined), obj);
 }
 
 /**
- * Immutably set/clear a dotted path in a nested object, pruning any parent
- * objects left empty. Returns the new root (empty when nothing remains).
+ * 在嵌套对象里以不可变方式设置/清除带点路径,并剪除因此变空的父对象。
+ * 返回新的根对象(全部清空时为空对象)。
  */
 export function setPath(
   obj: Record<string, unknown>,

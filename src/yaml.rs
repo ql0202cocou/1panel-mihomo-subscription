@@ -1,24 +1,19 @@
-//! Bounded YAML parsing for untrusted/admin-submitted documents.
+//! 对不受信任/管理员提交的文档做限界 YAML 解析。
 //!
-//! Per `docs/security-design.md`, YAML from outside the trust boundary (admin
-//! node/group content here; provider content in the converter) must be parsed
-//! with resource limits: nesting depth and node count after parse, plus an
-//! anchor/alias cap *before* parse.
+//! 按 `docs/security-design.md`,来自信任边界之外的 YAML(此处是管理员的节点/分组 content;
+//! 转换器里是机场内容)必须带资源限制解析:解析后限制嵌套深度与节点数,并在解析 *之前* 限制
+//! 锚点/别名数。
 //!
-//! The anchor/alias cap is the defense against alias-expansion ("billion
-//! laughs"): such inputs are tiny, so the size cap and post-parse checks cannot
-//! help — `serde_yaml` would already have expanded the bomb (and OOM'd) inside
-//! `from_str`. So we scan the raw text first and reject documents with an
-//! implausible number of anchors/aliases, bounding worst-case expansion to a
-//! size the post-parse node-count check can then reject safely.
+//! 锚点/别名上限是对别名扩展(「billion laughs」)的防御:这类输入极小,故大小上限与解析后的检查
+//! 都帮不上忙——`serde_yaml` 已在 `from_str` 内把炸弹展开(并 OOM)了。因此先扫原始文本,拒绝
+//! 锚点/别名数量离谱的文档,把最坏情况的展开规模限制到解析后节点数检查能安全拒绝的大小。
 
 use serde_yaml::Value;
 
 const MAX_DEPTH: usize = 32;
 const MAX_NODES: usize = 10_000;
-/// Max combined `&anchor` definitions and `*alias` references. A doubling
-/// alias chain uses ~3 tokens per level, so 32 bounds expansion to ~2^10
-/// nodes. Legitimate Mihomo configs use few or no anchors.
+/// `&anchor` 定义与 `*alias` 引用的合计上限。倍增的别名链每层约用 3 个 token,故 32 把展开
+/// 限制到 ~2^10 个节点。合法的 Mihomo 配置很少或不用锚点。
 const MAX_ANCHORS_ALIASES: usize = 32;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -28,8 +23,7 @@ pub enum YamlError {
     NotMapping,
 }
 
-/// Parse `text` into a YAML value, enforcing the anchor/alias cap before parse
-/// and depth/node-count limits after.
+/// 把 `text` 解析为 YAML 值:解析前强制锚点/别名上限,解析后限制深度/节点数。
 pub fn parse_limited(text: &str) -> Result<Value, YamlError> {
     if count_anchors_aliases(text) > MAX_ANCHORS_ALIASES {
         return Err(YamlError::TooComplex);
@@ -40,9 +34,8 @@ pub fn parse_limited(text: &str) -> Result<Value, YamlError> {
     Ok(value)
 }
 
-/// Count YAML anchor (`&name`) and alias (`*name`) tokens in the raw text. To
-/// avoid counting `&`/`*` inside scalars, only sigils preceded by whitespace or
-/// a flow indicator and followed by a name character are counted.
+/// 统计原始文本中的 YAML 锚点(`&name`)与别名(`*name`)token。为避免把标量内部的 `&`/`*`
+/// 也算进去,只统计前面是空白或流式指示符、后面是名字字符的符号。
 fn count_anchors_aliases(text: &str) -> usize {
     let bytes = text.as_bytes();
     let mut count = 0;
@@ -66,8 +59,7 @@ fn count_anchors_aliases(text: &str) -> usize {
     count
 }
 
-/// Parse `text` and require the top level to be a mapping (e.g. a single Mihomo
-/// proxy definition).
+/// 解析 `text` 并要求顶层是一个映射(如单个 Mihomo proxy 定义)。
 pub fn parse_mapping(text: &str) -> Result<serde_yaml::Mapping, YamlError> {
     match parse_limited(text)? {
         Value::Mapping(map) => Ok(map),
@@ -127,8 +119,7 @@ mod tests {
 
     #[test]
     fn rejects_billion_laughs_before_parsing() {
-        // A small input that would expand exponentially; rejected by the
-        // anchor/alias cap before serde_yaml can materialize it.
+        // 一个会指数膨胀的小输入;在 serde_yaml 能将其物化之前就被锚点/别名上限拒绝。
         let mut yaml = String::from("a: &a [x, x, x, x, x, x, x, x, x, x]\n");
         for (level, prev) in [('b', 'a'), ('c', 'b'), ('d', 'c'), ('e', 'd')] {
             yaml.push_str(&format!(

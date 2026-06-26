@@ -1,13 +1,19 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 
-// Chinese is the only MVP locale, but all copy goes through keys from day one
-// so English (and the app package's other locales) can be added without a
-// refactor.
+// MVP 阶段只有中文一种语言,但所有文案从一开始就走 key,这样以后新增英文
+//(以及应用包里的其他语言)无需重构。
 const zh = {
   translation: {
-    app: { title: "管理后台" },
-    nav: { profiles: "订阅配置", settings: "系统设置", logout: "退出登录" },
+    app: { title: "管理后台", subtitle: "订阅管理后台" },
+    nav: {
+      profiles: "订阅配置",
+      nodes: "节点配置",
+      settings: "系统设置",
+      logout: "退出登录",
+      role: "管理员",
+    },
+    theme: { dark: "暗色", light: "亮色" },
     login: {
       title: "管理员登录",
       username: "管理员账户",
@@ -18,6 +24,7 @@ const zh = {
     },
     profiles: {
       title: "订阅配置",
+      help: "维护机场订阅与自定义节点 / 分组 / 规则,生成永久托管链接。",
       create: "新建配置",
       name: "配置名称",
       sourceType: "原始订阅类型",
@@ -27,9 +34,22 @@ const zh = {
       lastFetch: "最近拉取",
       empty: "还没有订阅配置，点击“新建配置”开始。",
       open: "管理",
+      copyLink: "复制链接",
+      metricTotal: "配置总数",
+      metricEnabled: "启用中",
+      metricError: "拉取异常",
+      fetchOk: "拉取成功",
+      fetchFail: "拉取失败",
+      fetchNever: "未拉取",
     },
     detail: {
       hostedLink: "托管订阅",
+      live: "实时",
+      scan: "扫码导入",
+      context: "永久托管链接 · 客户端每次拉取实时套用当前配置。",
+      tabNodes: "节点",
+      tabGroups: "分组",
+      tabRules: "规则",
       copy: "复制订阅",
       copied: "已复制",
       copyFailed: "复制失败,请手动复制",
@@ -68,10 +88,15 @@ const zh = {
       deleteConfirm: "确定删除该节点?",
       nameTypeRequired: "节点名称和类型为必填项。",
       customGroup: "自定义节点",
+      providerTitle: "机场节点",
+      customReadonly: "只读 · 顺序在「节点配置」中调整",
+      manageHint: "全局节点的增删改与排序请前往",
+      dragHintGlobal: "拖动手柄调整全局节点顺序;松手即保存并对所有订阅生效。",
+      globalHelper: "跨订阅复用的全局自定义节点;可在任意订阅的「节点」中引用。",
       groupCount: "{{count}} 个节点",
       dragHint: "拖动左侧手柄可调整分组先后；展开「自定义节点」后可拖动组内节点顺序。松手即保存、立即生效。",
       providerReadonly: "机场节点顺序由机场决定，不可调整。",
-      providerNotGenerated: "机场节点需先点击底部“生成配置”后才会在此显示。",
+      providerNotGenerated: "机场节点需在「基础信息 → 立即刷新」生成后才会在此显示。",
       providerEmpty: "该机场订阅暂无节点。",
       customEmpty: "暂无自定义节点。",
       orderSaved: "顺序已保存并已应用到订阅。",
@@ -135,7 +160,8 @@ const zh = {
       importFailed: "导入机场分组失败",
       delete: "删除",
       deleteConfirm: "确定删除该分组?",
-      membersCount: "{{count}} 个节点",
+      membersCount: "{{count}} 个成员",
+      count: "{{count}} 个分组",
       dragHint: "拖动左侧手柄可调整分组顺序，松手即保存并立即生效。",
       orderSaved: "分组顺序已保存并已应用到订阅。",
       orderSaveFailed: "保存分组顺序失败。",
@@ -182,7 +208,9 @@ const zh = {
       deleteConfirm: "确定删除该规则?",
       dragHint: "规则按顺序匹配(命中即止);拖动左侧手柄可调整优先级,松手即保存并立即生效。",
       orderSaved: "规则顺序已保存并已应用到订阅。",
-      matchHint: "MATCH 为兜底规则,匹配所有未命中流量;仅需选择策略,建议放在列表最后。",
+      matchHint: "MATCH 为兜底规则,匹配所有未命中流量;仅需选择策略,永久固定在列表最后。",
+      fallbackNote: "兜底 · 未命中以上规则时",
+      count: "{{count}} 条",
     },
     preview: {
       title: "输出预览",
@@ -191,7 +219,11 @@ const zh = {
     },
     settings: {
       title: "系统设置",
+      help: "面板级配置与外观偏好。",
       publicPathPrefix: "公共路径前缀",
+      publicPathDesc: "重置后,所有配置的托管链接将立即失效,所有客户端需要重新导入。",
+      appearance: "外观",
+      themeLabel: "主题(亮色 / 暗色,手动切换)",
       resetPublicPath: "重置公共路径",
       resetWarning:
         "重置后，所有配置的托管链接将立即失效，所有客户端需要重新导入。输入 RESET 确认。",

@@ -1,16 +1,14 @@
-//! `mihomo`/`clash` -> `mihomo` conversion.
+//! `mihomo`/`clash` -> `mihomo` 转换。
 //!
-//! Parses provider YAML, appends enabled custom nodes/groups, replaces `rules`
-//! with the user's, and handles top-level keys per `docs/api-design.md`
-//! (rule-providers and unknown keys pass through, proxy-providers stripped).
-//! Validation follows `docs/api-design.md` and returns an itemized
-//! error list for the generate modal.
+//! 解析机场 YAML,追加启用的自定义节点/分组,用用户的规则替换 `rules`,并按 `docs/api-design.md`
+//! 处理顶层键(rule-providers 与未知键透传,proxy-providers 剥离)。校验遵循 `docs/api-design.md`,
+//! 返回逐条错误列表供生成弹窗使用。
 
 use serde_yaml::{Mapping, Value};
 
 use crate::yaml;
 
-/// Built-in policy targets that are always valid in rules and group members.
+/// 在规则与分组成员里始终有效的内置策略目标。
 const BUILTIN_POLICIES: &[&str] = &[
     "DIRECT",
     "REJECT",
@@ -22,7 +20,7 @@ const BUILTIN_POLICIES: &[&str] = &[
 
 pub struct CustomNode {
     pub name: String,
-    /// Full Mihomo proxy mapping as YAML text.
+    /// 完整的 Mihomo proxy 映射(YAML 文本)。
     pub content: String,
 }
 
@@ -36,40 +34,36 @@ pub struct CustomGroup {
 pub struct ConvertInput<'a> {
     pub provider_yaml: &'a str,
     pub rules: &'a str,
-    /// Enabled custom nodes only.
+    /// 仅启用的自定义节点。
     pub nodes: Vec<CustomNode>,
-    /// Enabled custom groups only.
+    /// 仅启用的自定义分组。
     pub groups: Vec<CustomGroup>,
-    /// Manual ordering of the **custom** nodes within the custom block (custom
-    /// node names). Names present here are emitted first in this order; any not
-    /// listed (newly added) keep their default relative position at the end. The
-    /// provider block's internal order is always upstream (not user-orderable).
+    /// 自定义块内 **自定义** 节点的手动顺序(自定义节点名)。此处列出的名字优先按序输出;未列出
+    /// 的(新增的)保持其默认相对位置在末尾。机场块的内部顺序始终是上游序(用户不可排)。
     pub node_order: Vec<String>,
-    /// Order of the two node blocks in the output `proxies`: a permutation of
-    /// `"provider"` / `"custom"`. Empty means the default `["provider","custom"]`.
+    /// 输出 `proxies` 中两个节点块的顺序:`"provider"` / `"custom"` 的一个排列。空表示默认
+    /// `["provider","custom"]`。
     pub node_section_order: Vec<String>,
-    /// Manual proxy-group ordering (group names). Names present here are emitted
-    /// first in this order; any not listed keep their default position at the end.
+    /// proxy-group 的手动顺序(分组名)。此处列出的名字优先按序输出;未列出的保持其默认位置在末尾。
     pub group_order: Vec<String>,
 }
 
 #[derive(Debug)]
 pub enum ConvertError {
-    /// Provider YAML could not be parsed (not a user-config validation issue).
+    /// 机场 YAML 无法解析(不是用户配置的校验问题)。
     ProviderParse,
-    /// Itemized validation failures, surfaced as `400` (see `api-design.md`).
+    /// 逐条列举的校验失败,以 `400` 暴露(见 `api-design.md`)。
     Validation(Vec<String>),
 }
 
-/// Convert provider YAML into a Mihomo config string.
+/// 把机场 YAML 转换为 Mihomo 配置字符串。
 pub fn convert(input: ConvertInput) -> Result<String, ConvertError> {
     let mut root =
         yaml::parse_mapping(input.provider_yaml).map_err(|_| ConvertError::ProviderParse)?;
 
     let provider_proxies = names_in(root.get("proxies"));
 
-    // Parse custom node content up front; collect parse failures as validation
-    // errors rather than aborting.
+    // 先解析自定义节点 content;把解析失败收集为校验错误,而非直接中止。
     let mut errors: Vec<String> = Vec::new();
     let mut parsed_nodes: Vec<(String, Mapping)> = Vec::new();
     for node in &input.nodes {
@@ -97,11 +91,10 @@ pub fn convert(input: ConvertInput) -> Result<String, ConvertError> {
         return Err(ConvertError::Validation(errors));
     }
 
-    // ── Build the output config ──────────────────────────────────────────────
+    // ── 构建输出配置 ──────────────────────────────────────────────────────────
 
-    // proxies: two blocks concatenated by `node_section_order`. The provider
-    // block keeps upstream order (not user-orderable); the custom block is the
-    // enabled custom nodes reordered by `node_order` (new ones fall to the end).
+    // proxies:两个块按 `node_section_order` 拼接。机场块保持上游序(用户不可排);自定义块是
+    // 启用的自定义节点,按 `node_order` 重排(新节点落到末尾)。
     let provider_block = sequence_of(root.get("proxies"));
     let mut custom_block: Vec<Value> = parsed_nodes
         .into_iter()
@@ -115,10 +108,9 @@ pub fn convert(input: ConvertInput) -> Result<String, ConvertError> {
     let proxies = concat_sections(provider_block, custom_block, &input.node_section_order);
     root.insert(Value::from("proxies"), Value::Sequence(proxies));
 
-    // proxy-groups: fully replaced with the user's custom groups (like `rules`).
-    // Provider groups are NOT passed through — the admin imports them as editable
-    // custom groups via `import-provider-groups`, so a provider update never
-    // changes groups unless re-imported. Apply the manual ordering after.
+    // proxy-groups:整体替换为用户的自定义分组(同 `rules`)。机场分组 *不* 透传——管理员经
+    // `import-provider-groups` 把它们导入为可编辑的自定义分组,故机场更新永不改变分组,除非重新
+    // 导入。之后再应用手动排序。
     let mut groups: Vec<Value> = input
         .groups
         .into_iter()
@@ -131,20 +123,19 @@ pub fn convert(input: ConvertInput) -> Result<String, ConvertError> {
     );
     root.insert(Value::from("proxy-groups"), Value::Sequence(groups));
 
-    // rules: fully replaced with the user's rules.
+    // rules:整体替换为用户的规则。
     let rules: Vec<Value> = rule_lines(input.rules)
         .map(|(_, line)| Value::from(line))
         .collect();
     root.insert(Value::from("rules"), Value::Sequence(rules));
 
-    // proxy-providers: stripped in the MVP (SSRF/caching bypass risk).
+    // proxy-providers:MVP 阶段剥离(SSRF/缓存绕过风险)。
     root.remove(Value::from("proxy-providers"));
 
-    // rule-providers: the provider's own map passes through untouched, so
-    // imported provider RULE-SET rules keep resolving. We don't host/manage
-    // custom rule-providers.
+    // rule-providers:机场自己的 map 原样透传,使导入的机场 RULE-SET 规则仍能解析。我们不
+    // 托管/管理自定义 rule-providers。
 
-    // All other top-level keys (dns, tun, ...) pass through.
+    // 其余所有顶层键(dns、tun…)透传。
 
     serde_yaml::to_string(&Value::Mapping(root)).map_err(|_| ConvertError::ProviderParse)
 }
@@ -156,9 +147,8 @@ fn validate(
     custom_group_names: &[String],
     errors: &mut Vec<String>,
 ) {
-    // Custom node names must not collide with provider proxy names (proxies are
-    // still passed through + appended). Provider groups are no longer in the
-    // output (replaced by custom groups), so there is no group-name collision.
+    // 自定义节点名不得与机场代理名冲突(代理仍透传 + 追加)。机场分组已不在输出里(被自定义
+    // 分组替换),故不存在分组名冲突。
     for name in custom_node_names {
         if provider_proxies.contains(name) {
             errors.push(format!(
@@ -167,9 +157,8 @@ fn validate(
         }
     }
 
-    // Known reference targets: provider proxies (passed through), custom nodes
-    // (appended), custom groups (the only groups in the output), and built-in
-    // policies. A reference to an un-imported provider group is unknown.
+    // 已知的引用目标:机场代理(透传)、自定义节点(追加)、自定义分组(输出里唯一的分组)与内置
+    // 策略。引用一个未导入的机场分组即为未知目标。
     let known = |name: &str| {
         provider_proxies.iter().any(|n| n == name)
             || custom_node_names.iter().any(|n| n == name)
@@ -177,7 +166,7 @@ fn validate(
             || BUILTIN_POLICIES.contains(&name)
     };
 
-    // Custom group members must reference something that exists.
+    // 自定义分组成员必须引用存在的东西。
     for group in &input.groups {
         for member in &group.members {
             if !known(member) {
@@ -189,8 +178,7 @@ fn validate(
         }
     }
 
-    // Each rule's policy target must exist. Advanced/logical rules we can't
-    // parse reliably are passed through without target validation.
+    // 每条规则的策略目标必须存在。无法可靠解析的高级/逻辑规则透传,不做目标校验。
     for (lineno, line) in rule_lines(input.rules) {
         if let Some(target) = rule_target(line) {
             if !known(&target) {
@@ -202,7 +190,7 @@ fn validate(
     }
 }
 
-/// Extract proxy/group `name` values from a `proxies`/`proxy-groups` value.
+/// 从 `proxies`/`proxy-groups` 值中提取各代理/分组的 `name`。
 fn names_in(value: Option<&Value>) -> Vec<String> {
     match value {
         Some(Value::Sequence(items)) => items
@@ -213,13 +201,11 @@ fn names_in(value: Option<&Value>) -> Vec<String> {
     }
 }
 
-/// Stable reorder of named items by a desired name order.
+/// 按期望的名字顺序对具名项做稳定重排。
 ///
-/// Items whose name appears in `order` are moved to the front in `order`'s
-/// sequence; all others keep their original relative order and follow. Items
-/// with no resolvable name, and `order` entries not present in `items`, are
-/// ignored. When `order` is empty this is a no-op. Shared by the converter
-/// (proxy mappings) and the preview endpoint (`ProxyPreview`s).
+/// 名字出现在 `order` 中的项按 `order` 的次序移到前面;其余保持原相对顺序在后。无法解析出名字
+/// 的项,以及 `order` 里不在 `items` 中的条目,均忽略。`order` 为空时是 no-op。由转换器(proxy
+/// 映射)与预览端点(`ProxyPreview`)共用。
 pub fn reorder_by_name<T, F>(items: &mut Vec<T>, name_of: F, order: &[String])
 where
     F: Fn(&T) -> Option<&str>,
@@ -232,8 +218,7 @@ where
         .enumerate()
         .map(|(i, n)| (n.as_str(), i))
         .collect();
-    // Stable by (rank, original index); unranked items sort after ranked ones
-    // while preserving their default order.
+    // 按 (rank, 原始下标) 稳定排序;无 rank 的项排在有 rank 的之后,同时保持其默认顺序。
     let mut indexed: Vec<(usize, T)> = std::mem::take(items).into_iter().enumerate().collect();
     indexed.sort_by_key(|(idx, item)| {
         let r = name_of(item).and_then(|n| rank.get(n)).copied();
@@ -242,9 +227,8 @@ where
     *items = indexed.into_iter().map(|(_, item)| item).collect();
 }
 
-/// Concatenate the provider and custom node blocks per `section_order` (a
-/// permutation of `"provider"`/`"custom"`). Defaults to provider-first when the
-/// order is empty or doesn't name `"custom"` before `"provider"`.
+/// 按 `section_order`(`"provider"`/`"custom"` 的排列)拼接机场块与自定义块。当顺序为空、或没把
+/// `"custom"` 排在 `"provider"` 前面时,默认机场块在前。
 pub fn concat_sections(
     provider: Vec<Value>,
     custom: Vec<Value>,
@@ -261,7 +245,7 @@ pub fn concat_sections(
     }
 }
 
-/// Clone a value's sequence, or an empty one if absent/not a sequence.
+/// 克隆某个值的序列;缺失或不是序列时返回空。
 fn sequence_of(value: Option<&Value>) -> Vec<Value> {
     match value {
         Some(Value::Sequence(items)) => items.clone(),
@@ -273,7 +257,7 @@ fn build_group(group: CustomGroup) -> Mapping {
     let mut m = Mapping::new();
     m.insert(Value::from("name"), Value::from(group.name));
     m.insert(Value::from("type"), Value::from(group.group_type));
-    // Merge group-specific options (url, interval, ...) before the member list.
+    // 在成员列表之前合并分组特有的选项(url、interval…)。
     if let Some(opts) = group.options {
         if let Ok(Value::Mapping(opt_map)) = serde_yaml::to_value(&opts) {
             for (k, v) in opt_map {
@@ -286,8 +270,7 @@ fn build_group(group: CustomGroup) -> Mapping {
     m
 }
 
-/// Iterate non-empty, non-comment rule lines with their 1-based line numbers
-/// (numbered over the original text so messages match the editor).
+/// 遍历非空、非注释的规则行,带其 1-based 行号(按原始文本编号,使消息与编辑器一致)。
 fn rule_lines(rules: &str) -> impl Iterator<Item = (usize, &str)> {
     rules.lines().enumerate().filter_map(|(i, raw)| {
         let line = raw.trim();
@@ -299,10 +282,9 @@ fn rule_lines(rules: &str) -> impl Iterator<Item = (usize, &str)> {
     })
 }
 
-/// The policy target of a rule line, or `None` when it cannot be parsed
-/// reliably (logical/nested rules) and should be passed through unchecked.
+/// 规则行的策略目标;当无法可靠解析(逻辑/嵌套规则)、应原样透传不检查时返回 `None`。
 fn rule_target(line: &str) -> Option<String> {
-    // Logical/nested rules contain parentheses; skip target validation.
+    // 逻辑/嵌套规则含括号;跳过目标校验。
     if line.contains('(') {
         return None;
     }

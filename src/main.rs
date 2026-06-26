@@ -23,7 +23,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    // Admin credentials are required; refuse to start without them.
+    // 管理员凭据是必需的;缺失则拒绝启动。
     let admin_username = require_env("ADMIN_USERNAME")?;
     let admin_password = require_env("ADMIN_PASSWORD")?;
 
@@ -37,11 +37,9 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Database ready at {db_path}");
 
     let public_base_url = std::env::var("PUBLIC_BASE_URL").unwrap_or_default();
-    // Set the Secure cookie attribute. `SECURE_COOKIES` is an explicit override;
-    // when unset we infer it from an HTTPS public origin. Behind a TLS-terminating
-    // reverse proxy the app speaks plain HTTP, so without this override a missing
-    // or http `PUBLIC_BASE_URL` would silently issue session cookies without
-    // `Secure`, exposing them to plaintext transmission.
+    // 设置 Secure cookie 属性。`SECURE_COOKIES` 是显式覆盖项;未设时由 HTTPS 公共源推断。在
+    // TLS 终止反向代理后,应用走纯 HTTP,故若无此覆盖,缺失或 http 的 `PUBLIC_BASE_URL` 会静默
+    // 签发不带 `Secure` 的会话 cookie,使其暴露于明文传输。
     let secure_cookies = env_bool("SECURE_COOKIES", public_base_url.starts_with("https://"));
     if !secure_cookies {
         tracing::warn!(
@@ -89,7 +87,7 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("Listening on http://{}", listener.local_addr()?);
-    // Connect info exposes the TCP peer address for client-IP derivation.
+    // Connect info 暴露 TCP 对端地址,用于客户端 IP 推导。
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
@@ -106,8 +104,7 @@ fn env_u64(key: &str, default: u64) -> u64 {
         .unwrap_or(default)
 }
 
-/// Parse a boolean env var (`true`/`false`/`1`/`0`, case-insensitive); fall back
-/// to `default` when unset or unrecognized.
+/// 解析布尔环境变量(`true`/`false`/`1`/`0`,不区分大小写);未设或无法识别时回退到 `default`。
 fn env_bool(key: &str, default: bool) -> bool {
     match std::env::var(key) {
         Ok(v) => match v.trim().to_ascii_lowercase().as_str() {

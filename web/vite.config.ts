@@ -7,7 +7,18 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      "/api": "http://localhost:8080",
+      // The backend's CSRF check requires the `Origin` host to equal `Host`. Going
+      // through the dev proxy makes them differ (Origin = :5173, Host = :8080),
+      // which would 403 every state-changing request (login/POST/...). Strip the
+      // `Origin` header on proxied API calls — the backend allows requests with no
+      // Origin — so dev login works. Dev-only; production is genuinely same-origin.
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => proxyReq.removeHeader("origin"));
+        },
+      },
       "/health": "http://localhost:8080",
     },
   },

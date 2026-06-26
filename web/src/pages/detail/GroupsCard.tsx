@@ -1,20 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Button,
-  Card,
-  Divider,
-  Empty,
-  Form,
-  Input,
-  List,
-  Modal,
-  Popconfirm,
-  Select,
-  Space,
-  Tag,
-  Typography,
-  message,
-} from "antd";
+import { Button, Form, Input, Modal, Popconfirm, Select, message } from "antd";
+import { DeleteOutlined, EditOutlined, HolderOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   DndContext,
   PointerSensor,
@@ -33,40 +19,25 @@ import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../../api";
 import type { CustomGroup, CustomNode, GroupType, ProxiesResponse } from "../../types";
-import { AdvancedFields, FieldInput, splitAdvanced } from "./fields";
-import {
-  BUILTIN_POLICIES,
-  GROUP_TYPES,
-  groupOptionFields,
-  groupOptionKeys,
-} from "./groupSchema";
+import { AdvancedFields, FieldInput, TypeChips, splitAdvanced } from "./fields";
+import { BUILTIN_POLICIES, GROUP_TYPES, groupOptionFields, groupOptionKeys } from "./groupSchema";
 
 interface Props {
   profileId: string;
   groups: CustomGroup[];
   nodes: CustomNode[];
-  /** Changes when the profile is (re)generated; refreshes member suggestions. */
   generatedAt: string | null;
   onChange: () => void;
 }
 
 type Options = Record<string, unknown>;
 
-/** One row in the sortable group list. Every group is an editable custom group
- * (provider groups are imported as custom groups, never passed through). */
 interface GroupRow {
-  /** Stable dnd/React id — group names are unique within a profile. */
   name: string;
   group: CustomGroup;
 }
 
-/**
- * Build the ordered, all-editable row list. Order follows the generated output
- * (`orderNames`, already reordered by `group_order`), keeping only names that
- * are real custom groups — any stale name from an older cached output is
- * dropped. Custom groups not yet in the output (e.g. just imported/added,
- * pre-regenerate) are appended so they stay visible and editable.
- */
+/** 有序的可编辑行:跟随生成输出的顺序,丢弃失效的名字,追加新增的。 */
 function buildRows(orderNames: string[], groups: CustomGroup[]): GroupRow[] {
   const byName = new Map(groups.map((g) => [g.name, g]));
   const seen = new Set<string>();
@@ -87,12 +58,7 @@ function buildRows(orderNames: string[], groups: CustomGroup[]): GroupRow[] {
   return result;
 }
 
-/**
- * Merge freshly derived rows into the current on-screen order: keep the existing
- * order (with refreshed data) for rows that still exist, append new ones, drop
- * removed ones. Preserves an optimistic drag order even when the re-derived
- * server list can't yet reflect it (the saved order is already persisted).
- */
+/** 对仍存在的行保持当前屏幕顺序;追加新增、丢弃已删,避免乐观拖拽被 reload 冲掉。 */
 function reconcileRows(prev: GroupRow[], derived: GroupRow[]): GroupRow[] {
   if (prev.length === 0) return derived;
   const byName = new Map(derived.map((r) => [r.name, r]));
@@ -122,8 +88,6 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
   const [members, setMembers] = useState<string[]>([]);
   const [options, setOptions] = useState<Options>({});
 
-  // From the latest generated output: provider proxy names (for member
-  // suggestions) and the group order (group names in output order).
   const [providerProxies, setProviderProxies] = useState<string[]>([]);
   const [orderNames, setOrderNames] = useState<string[]>([]);
   const [rows, setRows] = useState<GroupRow[]>([]);
@@ -137,7 +101,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
       setProviderProxies(res.proxies.map((p) => p.name));
       setOrderNames(res.groups.map((g) => g.name));
     } catch {
-      // Non-fatal: members can still be typed in by hand.
+      // 成员仍可手动输入
     }
   }, [profileId]);
 
@@ -145,9 +109,6 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
     void loadProviders();
   }, [loadProviders, generatedAt]);
 
-  // Keep the sortable rows in sync with the latest server/props state, but
-  // preserve the current order for surviving rows so an optimistic drag isn't
-  // clobbered by a reload that can't yet reflect it (see reconcileRows).
   const derived = useMemo(() => buildRows(orderNames, groups), [orderNames, groups]);
   useEffect(() => {
     setRows((prev) => reconcileRows(prev, derived));
@@ -160,7 +121,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
     const newIndex = rows.findIndex((r) => r.name === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
     const next = arrayMove(rows, oldIndex, newIndex);
-    setRows(next); // optimistic
+    setRows(next);
     try {
       await api(`/api/profiles/${profileId}/group-order`, {
         method: "PUT",
@@ -170,13 +131,10 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
     } catch (e) {
       message.error((e as ApiError).message ?? t("groups.orderSaveFailed"));
     } finally {
-      // Reconcile with the server (confirms on success, reverts on failure).
       void loadProviders();
     }
   }
 
-  // Import the airport's own proxy-groups as editable custom groups (the
-  // converter otherwise replaces provider groups). Appends, skipping existing.
   async function importProviderGroups() {
     setImporting(true);
     try {
@@ -184,11 +142,8 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
         `/api/profiles/${profileId}/import-provider-groups`,
         { method: "POST" },
       );
-      if (res.imported === 0) {
-        message.info(t("groups.importNone"));
-      } else {
-        message.success(t("groups.imported", { count: res.imported }));
-      }
+      if (res.imported === 0) message.info(t("groups.importNone"));
+      else message.success(t("groups.imported", { count: res.imported }));
       onChange();
     } catch (e) {
       message.error((e as ApiError).message ?? t("groups.importFailed"));
@@ -222,11 +177,11 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
     setOptions(next);
   }
 
-  function setAdvancedOptions(rows: [string, unknown][]) {
+  function setAdvancedOptions(advRows: [string, unknown][]) {
     const known = groupOptionKeys(groupType);
     const next: Options = {};
     for (const [k, v] of Object.entries(options)) if (known.has(k)) next[k] = v;
-    for (const [k, v] of rows) next[k] = v;
+    for (const [k, v] of advRows) next[k] = v;
     setOptions(next);
   }
 
@@ -235,7 +190,6 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
       message.error(t("groups.nameRequired"));
       return;
     }
-    // Drop empty keys; send null when no options remain.
     const cleaned: Options = {};
     for (const [k, v] of Object.entries(options)) {
       if (k.trim() === "" || v === "" || v === undefined || v === null) continue;
@@ -249,11 +203,8 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
       enabled: editing ? editing.enabled : true,
     });
     try {
-      if (editing) {
-        await api(`/api/profiles/${profileId}/groups/${editing.id}`, { method: "PUT", body });
-      } else {
-        await api(`/api/profiles/${profileId}/groups`, { method: "POST", body });
-      }
+      if (editing) await api(`/api/profiles/${profileId}/groups/${editing.id}`, { method: "PUT", body });
+      else await api(`/api/profiles/${profileId}/groups`, { method: "POST", body });
       setOpen(false);
       onChange();
     } catch (e) {
@@ -266,8 +217,6 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
     onChange();
   }
 
-  // Suggestions: provider proxies/groups, custom nodes/groups (minus the group
-  // being edited, which cannot reference itself) and built-in policies.
   const memberOptions = dedupe([
     ...providerProxies,
     ...nodes.map((n) => n.name),
@@ -278,51 +227,43 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
   const optionFields = groupOptionFields(groupType);
   const advancedOptions = splitAdvanced(options, groupOptionKeys(groupType));
 
-  const total = rows.length;
-
   return (
-    <Card
-      title={`${t("groups.title")} (${total})`}
-      extra={
-        <Space>
+    <div className="dcard">
+      <div className="dcard-head">
+        <span className="dcard-title">
+          {t("groups.title")} <span className="row-sub">{t("groups.count", { count: rows.length })}</span>
+        </span>
+        <div className="dcard-actions">
           <Popconfirm title={t("groups.importConfirm")} onConfirm={importProviderGroups}>
             <Button loading={importing}>{t("groups.importProvider")}</Button>
           </Popconfirm>
-          <Button onClick={startAdd}>{t("groups.add")}</Button>
-        </Space>
-      }
-    >
-      {total === 0 ? (
-        <Empty description={t("groups.empty")} />
+          <Button type="primary" icon={<PlusOutlined />} onClick={startAdd}>
+            {t("groups.add")}
+          </Button>
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="empty-line">{t("groups.empty")}</div>
       ) : (
-        <>
-          <Typography.Paragraph type="secondary">{t("groups.dragHint")}</Typography.Paragraph>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <SortableContext
-              items={rows.map((r) => r.name)}
-              strategy={verticalListSortingStrategy}
-            >
-              <List>
-                {rows.map((row) => (
-                  <SortableGroupRow
-                    key={row.name}
-                    row={row}
-                    onEdit={startEdit}
-                    onRemove={remove}
-                  />
-                ))}
-              </List>
-            </SortableContext>
-          </DndContext>
-        </>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={rows.map((r) => r.name)} strategy={verticalListSortingStrategy}>
+            {rows.map((row) => (
+              <SortableGroupRow key={row.name} row={row} onEdit={startEdit} onRemove={remove} />
+            ))}
+          </SortableContext>
+        </DndContext>
       )}
+      <div className="dcard-note">{t("groups.dragHint")}</div>
 
       <Modal
         title={editing ? t("groups.edit") : t("groups.add")}
         open={open}
         onCancel={() => setOpen(false)}
         onOk={save}
-        width={620}
+        width={560}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
         destroyOnClose
       >
         <Form layout="vertical">
@@ -330,10 +271,10 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Form.Item>
           <Form.Item label={t("groups.type")} required>
-            <Select
+            <TypeChips
+              options={GROUP_TYPES}
               value={groupType}
-              onChange={setGroupType}
-              options={GROUP_TYPES.map((g) => ({ value: g, label: g }))}
+              onChange={(v) => setGroupType(v as GroupType)}
             />
           </Form.Item>
           <Form.Item label={t("groups.members")} help={t("groups.membersHint")}>
@@ -351,34 +292,40 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
           </Form.Item>
 
           {optionFields.length > 0 && (
-            <Divider orientation="left" plain>
-              {t("groups.options")}
-            </Divider>
+            <div className="modal-block">
+              <div className="modal-block-title">{t("groups.options")}</div>
+              {optionFields.map((def) => (
+                <Form.Item
+                  key={def.key}
+                  label={t(`groupFields.${def.key}`, def.key)}
+                  style={{ marginBottom: 12 }}
+                >
+                  <FieldInput
+                    def={def}
+                    value={options[def.key]}
+                    onChange={(v) => setOption(def.key, v)}
+                  />
+                </Form.Item>
+              ))}
+            </div>
           )}
-          {optionFields.map((def) => (
-            <Form.Item key={def.key} label={t(`groupFields.${def.key}`, def.key)}>
-              <FieldInput
-                def={def}
-                value={options[def.key]}
-                onChange={(v) => setOption(def.key, v)}
-              />
-            </Form.Item>
-          ))}
 
           <AdvancedFields entries={advancedOptions} onChange={setAdvancedOptions} />
         </Form>
       </Modal>
-    </Card>
+    </div>
   );
 }
 
-interface RowProps {
+function SortableGroupRow({
+  row,
+  onEdit,
+  onRemove,
+}: {
   row: GroupRow;
   onEdit: (group: CustomGroup) => void;
   onRemove: (group: CustomGroup) => void;
-}
-
-function SortableGroupRow({ row, onEdit, onRemove }: RowProps) {
+}) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: row.name,
@@ -386,38 +333,31 @@ function SortableGroupRow({ row, onEdit, onRemove }: RowProps) {
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    background: isDragging ? "rgba(0,0,0,0.04)" : undefined,
+    background: isDragging ? "var(--bg-subtle)" : undefined,
   };
-
   const { group } = row;
-  const actions = [
-    <a key="edit" onClick={() => onEdit(group)}>
-      {t("basic.edit")}
-    </a>,
-    <Popconfirm key="del" title={t("groups.deleteConfirm")} onConfirm={() => onRemove(group)}>
-      <a>{t("groups.delete")}</a>
-    </Popconfirm>,
-  ];
-
   return (
-    <List.Item ref={setNodeRef} style={style} actions={actions}>
-      <Space>
-        <span
-          {...attributes}
-          {...listeners}
-          style={{ cursor: "grab", color: "#999", userSelect: "none", touchAction: "none" }}
-          aria-label="drag handle"
-        >
-          ⋮⋮
-        </span>
-        <span>{row.name}</span>
-        <Tag>{group.group_type}</Tag>
-        <span style={{ color: "#999" }}>
-          {t("groups.membersCount", { count: group.members.length })}
-        </span>
-        {!group.enabled && <Tag>{t("profiles.disabled")}</Tag>}
-      </Space>
-    </List.Item>
+    <div className="row" ref={setNodeRef} style={style}>
+      <span className="row-grab" {...attributes} {...listeners} aria-label="drag">
+        <HolderOutlined />
+      </span>
+      <span style={{ width: 150, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: 13.5, color: "var(--text)", fontWeight: 550 }}>{row.name}</span>
+        <span className="row-sub">{t("groups.membersCount", { count: group.members.length })}</span>
+      </span>
+      <span className="tag-mono tag-policy">{group.group_type}</span>
+      <span style={{ flex: 1 }} />
+      <span className="row-actions">
+        <button className="icon-btn" onClick={() => onEdit(group)} aria-label={t("basic.edit")}>
+          <EditOutlined />
+        </button>
+        <Popconfirm title={t("groups.deleteConfirm")} onConfirm={() => onRemove(group)}>
+          <button className="icon-btn danger" aria-label={t("groups.delete")}>
+            <DeleteOutlined />
+          </button>
+        </Popconfirm>
+      </span>
+    </div>
   );
 }
 

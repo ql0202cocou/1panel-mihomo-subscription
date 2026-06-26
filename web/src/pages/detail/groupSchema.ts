@@ -1,6 +1,5 @@
-// Structured-editor schema for custom proxy-group options. The group's options
-// (url, interval, strategy, …) are edited as typed inputs per group type, with
-// everything else falling to advanced key/value rows — no hand-written JSON.
+// 自定义代理组选项的结构化编辑器 schema。组的选项(url、interval、strategy…)按组
+// 类型用带类型的输入框编辑,其余一律落到高级键值行——无需手写 JSON。
 
 import type { FieldDef } from "./nodeSchema";
 import type { GroupType } from "../../types";
@@ -18,7 +17,7 @@ const HEALTH: FieldDef[] = [
   { key: "interval", kind: "number", placeholder: "300" },
 ];
 
-/** Type-specific common option fields; anything else falls to advanced KV. */
+/** 各类型专属的常用选项字段;其余一律落到高级键值。 */
 export const GROUP_OPTION_FIELDS: Record<string, FieldDef[]> = {
   select: [],
   "url-test": [
@@ -46,7 +45,7 @@ export function groupOptionKeys(type: string): Set<string> {
   return new Set(groupOptionFields(type).map((f) => f.key));
 }
 
-/** Built-in policy targets always valid as group members. */
+/** 始终可作为组成员的内置策略目标。 */
 export const BUILTIN_POLICIES = [
   "DIRECT",
   "REJECT",

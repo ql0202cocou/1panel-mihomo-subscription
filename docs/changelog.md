@@ -47,6 +47,51 @@
 
 ## [Unreleased]
 
+## [0.3.0-a1] - 2026-06-26
+
+### 变更
+
+- 自定义节点改为**全局共享池**(跨订阅复用):自定义节点不再隶属于单个配置,而是一份
+  全局集合,自动追加到**每条**配置的输出。配置详情页的「自定义节点」块改为只读(顺序在
+  「节点配置」页统一调整),公开链接每次拉取都会即时套用最新全局节点,无需逐配置重新生成。
+  - 后端:新增 `global_nodes` 表(`name` 全局唯一,`position` 为全局自定义块顺序)与
+    迁移 `0007_global_nodes.sql`;迁移把原各配置的 `custom_nodes` **按名称去重合并**
+    (取 `updated_at` 最新者)进全局池,随后 `DROP TABLE custom_nodes`。
+  - 端点:新增 `GET/POST /api/global-nodes`、`PUT/DELETE /api/global-nodes/:id`、
+    `PUT /api/global-nodes/order`(全局排序,立即重排所有配置的缓存);移除
+    `GET/POST /api/profiles/:id/nodes`、`PUT/DELETE /api/profiles/:id/nodes/:node_id`、
+    `PUT /api/profiles/:id/node-order`。`/api/profiles/:id/node-section-order` 仍按配置保留
+    (机场块 / 自定义块的前后位置)。
+  - 转换器/生成:自定义块从全局池按 `position` 取出;`profiles.node_order` 弃用(此后恒
+    为 NULL,节点顺序由 `global_nodes.position` 决定);`resync_cache` 按全局节点名集合切分
+    自定义块并按全局顺序重排。
+  - 配置详情响应 `nodes` 字段改为全局节点的只读快照(各配置一致),供分组/规则建议使用。
+- Web 后台重构(进行中):新增左侧栏 App Shell + 陶土色主题(亮/暗**手动**切换、持久化;
+  AntD `ConfigProvider` token + `darkAlgorithm` + CSS 变量层),顶栏标题 + 主题切换;新增
+  「节点配置」全局页路由(`/nodes`,编辑器待后续);引入依赖 `@ant-design/icons` 与
+  JetBrains Mono 字体。后端契约不变。
+- Web 后台重构(进行中):登录页(渐变底 + logo + 错误 banner)、订阅列表(概览指标条
+  总数/启用中/拉取异常 + 横条卡片含复制链接/管理 + shimmer 骨架)、系统设置(公共路径卡 +
+  新增「外观」主题分段控件)按设计稿重排。修复 `vite` dev 代理:剥离 `/api` 的 `Origin` 头,
+  使 `npm run dev` 登录不再被 CSRF 同源校验 `403`(仅 dev,生产同源不受影响)。前端改动。
+- Web 后台重构(进行中):配置详情页由 6 张竖排卡片重构为顶部「托管订阅」hero(URL +
+  二维码 + 复制/重置)+ 标签页(基础信息 · 节点 · 分组 · 规则 · 输出预览),消除长滚动。
+  节点 tab 改为**只读**两块(机场 + 全局自定义,带锁图标),编辑/排序移至新的「节点配置」
+  全局页(`/api/global-nodes` 的增删改 + 拖拽排序)。规则 tab 的 `MATCH` 兜底**永久钉在
+  列表底部**(锁定、不可拖拽/删除、仅可编辑)。前端改动,后端契约不变。
+- Web 后台重构(进行中):节点/分组录入弹窗收尾——类型选择改为可点选的 chip 行(仍允许
+  自由输入),嵌套选项(REALITY / ws-opts / grpc-opts、分组测速选项)呈现为带标题的子区块;
+  补窄屏(≤880px)降级:侧栏收起、指标条单列、hero 上下堆叠、横条动作换行。前端改动。
+
+### 文档
+
+- `api-design.md` / `data-model.md` 同步全局节点模型(新增端点、`global_nodes` 表、移除
+  per-profile 节点端点与 `custom_nodes` 表)。
+- 精简全部技术文档(`api-design`/`data-model`/`security-design`/`1panel-app`/`release`/
+  `README`):删冗余复述、散文转要点,规范性内容(schema、env 表、端点表、SSRF 段、请求/
+  响应体)全部保留;合计约 1123 → 600 行。`changelog` 历史不动。
+- 全库 `src/` 源码注释统一中文化(后端 `src/*.rs` 与前端 `web/src/`;测试文件注释保持原样)。
+
 ## [0.2.5] - 2026-06-20
 
 ### 变更

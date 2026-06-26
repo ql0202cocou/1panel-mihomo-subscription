@@ -1,11 +1,9 @@
-//! Deterministic provider-URL masking, per `docs/security-design.md`.
+//! 确定性的机场 URL 脱敏,见 `docs/security-design.md`。
 //!
-//! Keep the scheme, host, and path; replace every query parameter value with
-//! `***`; drop any userinfo so credentials are never echoed. The same rule is
-//! applied everywhere a provider URL might surface (responses, logs, errors).
+//! 保留 scheme、host 与 path;把每个查询参数值替换为 `***`;丢弃任何 userinfo,使凭据从不被
+//! 回显。机场 URL 可能出现的任何地方(响应、日志、错误)都套用同一规则。
 
-/// Mask a provider subscription URL. Unparseable input collapses to `***`
-/// rather than leaking the raw string.
+/// 脱敏一个机场订阅 URL。无法解析的输入直接坍缩为 `***`,而非泄露原始串。
 pub fn mask_url(raw: &str) -> String {
     let Ok(url) = url::Url::parse(raw) else {
         return "***".to_string();

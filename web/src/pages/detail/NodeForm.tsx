@@ -1,17 +1,17 @@
-import { AutoComplete, Divider, Form, Input } from "antd";
+import { AutoComplete, Form, Input } from "antd";
 import { useTranslation } from "react-i18next";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { commonFields, commonKeys, groupsFor, NODE_TYPES, type FieldDef } from "./nodeSchema";
-import { AdvancedFields, FieldInput, getPath, isEmptyValue, setPath, splitAdvanced } from "./fields";
+import { AdvancedFields, FieldInput, TypeChips, getPath, isEmptyValue, setPath, splitAdvanced } from "./fields";
 
 export interface NodeModel {
   name: string;
   type: string;
-  /** Every proxy key except `name`/`type`, in document order. */
+  /** 除 `name`/`type` 外的全部代理字段,保持文档顺序。 */
   fields: Record<string, unknown>;
 }
 
-/** Parse stored proxy YAML into the editor model; tolerant of invalid input. */
+/** 把存储的代理 YAML 解析成编辑器模型;容忍非法输入。 */
 export function contentToModel(content: string): NodeModel {
   let parsed: Record<string, unknown> = {};
   try {
@@ -20,7 +20,7 @@ export function contentToModel(content: string): NodeModel {
       parsed = p as Record<string, unknown>;
     }
   } catch {
-    // Unparseable content edits as a blank node rather than blocking the admin.
+    // content 无法解析时按空白节点处理,而不是卡住管理员。
   }
   let name = "";
   let type = "";
@@ -33,7 +33,7 @@ export function contentToModel(content: string): NodeModel {
   return { name, type, fields };
 }
 
-/** Serialize the editor model back to a Mihomo proxy YAML mapping. */
+/** 把编辑器模型序列化回 Mihomo 代理 YAML 映射。 */
 export function modelToContent(m: NodeModel): string {
   const obj: Record<string, unknown> = {};
   if (m.name) obj.name = m.name;
@@ -45,13 +45,23 @@ export function modelToContent(m: NodeModel): string {
   return stringifyYaml(obj);
 }
 
+/** 由节点 content 取 `server:port`,经 model 解析(容忍任意 YAML 形态;无 server 时返回空)。
+ *  供只读节点行展示使用。 */
+export function nodeAddr(content: string): string {
+  const { fields } = contentToModel(content);
+  const server = fields.server;
+  if (server == null || server === "") return "";
+  const port = fields.port;
+  return port != null && port !== "" ? `${server}:${port}` : String(server);
+}
+
 interface Props {
   value: NodeModel;
   onChange: (next: NodeModel) => void;
 }
 
-/** Structured editor for a custom proxy node: typed common fields per type plus
- *  advanced key/value rows for everything else — no hand-written YAML required. */
+/** 自定义代理节点的结构化编辑器:按类型给出带类型约束的常用字段,其余一律用
+ *  高级键值行编辑——无需手写 YAML。 */
 export default function NodeForm({ value, onChange }: Props) {
   const { t } = useTranslation();
   const known = commonKeys(value.type);
@@ -63,8 +73,8 @@ export default function NodeForm({ value, onChange }: Props) {
     onChange({ ...value, fields });
   }
 
-  // Edit one subfield of a nested option block (e.g. `reality-opts.public-key`).
-  // The group object is pruned and removed entirely once it has no entries left.
+  // 编辑嵌套选项块里的某个子字段(如 `reality-opts.public-key`)。
+  // 当该分组对象不再有任何条目时,整个分组会被剪除删掉。
   function setGroupField(groupKey: string, path: string, v: unknown) {
     const current = value.fields[groupKey];
     const nested = current && typeof current === "object" && !Array.isArray(current)
@@ -77,8 +87,8 @@ export default function NodeForm({ value, onChange }: Props) {
     onChange({ ...value, fields });
   }
 
-  // Advanced rows are kept as an ordered array so a key rename does not reorder
-  // the surrounding fields. They are merged back into `fields` on every edit.
+  // 高级行用有序数组保存,这样重命名某个 key 不会打乱周围字段的顺序。
+  // 每次编辑都会把它们合并回 `fields`。
   const advanced = splitAdvanced(value.fields, known);
 
   function setAdvanced(next: [string, unknown][]) {
@@ -103,6 +113,11 @@ export default function NodeForm({ value, onChange }: Props) {
         />
       </Form.Item>
       <Form.Item label={t("nodes.type")} required>
+        <TypeChips
+          options={NODE_TYPES}
+          value={value.type}
+          onChange={(type) => onChange({ ...value, type })}
+        />
         <AutoComplete
           style={{ width: "100%" }}
           options={NODE_TYPES.map((o) => ({ value: o }))}
@@ -132,12 +147,10 @@ export default function NodeForm({ value, onChange }: Props) {
         .map((group) => {
           const nested = (value.fields[group.key] ?? {}) as Record<string, unknown>;
           return (
-            <div key={group.key}>
-              <Divider orientation="left" plain>
-                {t(`nodeGroups.${group.key}`, group.key)}
-              </Divider>
+            <div className="modal-block" key={group.key}>
+              <div className="modal-block-title">{t(`nodeGroups.${group.key}`, group.key)}</div>
               {group.fields.map((sub) => (
-                <Form.Item key={sub.key} label={fieldLabel(sub)}>
+                <Form.Item key={sub.key} label={fieldLabel(sub)} style={{ marginBottom: 12 }}>
                   <FieldInput
                     def={sub}
                     value={getPath(nested, sub.key)}

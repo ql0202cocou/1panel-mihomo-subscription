@@ -1,20 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AutoComplete, Button, Input, Modal, Popconfirm, Switch, Typography, message } from "antd";
 import {
-  Alert,
-  AutoComplete,
-  Button,
-  Card,
-  Empty,
-  Input,
-  List,
-  Modal,
-  Popconfirm,
-  Space,
-  Switch,
-  Tag,
-  Typography,
-  message,
-} from "antd";
+  ArrowRightOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  HolderOutlined,
+  LockOutlined,
+  PlusOutlined,
+} from "@ant-design/icons";
 import {
   DndContext,
   PointerSensor,
@@ -32,12 +25,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../../api";
-import type {
-  CustomGroup,
-  CustomNode,
-  ProviderRulesResponse,
-  ProxiesResponse,
-} from "../../types";
+import type { CustomGroup, CustomNode, ProviderRulesResponse, ProxiesResponse } from "../../types";
 import { BUILTIN_POLICIES } from "./groupSchema";
 
 interface Props {
@@ -45,58 +33,28 @@ interface Props {
   initial: string;
   nodes: CustomNode[];
   groups: CustomGroup[];
-  /** Changes when the profile is (re)generated; refreshes policy suggestions. */
   generatedAt: string | null;
-  /** Validation errors from the last generate attempt (itemized). */
   errors: string[];
   onSaved: () => void;
 }
 
-// Every Mihomo rule type, organized into categories so the add/edit selector is
-// browsable (not one flat list). Free text is still allowed in the selector, so
-// a type Mihomo adds later can be typed in without a code change. `MATCH` (the
-// fallback) is a normal rule here: it takes only a policy and is
-// added/edited/reordered/deleted like any other rule (it should stay last to be
-// effective, but that's left to the admin's ordering).
+// 全部 Mihomo 规则类型,按分类分组以便选择器可浏览;仍允许自由输入未列出的类型。
 const RULE_TYPE_GROUPS: { key: string; types: string[] }[] = [
   { key: "domain", types: ["DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-REGEX", "GEOSITE"] },
   {
     key: "ip",
-    types: [
-      "IP-CIDR",
-      "IP-CIDR6",
-      "IP-SUFFIX",
-      "IP-ASN",
-      "GEOIP",
-      "SRC-GEOIP",
-      "SRC-IP-ASN",
-      "SRC-IP-CIDR",
-      "SRC-IP-SUFFIX",
-    ],
+    types: ["IP-CIDR", "IP-CIDR6", "IP-SUFFIX", "IP-ASN", "GEOIP", "SRC-GEOIP", "SRC-IP-ASN", "SRC-IP-CIDR", "SRC-IP-SUFFIX"],
   },
   { key: "port", types: ["DST-PORT", "SRC-PORT", "IN-PORT"] },
-  {
-    key: "process",
-    types: ["PROCESS-NAME", "PROCESS-PATH", "PROCESS-NAME-REGEX", "PROCESS-PATH-REGEX"],
-  },
-  {
-    key: "inbound",
-    types: ["IN-TYPE", "IN-USER", "IN-NAME", "UID", "NETWORK", "DSCP", "RULE-SET"],
-  },
+  { key: "process", types: ["PROCESS-NAME", "PROCESS-PATH", "PROCESS-NAME-REGEX", "PROCESS-PATH-REGEX"] },
+  { key: "inbound", types: ["IN-TYPE", "IN-USER", "IN-NAME", "UID", "NETWORK", "DSCP", "RULE-SET"] },
   { key: "logical", types: ["AND", "OR", "NOT", "SUB-RULE"] },
   { key: "fallback", types: ["MATCH"] },
 ];
 
-// Free-text-allowed enum suggestions for types whose payload is a small fixed
-// set (kept as AutoComplete, never a hard Select, so an unlisted-but-valid value
-// still works).
 const NETWORK_OPTIONS = ["tcp", "udp"];
 const IN_TYPE_OPTIONS = ["HTTP", "HTTPS", "SOCKS", "SOCKS4", "SOCKS5", "MIXED", "REDIR", "TPROXY", "TUN"];
-// Logical/nested types whose payload is itself one or more `(TYPE,payload)`
-// sub-conditions — edited in a multi-line box rather than a single field.
 const LOGICAL_TYPES = new Set(["AND", "OR", "NOT", "SUB-RULE"]);
-// Per-type payload example, shown as the content-input placeholder (à la Clash
-// Verge). Helps the admin enter the right shape without docs.
 const RULE_EXAMPLES: Record<string, string> = {
   DOMAIN: "example.com",
   "DOMAIN-SUFFIX": "example.com",
@@ -108,22 +66,13 @@ const RULE_EXAMPLES: Record<string, string> = {
   "IP-SUFFIX": "8.8.8.8/24",
   "IP-ASN": "13335",
   GEOIP: "CN",
-  "SRC-GEOIP": "CN",
-  "SRC-IP-ASN": "13335",
-  "SRC-IP-CIDR": "192.168.1.0/24",
-  "SRC-IP-SUFFIX": "192.168.1.0/24",
   "DST-PORT": "443",
   "SRC-PORT": "8080",
   "IN-PORT": "7890",
   "PROCESS-NAME": "curl",
   "PROCESS-PATH": "/usr/bin/curl",
-  "PROCESS-NAME-REGEX": ".*curl.*",
-  "PROCESS-PATH-REGEX": ".*/curl",
   "IN-TYPE": "SOCKS5",
-  "IN-USER": "mihomo",
-  "IN-NAME": "ss1",
   UID: "1000",
-  DSCP: "0,32",
   AND: "(DOMAIN,example.com),(NETWORK,tcp)",
   OR: "(NETWORK,udp),(DST-PORT,443)",
   NOT: "(DOMAIN,example.com)",
@@ -148,10 +97,6 @@ function parseRule(line: string): RuleModel {
   if (type.toUpperCase() === "MATCH") {
     return { type, payload: "", policy: parts[1] ?? "", noResolve: false };
   }
-  // Everything after the type is [payload..., policy, no-resolve?]. The payload
-  // itself may contain commas (logical/nested rules like AND/OR/NOT), so peel the
-  // optional trailing `no-resolve` and the policy off the end and re-join the
-  // remainder as the payload rather than assuming fixed positions.
   let rest = parts.slice(1);
   let noResolve = false;
   if (rest.length > 0 && rest[rest.length - 1] === "no-resolve") {
@@ -169,24 +114,17 @@ function serializeRule(r: RuleModel): string {
   return r.noResolve ? `${base},no-resolve` : base;
 }
 
-export default function RulesCard({
-  profileId,
-  initial,
-  nodes,
-  groups,
-  generatedAt,
-  errors,
-  onSaved,
-}: Props) {
+// 编辑目标:null = 新增;数字 = 编辑该条非 MATCH 规则;"match" = 编辑钉底的 MATCH。
+type EditTarget = number | "match" | null;
+
+export default function RulesCard({ profileId, initial, nodes, groups, generatedAt, errors, onSaved }: Props) {
   const { t } = useTranslation();
-  // Source of truth is the raw, non-empty rule lines (including the MATCH
-  // fallback, which is just a normal rule here). Comments and uncommon rules
-  // (e.g. logical AND/OR) are preserved verbatim until explicitly edited.
-  const [lines, setLines] = useState<string[]>([]);
-  // The add/edit modal: editingIndex === null means we're adding a new rule,
-  // otherwise we're rewriting the rule at that list position.
+  // MATCH 钉在底部(锁定)。`rules` 按序保存其余所有行;`matchLine` 保存唯一的 MATCH 兜底
+  // (或 null)。
+  const [rules, setRules] = useState<string[]>([]);
+  const [matchLine, setMatchLine] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editing, setEditing] = useState<EditTarget>(null);
   const [model, setModel] = useState<RuleModel>(EMPTY_RULE);
   const [policies, setPolicies] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
@@ -194,13 +132,18 @@ export default function RulesCard({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   useEffect(() => {
-    const all = initial
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l !== "");
-    setLines(all);
+    const all = initial.split("\n").map((l) => l.trim()).filter((l) => l !== "");
+    // 最后一条 MATCH 作为兜底,钉底保留;其余行原样留在列表。
+    let match: string | null = null;
+    const rest: string[] = [];
+    for (const line of all) {
+      if (isMatchLine(line)) match = line;
+      else rest.push(line);
+    }
+    setRules(rest);
+    setMatchLine(match);
     setModalOpen(false);
-    setEditingIndex(null);
+    setEditing(null);
     setModel(EMPTY_RULE);
   }, [initial]);
 
@@ -209,7 +152,7 @@ export default function RulesCard({
       const res = await api<ProxiesResponse>(`/api/profiles/${profileId}/proxies`);
       setPolicies([...res.proxies.map((p) => p.name), ...res.groups.map((g) => g.name)]);
     } catch {
-      // Non-fatal: policies can still be typed in by hand.
+      // 策略仍可手动输入
     }
   }, [profileId]);
 
@@ -217,11 +160,12 @@ export default function RulesCard({
     void loadPolicies();
   }, [loadPolicies, generatedAt]);
 
-  // Save the current rule lines verbatim (MATCH is a normal line in the list).
+  // 保存规则 + 钉底的 MATCH(始终在最后)。
   const persist = useCallback(
-    async (nextLines: string[]) => {
-      const content = nextLines.join("\n");
-      setLines(nextLines);
+    async (nextRules: string[], nextMatch: string | null) => {
+      setRules(nextRules);
+      setMatchLine(nextMatch);
+      const content = [...nextRules, ...(nextMatch ? [nextMatch] : [])].join("\n");
       try {
         await api(`/api/profiles/${profileId}/rules`, {
           method: "PUT",
@@ -235,36 +179,35 @@ export default function RulesCard({
     [profileId, onSaved, t],
   );
 
-  // Rule order is semantic (first match wins), so reordering directly changes
-  // behavior. Drag uses real list indices.
   function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const next = arrayMove(lines, Number(active.id), Number(over.id));
-    void persist(next);
+    const next = arrayMove(rules, Number(active.id), Number(over.id));
+    void persist(next, matchLine);
     message.success(t("rules.orderSaved"));
   }
 
   function openAdd() {
-    setEditingIndex(null);
+    setEditing(null);
     setModel(EMPTY_RULE);
     setModalOpen(true);
   }
-
   function openEdit(index: number) {
-    setEditingIndex(index);
-    setModel(parseRule(lines[index]));
+    setEditing(index);
+    setModel(parseRule(rules[index]));
     setModalOpen(true);
   }
-
+  function openEditMatch() {
+    setEditing("match");
+    setModel(matchLine ? parseRule(matchLine) : { ...EMPTY_RULE, type: "MATCH" });
+    setModalOpen(true);
+  }
   function closeModal() {
     setModalOpen(false);
-    setEditingIndex(null);
+    setEditing(null);
     setModel(EMPTY_RULE);
   }
 
-  // Add (editingIndex === null) or save (rewrite at editingIndex) the composed
-  // rule from the modal, then close it.
   function submit() {
     const isMatch = model.type.trim().toUpperCase() === "MATCH";
     if (!model.type.trim() || !model.policy.trim() || (!isMatch && !model.payload.trim())) {
@@ -272,25 +215,30 @@ export default function RulesCard({
       return;
     }
     const line = serializeRule(model);
-    const next =
-      editingIndex === null
-        ? [...lines, line]
-        : lines.map((l, i) => (i === editingIndex ? line : l));
     closeModal();
-    void persist(next);
+    if (isMatch) {
+      // 任何 MATCH(新增或编辑)都成为唯一的钉底兜底。
+      void persist(rules, line);
+      return;
+    }
+    if (editing === "match") {
+      // 在编辑钉底行时把类型改成了非 MATCH:将其落入列表,并清空钉底的 MATCH。
+      void persist([...rules, line], null);
+      return;
+    }
+    const next = editing === null ? [...rules, line] : rules.map((l, i) => (i === editing ? line : l));
+    void persist(next, matchLine);
   }
 
   function remove(index: number) {
-    void persist(lines.filter((_, i) => i !== index));
+    void persist(rules.filter((_, i) => i !== index), matchLine);
   }
 
-  // Seed the editor with the airport's own rules (the converter otherwise
-  // replaces provider rules). Appends, skipping lines already present.
   async function importProviderRules() {
     setImporting(true);
     try {
       const res = await api<ProviderRulesResponse>(`/api/profiles/${profileId}/provider-rules`);
-      const existing = new Set(lines);
+      const existing = new Set([...rules, ...(matchLine ? [matchLine] : [])]);
       const incoming = res.rules
         .map((l) => l.trim())
         .filter((l) => l !== "" && !isMatchLine(l) && !existing.has(l));
@@ -298,7 +246,7 @@ export default function RulesCard({
         message.info(t("rules.importNone"));
         return;
       }
-      await persist([...lines, ...incoming]);
+      await persist([...rules, ...incoming], matchLine);
       message.success(t("rules.imported", { count: incoming.length }));
     } catch (e) {
       message.error((e as ApiError).message ?? t("rules.importFailed"));
@@ -311,83 +259,155 @@ export default function RulesCard({
     () =>
       Array.from(
         new Set(
-          [
-            ...policies,
-            ...nodes.map((n) => n.name),
-            ...groups.map((g) => g.name),
-            ...BUILTIN_POLICIES,
-          ].filter((s) => s.trim() !== ""),
+          [...policies, ...nodes.map((n) => n.name), ...groups.map((g) => g.name), ...BUILTIN_POLICIES].filter(
+            (s) => s.trim() !== "",
+          ),
         ),
       ).map((value) => ({ value })),
     [policies, nodes, groups],
   );
 
+  const ruleErrors = errors.filter((e) => /rules line/.test(e));
+  const total = rules.length + (matchLine ? 1 : 0);
+
   return (
-    <Card
-      title={`${t("rules.title")} (${lines.length})`}
-      extra={
-        <Space>
-          <Button type="primary" onClick={openAdd}>
-            {t("rules.add")}
-          </Button>
+    <div className="dcard">
+      <div className="dcard-head">
+        <span className="dcard-title">
+          {t("rules.title")} <span className="row-sub">{t("rules.count", { count: total })}</span>
+        </span>
+        <div className="dcard-actions">
           <Popconfirm title={t("rules.importConfirm")} onConfirm={importProviderRules}>
             <Button loading={importing}>{t("rules.importProvider")}</Button>
           </Popconfirm>
-        </Space>
-      }
-    >
-      <Space direction="vertical" style={{ width: "100%" }} size="small">
-        <Typography.Text type="secondary">{t("rules.hint")}</Typography.Text>
-        {errors.length > 0 && (
-          <Alert
-            type="error"
-            showIcon
-            message={t("rules.invalid")}
-            description={errors.map((err, i) => (
-              <div key={i}>{err}</div>
-            ))}
-          />
-        )}
+          <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
+            {t("rules.add")}
+          </Button>
+        </div>
+      </div>
 
-        {lines.length === 0 ? (
-          <Empty description={t("rules.empty")} />
-        ) : (
-          <>
-            <Typography.Text type="secondary">{t("rules.dragHint")}</Typography.Text>
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-              <SortableContext
-                items={lines.map((_, index) => String(index))}
-                strategy={verticalListSortingStrategy}
-              >
-                <List>
-                  {lines.map((line, index) => (
-                    <SortableRuleItem
-                      key={index}
-                      id={String(index)}
-                      line={line}
-                      onEdit={() => openEdit(index)}
-                      onRemove={() => remove(index)}
-                    />
-                  ))}
-                </List>
-              </SortableContext>
-            </DndContext>
-          </>
-        )}
-      </Space>
+      {ruleErrors.length > 0 && (
+        <div className="warn-banner">
+          {t("rules.invalid")}
+          {ruleErrors.map((e, i) => (
+            <div key={i}>{e}</div>
+          ))}
+        </div>
+      )}
+
+      {rules.length === 0 && !matchLine ? (
+        <div className="empty-line">{t("rules.empty")}</div>
+      ) : (
+        <>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+            <SortableContext
+              items={rules.map((_, i) => String(i))}
+              strategy={verticalListSortingStrategy}
+            >
+              {rules.map((line, index) => (
+                <SortableRuleRow
+                  key={index}
+                  id={String(index)}
+                  line={line}
+                  onEdit={() => openEdit(index)}
+                  onRemove={() => remove(index)}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+          {matchLine && <MatchRow line={matchLine} onEdit={openEditMatch} />}
+        </>
+      )}
+      <div className="dcard-note">{t("rules.dragHint")}</div>
 
       <Modal
         open={modalOpen}
-        title={editingIndex === null ? t("rules.add") : t("rules.edit")}
+        title={editing === null ? t("rules.add") : t("rules.edit")}
         onOk={submit}
         onCancel={closeModal}
-        okText={editingIndex === null ? t("rules.add") : t("common.save")}
+        okText={editing === null ? t("rules.add") : t("common.save")}
         cancelText={t("common.cancel")}
         destroyOnClose
       >
         <RuleComposer model={model} onChange={setModel} policyOptions={policyOptions} />
       </Modal>
-    </Card>
+    </div>
+  );
+}
+
+function SortableRuleRow({
+  id,
+  line,
+  onEdit,
+  onRemove,
+}: {
+  id: string;
+  line: string;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    background: isDragging ? "var(--bg-subtle)" : undefined,
+  };
+  const comment = isComment(line);
+  const r = parseRule(line);
+  return (
+    <div className="row" ref={setNodeRef} style={style}>
+      <span className="row-grab" {...attributes} {...listeners} aria-label="drag">
+        <HolderOutlined />
+      </span>
+      {comment ? (
+        <span className="rule-content" style={{ color: "var(--text-4)" }}>
+          {line}
+        </span>
+      ) : (
+        <>
+          <span className="tag-mono tag-type">{r.type}</span>
+          <span className="rule-content">{r.payload}</span>
+          {r.noResolve && <span className="tag-mono">no-resolve</span>}
+          <ArrowRightOutlined className="rule-arrow" style={{ fontSize: 11 }} />
+          <span className="tag-mono tag-policy">{r.policy}</span>
+        </>
+      )}
+      <span className="row-actions">
+        {!comment && (
+          <button className="icon-btn" onClick={onEdit} aria-label={t("basic.edit")}>
+            <EditOutlined />
+          </button>
+        )}
+        <Popconfirm title={t("rules.deleteConfirm")} onConfirm={onRemove}>
+          <button className="icon-btn danger" aria-label={t("rules.delete")}>
+            <DeleteOutlined />
+          </button>
+        </Popconfirm>
+      </span>
+    </div>
+  );
+}
+
+// 钉底的兜底行:锁在底部,仅可编辑(不可拖拽、不可删除)。
+function MatchRow({ line, onEdit }: { line: string; onEdit: () => void }) {
+  const { t } = useTranslation();
+  const r = parseRule(line);
+  return (
+    <div className="row row-match">
+      <span className="row-lock">
+        <LockOutlined />
+      </span>
+      <span className="tag-mono tag-type">MATCH</span>
+      <span className="rule-content">{t("rules.fallbackNote")}</span>
+      <ArrowRightOutlined className="rule-arrow" style={{ fontSize: 11 }} />
+      <span className="tag-mono tag-policy">{r.policy}</span>
+      <span className="row-actions">
+        <button className="icon-btn" onClick={onEdit} aria-label={t("basic.edit")}>
+          <EditOutlined />
+        </button>
+      </span>
+    </div>
   );
 }
 
@@ -397,34 +417,18 @@ interface ComposerProps {
   policyOptions: { value: string }[];
 }
 
-// The structured rule fields (type · content · no-resolve · policy), rendered
-// vertically inside the add/edit modal. Both the type selector and the content
-// input adapt to the full Mihomo rule set: the type is picked from a grouped,
-// searchable list (Domain / IP / Port / Process / Inbound / Logical / Fallback)
-// that still accepts a free-typed custom type; the content field is type-aware —
-// NETWORK / IN-TYPE pick from an enum, RULE-SET is a rule-set name (the
-// provider's own rule-providers — we don't host custom ones), logical/nested
-// AND/OR/NOT/SUB-RULE get a multi-line builder, MATCH takes no payload, and the
-// rest are example-seeded inputs labelled per type.
 function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
   const { t } = useTranslation();
   const upperType = model.type.trim().toUpperCase();
   const isMatch = upperType === "MATCH";
   const isLogical = LOGICAL_TYPES.has(upperType);
-  // `no-resolve` is offered for every rule type (except MATCH, which has no
-  // payload). Mihomo only acts on it for IP-resolving rules and ignores it
-  // elsewhere, but we don't gate the toggle so the full editable set is visible.
   const showNoResolve = !isMatch;
 
-  // Grouped type options for the selector; leaf values are literal Mihomo
-  // strings, group labels go through i18n.
   const typeOptions = RULE_TYPE_GROUPS.map((g) => ({
     label: t(`rules.typeGroups.${g.key}`),
     options: g.types.map((v) => ({ value: v })),
   }));
 
-  // The content field label, content input, and optional hint, all chosen by the
-  // selected rule type.
   function contentBlock() {
     if (upperType === "NETWORK") {
       return {
@@ -501,7 +505,7 @@ function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
   const content = contentBlock();
 
   return (
-    <Space direction="vertical" style={{ width: "100%" }} size="middle">
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div>
         <Typography.Text type="secondary">{t("rules.ruleType")}</Typography.Text>
         <AutoComplete
@@ -511,9 +515,7 @@ function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
           onChange={(type) => onChange({ ...model, type })}
           placeholder={t("rules.ruleType")}
           filterOption={(input, opt) =>
-            String((opt as { value?: string })?.value ?? "")
-              .toLowerCase()
-              .includes(input.toLowerCase())
+            String((opt as { value?: string })?.value ?? "").toLowerCase().includes(input.toLowerCase())
           }
         />
       </div>
@@ -531,14 +533,14 @@ function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
         </div>
       )}
       {showNoResolve && (
-        <Space size={8}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Switch
             size="small"
             checked={model.noResolve}
             onChange={(noResolve) => onChange({ ...model, noResolve })}
           />
           <Typography.Text type="secondary">{t("rules.noResolve")}</Typography.Text>
-        </Space>
+        </div>
       )}
       <div>
         <Typography.Text type="secondary">{t("rules.policy")}</Typography.Text>
@@ -553,71 +555,6 @@ function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
           }
         />
       </div>
-    </Space>
-  );
-}
-
-interface RuleItemProps {
-  id: string;
-  line: string;
-  onEdit: () => void;
-  onRemove: () => void;
-}
-
-function SortableRuleItem({ id, line, onEdit, onRemove }: RuleItemProps) {
-  const { t } = useTranslation();
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id,
-  });
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    background: isDragging ? "rgba(0,0,0,0.04)" : undefined,
-  };
-  const comment = isComment(line);
-  const r = parseRule(line);
-
-  const actions = [
-    ...(comment
-      ? []
-      : [
-          <a key="edit" onClick={onEdit}>
-            {t("basic.edit")}
-          </a>,
-        ]),
-    <Popconfirm key="del" title={t("rules.deleteConfirm")} onConfirm={onRemove}>
-      <a>{t("rules.delete")}</a>
-    </Popconfirm>,
-  ];
-
-  return (
-    <List.Item ref={setNodeRef} style={style} actions={actions}>
-      <Space>
-        <span
-          {...attributes}
-          {...listeners}
-          style={{
-            cursor: "grab",
-            color: "#999",
-            userSelect: "none",
-            touchAction: "none",
-          }}
-          aria-label="drag handle"
-        >
-          ⋮⋮
-        </span>
-        {comment ? (
-          <Typography.Text type="secondary">{line}</Typography.Text>
-        ) : (
-          <Space wrap>
-            <Tag>{r.type}</Tag>
-            {r.payload && <span>{r.payload}</span>}
-            <span style={{ color: "#999" }}>→</span>
-            <Tag color="blue">{r.policy}</Tag>
-            {r.noResolve && <Tag>no-resolve</Tag>}
-          </Space>
-        )}
-      </Space>
-    </List.Item>
+    </div>
   );
 }

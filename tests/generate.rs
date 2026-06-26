@@ -197,12 +197,7 @@ async fn proxies_endpoint_reflects_generated_cache() {
     let node = r#"{"name":"my-vmess","node_type":"vmess","content":"{ name: my-vmess, type: vmess, server: 9.9.9.9, port: 443, uuid: abc }"}"#;
     let resp = app
         .clone()
-        .oneshot(authed(
-            "POST",
-            &format!("/api/profiles/{id}/nodes"),
-            &cookie,
-            node,
-        ))
+        .oneshot(authed("POST", "/api/global-nodes", &cookie, node))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::CREATED);
@@ -297,12 +292,7 @@ async fn node_order_reorders_preview_and_survives_regeneration() {
         );
         let resp = app
             .clone()
-            .oneshot(authed(
-                "POST",
-                &format!("/api/profiles/{id}/nodes"),
-                &cookie,
-                &node,
-            ))
+            .oneshot(authed("POST", "/api/global-nodes", &cookie, &node))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::CREATED);
@@ -343,13 +333,14 @@ async fn node_order_reorders_preview_and_survives_regeneration() {
         "default: provider block then custom block"
     );
 
-    // Reorder the custom block to [b, a] (node-order is custom-only; `a` unlisted
-    // falls to the end). Provider block is untouched.
+    // Reorder the global custom block to [b, a] (`a` unlisted falls to the end).
+    // The provider block is untouched; a global reorder restitches every
+    // profile's cache, so this profile reflects it immediately.
     let resp = app
         .clone()
         .oneshot(authed(
             "PUT",
-            &format!("/api/profiles/{id}/node-order"),
+            "/api/global-nodes/order",
             &cookie,
             r#"{"order":["b"]}"#,
         ))
@@ -410,6 +401,62 @@ async fn node_order_reorders_preview_and_survives_regeneration() {
 }
 
 #[tokio::test]
+async fn global_node_applies_to_every_profile() {
+    let temp = TempDb::new();
+    let fetcher = Arc::new(FakeFetcher::default());
+    let app = build_router(test_state_with_fetcher(&temp, fetcher).await);
+    let cookie = login(&app).await;
+
+    // One global custom node, shared across all profiles (Model C).
+    let node = r#"{"name":"global-ss","node_type":"ss","content":"{ name: global-ss, type: ss, server: 9.9.9.9, port: 1080 }"}"#;
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/api/global-nodes", &cookie, node))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    // The pool is unique by name: a duplicate is a conflict.
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/api/global-nodes", &cookie, node))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CONFLICT);
+
+    // Two distinct profiles; the global node is appended to each one's output.
+    for name in ["alpha", "beta"] {
+        let body = format!(
+            r#"{{"name":"{name}","source_type":"clash","source_url":"https://provider.example/sub?token=x"}}"#
+        );
+        let resp = app
+            .clone()
+            .oneshot(authed("POST", "/api/profiles", &cookie, &body))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let id = json(resp).await["id"].as_str().unwrap().to_string();
+
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/api/profiles/{id}/preview"),
+                &cookie,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let yaml = text(resp).await;
+        assert!(
+            yaml.contains("global-ss"),
+            "global node must appear in every profile's output ({name})"
+        );
+    }
+}
+
+#[tokio::test]
 async fn reorder_applies_to_the_cache_immediately_without_a_fetch() {
     let temp = TempDb::new();
     let fetcher = Arc::new(FakeFetcher::default());
@@ -422,12 +469,7 @@ async fn reorder_applies_to_the_cache_immediately_without_a_fetch() {
     // Custom node + generate: cached order is provider-first [hk-1, mine].
     let node = r#"{"name":"mine","node_type":"ss","content":"{ name: mine, type: ss, server: 9.9.9.9, port: 1080 }"}"#;
     app.clone()
-        .oneshot(authed(
-            "POST",
-            &format!("/api/profiles/{id}/nodes"),
-            &cookie,
-            node,
-        ))
+        .oneshot(authed("POST", "/api/global-nodes", &cookie, node))
         .await
         .unwrap();
     app.clone()
@@ -662,12 +704,7 @@ async fn refresh_keeps_known_node_order_and_appends_new_nodes() {
     // Add a custom node, then generate: output is [hk-1, mine].
     let node = r#"{"name":"mine","node_type":"ss","content":"{ name: mine, type: ss, server: 9.9.9.9, port: 1080 }"}"#;
     app.clone()
-        .oneshot(authed(
-            "POST",
-            &format!("/api/profiles/{id}/nodes"),
-            &cookie,
-            node,
-        ))
+        .oneshot(authed("POST", "/api/global-nodes", &cookie, node))
         .await
         .unwrap();
     app.clone()

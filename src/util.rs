@@ -1,21 +1,20 @@
-//! Small shared helpers: timestamps and CSPRNG-backed random identifiers.
+//! 共享小工具:时间戳,以及由 CSPRNG 支撑的随机标识符。
 
 use base64::Engine;
 use rand::RngCore;
 
-/// Current time as an RFC 3339 UTC string (the project's timestamp format).
+/// 当前时间,RFC 3339 UTC 字符串(本项目的时间戳格式)。
 pub fn now() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 
-/// A per-profile subscription token: 32 random bytes, URL-safe (≥256 bits),
-/// per `docs/security-design.md`.
+/// per-profile 的订阅 token:32 随机字节,URL-safe(≥256 位),见 `docs/security-design.md`。
 pub fn random_token() -> String {
     random_b64(32)
 }
 
-/// A random public path prefix: 16 random bytes, URL-safe (~22 chars, within
-/// the 16-24 char range recommended in `docs/security-design.md`).
+/// 随机公共路径前缀:16 随机字节,URL-safe(~22 字符,落在 `docs/security-design.md`
+/// 推荐的 16-24 字符区间内)。
 pub fn random_path_prefix() -> String {
     random_b64(16)
 }
