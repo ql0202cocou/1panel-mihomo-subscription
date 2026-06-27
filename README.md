@@ -9,11 +9,11 @@ A lightweight self-hosted Mihomo subscription converter/distributor for 1Panel
 nodes, and proxy groups, and generate long-lived Mihomo links. Ships a web admin
 UI with login, SSRF protection, and provider-URL masking.
 
-> 状态:已实现并经安全审计加固。当前版本 `0.2.1`,镜像已发布到 Docker Hub
-> (`quinlanhoo/mihomo-subscription`,多架构 amd64+arm64),1Panel 应用包安装表单完整。
-> Status: implemented and security-hardened. Current version `0.2.1`; the image is
-> published on Docker Hub (`quinlanhoo/mihomo-subscription`, multi-arch
-> amd64+arm64) and the 1Panel app package ships a complete install form.
+> 状态:已实现并经安全审计加固。镜像发布在 Docker Hub
+> (`quinlanhoo/mihomo-subscription:latest`,多架构 amd64+arm64),用 docker compose 部署。
+> Status: implemented and security-hardened. The image is published on Docker Hub
+> (`quinlanhoo/mihomo-subscription:latest`, multi-arch amd64+arm64); deploy with
+> docker compose.
 
 ## 在 1Panel 中部署 / Deploy in 1Panel
 
@@ -34,7 +34,7 @@ create:
 ```yaml
 services:
   mihomo-subscription:
-    image: quinlanhoo/mihomo-subscription:0.2.1
+    image: quinlanhoo/mihomo-subscription:latest
     container_name: mihomo-subscription
     restart: always
     networks: [1panel-network]
@@ -73,10 +73,6 @@ networks:
 [docs/1panel-app.md](docs/1panel-app.md) 的环境变量表。 The service refuses to
 start without `ADMIN_USERNAME`/`ADMIN_PASSWORD`; see the env-var table in
 [docs/1panel-app.md](docs/1panel-app.md) for every variable.
-
-> 也可改用 1Panel 应用包安装(带图形化安装表单),见 [docs/1panel-app.md](docs/1panel-app.md)。
-> Prefer a GUI install form? Use the 1Panel app package instead — see
-> [docs/1panel-app.md](docs/1panel-app.md).
 
 **2. 反向代理 / Reverse proxy** — 在 1Panel「网站 → 反向代理」指向该容器,并**保留
 原始 Host 头**,否则管理 API 的 `Origin`/`Host` 同源校验会让登录/写操作返回 `403`。

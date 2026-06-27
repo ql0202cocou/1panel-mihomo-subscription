@@ -31,7 +31,7 @@
 
 ## 认证
 
-凭据来自 `ADMIN_USERNAME` / `ADMIN_PASSWORD`(1Panel 表单 → compose)。登录签发会话 Cookie
+凭据来自 `ADMIN_USERNAME` / `ADMIN_PASSWORD`(compose 环境变量)。登录签发会话 Cookie
 (`HttpOnly`、`SameSite=Lax`,HTTPS 加 `Secure`);登录失败按 IP + 账户限流。除 `/health`、
 登录、公开端点外,所有路由需有效会话(否则 `401`)。
 
