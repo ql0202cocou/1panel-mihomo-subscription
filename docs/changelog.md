@@ -47,6 +47,20 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-28
+
+### 变更
+
+- 「分组预览」名称 + 成员列加宽,长分组名(含 emoji / 中英混排)更易在一行完整显示。
+
+### 移除
+
+- 弃用 1Panel 应用包,改为用 docker compose 在 1Panel 上部署。删除整个 `apps/mihomo-subscription/`
+  应用包目录及 CI 的「1Panel package YAML」校验 job;`docs/release.md` 去掉应用包步骤;
+  `docs/1panel-app.md` 重写为「compose 部署 + 环境变量」(保留权威 env 表与反代 `Host` 透传要求);
+  README / docs/README 相应更新。仅保留 1Panel 兼容性(compose、`1panel-network`、`./data`、保留
+  `Host` 的反代),不再维护应用商店格式。
+
 ## [0.4.0] - 2026-06-28
 
 ### 新增
