@@ -531,6 +531,10 @@ function MatchRow({ line, onEdit }: { line: string; onEdit: () => void }) {
         <button className="icon-btn" onClick={onEdit} aria-label={t("basic.edit")}>
           <EditOutlined />
         </button>
+        {/* MATCH 钉底不可删除:灰色禁用的删除图标 + 斜杠,与其它行图标列对齐 */}
+        <button className="icon-btn icon-slash" disabled aria-label={t("rules.delete")}>
+          <DeleteOutlined />
+        </button>
       </span>
     </div>
   );

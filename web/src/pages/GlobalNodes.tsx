@@ -24,7 +24,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../api";
 import type { CustomNode } from "../types";
-import NodeForm, { contentToModel, modelToContent, nodeAddr, type NodeModel } from "./detail/NodeForm";
+import NodeForm, { contentToModel, modelToContent, type NodeModel } from "./detail/NodeForm";
 import { NODE_TYPE_LABELS } from "./detail/nodeSchema";
 import "./detail/detail.css";
 
@@ -187,7 +187,6 @@ function NodeRow({
           {NODE_TYPE_LABELS[node.node_type] ?? node.node_type}
         </span>
       )}
-      <span className="tag-addr">{nodeAddr(node.content)}</span>
       <span className="row-actions">
         <button className="icon-btn" onClick={() => onEdit(node)} aria-label={t("basic.edit")}>
           <EditOutlined />

@@ -361,9 +361,6 @@ function RuleSetRow({
       <div className="rs-main">
         <div className="rs-line1">
           <span className="rs-name">{rs.name}</span>
-          <span className="tag-mono tag-proto custom">
-            {rs.behavior}/{rs.format}
-          </span>
           <span className="rs-count">{t("ruleSets.count", { count: rs.count })}</span>
           {status && (
             <span className="rs-status" style={{ color: status.color }}>
@@ -382,6 +379,9 @@ function RuleSetRow({
         </div>
       </div>
       <span className="row-actions">
+        <span className="tag-mono tag-proto custom">
+          {rs.behavior}/{rs.format}
+        </span>
         <button className="icon-btn" onClick={() => onCopy(rs)} aria-label={t("ruleSets.copyLink")}>
           <CopyOutlined />
         </button>

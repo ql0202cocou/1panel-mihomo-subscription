@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { message } from "antd";
-import { HolderOutlined, LockOutlined, ArrowRightOutlined } from "@ant-design/icons";
+import { HolderOutlined, LockOutlined } from "@ant-design/icons";
 import {
   DndContext,
   PointerSensor,
@@ -16,11 +16,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../../api";
 import type { CustomNode, ProxiesResponse, ProxyPreview } from "../../types";
-import { nodeAddr } from "./NodeForm";
 import { NODE_TYPE_LABELS } from "./nodeSchema";
 
 interface Props {
@@ -151,7 +149,6 @@ export default function NodesCard({ profileId, profileName, nodes, generatedAt }
                           {NODE_TYPE_LABELS[n.node_type] ?? n.node_type}
                         </span>
                       )}
-                      <span className="tag-addr">{nodeAddr(n.content)}</span>
                     </div>
                   ))
                 )}
@@ -160,12 +157,6 @@ export default function NodesCard({ profileId, profileName, nodes, generatedAt }
           )}
         </SortableContext>
       </DndContext>
-
-      <div className="dcard-note">
-        <ArrowRightOutlined style={{ fontSize: 11, marginRight: 4 }} />
-        {t("nodes.manageHint")} <Link to="/nodes">{t("nav.nodes")}</Link>
-      </div>
-
     </div>
   );
 }
