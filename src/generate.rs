@@ -120,7 +120,7 @@ pub async fn preview(
         .fetch(&profile.source_url)
         .await
         .map_err(|e| ApiError::Upstream(e.status_label()))?;
-    let (yaml, _) = convert(&state, &profile.id, &fetched.body)
+    let (yaml, _) = convert(&state, &profile.id, &profile.token, &fetched.body)
         .await?
         .map_err(map_convert_err)?;
     Ok(yaml_body(yaml))
@@ -254,7 +254,7 @@ async fn fetch_and_convert(state: &AppState, profile: &ProfileCore) -> Result<Bu
     };
     let _ = update_last_fetch(state, &profile.id, "success").await;
 
-    let (yaml, warnings) = convert(state, &profile.id, &fetched.body)
+    let (yaml, warnings) = convert(state, &profile.id, &profile.token, &fetched.body)
         .await
         .map_err(|_| BuildError::Upstream("internal".to_string()))?
         .map_err(|e| match e {
@@ -283,6 +283,7 @@ async fn fetch_and_convert(state: &AppState, profile: &ProfileCore) -> Result<Bu
 async fn convert(
     state: &AppState,
     profile_id: &str,
+    token: &str,
     provider_yaml: &str,
 ) -> ApiResult<Result<(String, Vec<String>), ConvertError>> {
     let rules =
@@ -292,25 +293,28 @@ async fn convert(
             .await?
             .unwrap_or_default();
 
-    // 被本 profile `RULE-SET` 规则引用、且启用的面板托管规则集 → 注入输出 `rule-providers:`
-    // (`url` 指向面板托管链接)。未被引用的不注入。规则集库通常很小,取全量后在内存里按引用过滤。
+    // 被本 profile `RULE-SET` 规则引用、且启用的 **本订阅自有** 规则集(③)→ 注入输出
+    // `rule-providers:`(`url` 指向按订阅 token 隔离的托管链接)。未被引用的不注入;全局 ② 库不参与
+    // 生成。规则集通常很少,取全量后在内存里按引用过滤。
     let refs = converter::ruleset_refs(&rules);
     let rule_providers: Vec<RuleProvider> = if refs.is_empty() {
         Vec::new()
     } else {
         sqlx::query_as::<_, (String, String, String, String, Option<String>, bool)>(
-            "SELECT name, behavior, format, source, url, cache FROM rule_sets WHERE enabled = 1",
+            "SELECT name, behavior, format, source, url, cache FROM profile_rule_sets \
+             WHERE profile_id = ? AND enabled = 1",
         )
+        .bind(profile_id)
         .fetch_all(&state.db)
         .await?
         .into_iter()
         .filter(|(name, ..)| refs.iter().any(|r| r == name))
         .map(|(name, behavior, format, source, url, cache)| {
-            // remote 且关闭本地缓存托管:直接注入上游 URL;否则指向面板托管链接。
+            // remote 且关闭本地缓存托管:直接注入上游 URL;否则指向按订阅隔离的面板托管链接。
             let link = if source == "remote" && !cache {
                 url.unwrap_or_default()
             } else {
-                state.rule_set_url(&name, &behavior, &format)
+                state.profile_rule_set_url(token, &name, &behavior, &format)
             };
             RuleProvider {
                 url: link,

@@ -123,11 +123,11 @@ CREATE INDEX idx_global_nodes_position ON global_nodes (position);
 
 ### rule_sets
 
-**全局规则集库(面板托管,跨订阅共享)。** 自 `0008_rule_sets.sql` 起,管理员可在「规则托管」页
-维护命名规则集,面板把每个托管为永久链接 `/<prefix>/r/<name>/<behavior>.<format>`;订阅以
-`RULE-SET,<name>` 引用时,转换器注入指向托管链接的 `rule-providers:` 条目。以新的「面板自托管」
-模型重新引入 0.2.3 移除的规则集(旧 `rule_providers` 是 per-profile 且只注入条目,见迁移
-`0005`/`0006`)。
+**全局用户规则库 / 导入源(② 用户规则库),`0008_rule_sets.sql`。** 管理员在「规则托管」页维护命名
+规则集模板(手动 payload 或远程来源)。**自「订阅自包含规则库」起 ② 仅作导入源:不再公开托管、不再
+参与生成**(对比早期版本曾托管在 `/<prefix>/r/<name>/...` 并按引用注入)。订阅通过「导入托管规则」
+把所选 ② 条目复制进自己的 `profile_rule_sets`(③);生成只读 ③。表结构不变;`url`(remote 上游)、
+`cached_*` 列保留但 ② 不再镜像(导入到 ③ 后由 ③ 镜像)。
 
 ```sql
 CREATE TABLE rule_sets (
@@ -160,8 +160,45 @@ CREATE INDEX idx_rule_sets_position ON rule_sets (position);
   SSRF 安全)、把原始字节存入 `cached_body`(BLOB,故二进制 `mrs` 不损坏)并以稳定链接二次托管,失败
   回退旧缓存;`cache=0` 则不托管,转换时直接注入上游 `url`。`last_fetch_status` 同 profile 拉取标签。
   更新规则集会清空缓存列(下次拉取重新回源)。
-- `position`:仅「规则托管」页的展示顺序(`ORDER BY position, name`);rule-providers 按引用注入为
-  map,顺序无语义,故排序**不**触发任何缓存重缝。
+- `position`:仅「规则托管」页的展示顺序(`ORDER BY position, name`)。
+
+### profile_rule_sets
+
+**每订阅自包含规则库(③ 托管规则库),`0011_profile_rule_sets.sql`。** 镜像 `rule_sets` 的字段但按
+`profile_id` 隔离、去掉无语义的 `position`(rule-providers 是 map)。下发时 `RULE-SET,<name>` 引用按名
+注入本订阅自己的定义;托管在**按订阅 token 隔离**的链接
+`/<prefix>/api/sub/<token>/r/<name>/<behavior>.<format>`,故不同订阅可复用同名而不冲突。
+
+```sql
+CREATE TABLE profile_rule_sets (
+    id                TEXT    PRIMARY KEY,
+    profile_id        TEXT    NOT NULL REFERENCES profiles (id) ON DELETE CASCADE,
+    name              TEXT    NOT NULL,
+    behavior          TEXT    NOT NULL CHECK (behavior IN ('domain', 'ipcidr', 'classical')),
+    format            TEXT    NOT NULL CHECK (format IN ('yaml', 'text', 'mrs')),
+    source            TEXT    NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'remote')),
+    content           TEXT    NOT NULL DEFAULT '',
+    rule_count        INTEGER NOT NULL DEFAULT 0,
+    url               TEXT,
+    interval_hours    INTEGER NOT NULL DEFAULT 24,
+    cache             INTEGER NOT NULL DEFAULT 1,
+    cached_body       BLOB,
+    cached_at         TEXT,
+    last_fetch_status TEXT,
+    enabled           INTEGER NOT NULL DEFAULT 1,
+    created_at        TEXT    NOT NULL,
+    updated_at        TEXT    NOT NULL,
+    UNIQUE (profile_id, name)
+);
+
+CREATE INDEX idx_profile_rule_sets_profile ON profile_rule_sets (profile_id);
+```
+
+- `name` 在**单个订阅内**唯一(`UNIQUE(profile_id, name)`),是 URL 路径段与 `RULE-SET` 引用名,限定
+  `[A-Za-z0-9._-]`。
+- **manual / remote** 行为与 `rule_sets` 完全一致(校验/渲染/镜像逻辑由 `src/rulelib.rs` 共用);唯一
+  区别是托管链接含订阅 token、且这是生成时**唯一**的规则集来源。
+- 「导入托管规则」从 ② 复制条目进本表(含真实远程 URL,由后端复制,前端只见脱敏 URL)。
 
 ### custom_groups
 

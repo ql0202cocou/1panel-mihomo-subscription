@@ -47,6 +47,31 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **订阅自包含的规则库(③ 托管规则库)**:每个订阅现在持有自己的规则集定义,随订阅自包含。在订阅
+  「规则」里编辑 RULE-SET 规则时可直接内联定义其 rule-provider(规则集名 / behavior / format /
+  手动 payload 或远程 URL+更新间隔),保存进该订阅。新增 per-profile API
+  `GET/POST /api/profiles/:id/rule-sets`、`PUT/DELETE /api/profiles/:id/rule-sets/:rsid`、
+  `POST /api/profiles/:id/rule-sets/import`(从全局库复制),以及按订阅 token 隔离的公开托管端点
+  `GET /:prefix/api/sub/:token/r/:name/:behavior.:format`(无鉴权、统一 404、IP 限流;manual 渲染、
+  remote 懒刷新二次托管、支持 mrs)。新增迁移 `0011_profile_rule_sets.sql`。
+
+### 变更
+
+- **规则集托管彻底解耦为「三规则库」模型**:① 机场原始规则、② 全局用户规则库、③ 每订阅托管规则库。
+  下发只读 ③;①②仅作导入源。生成时 `RULE-SET` 引用按名注入 ③ 自己的定义(URL 指向按订阅 token
+  隔离的托管链接,remote+cache 关闭则直注上游),不再读取全局库。
+- **全局「规则托管」页(②)降级为用户规则库 / 导入源**:不再公开托管、不再参与生成。移除全局托管
+  路由 `/:prefix/r/:name/:file` 与 ② 的远程镜像/缓存代码路径;`/api/rule-sets` 响应去掉托管链接
+  `url` 字段(保留 `remote_url_masked` 模板来源)。页面去掉托管链接展示与「复制链接」,文案改为
+  「用户规则库」。「导入托管规则」改为把所选 ② 条目**复制**进当前订阅 ③ 并追加 `RULE-SET` 规则行。
+- 规则编辑弹窗:RULE-SET 类型改为内联 rule-provider 定义表单(手动 / 远程双来源),替代原先的纯名称
+  输入;并对齐设计稿细节——规则类型旁显示所属分类徽标、匹配内容下显示示例、切换类型时按示例预填
+  匹配内容、NETWORK 用分段切换、MATCH 用说明框、策略下拉按「节点 / 分组 / 内置」分组。
+- 规则卡恢复「添加规则」按钮(0.3.0 曾移除手动单条新增):打开规则编辑器以新增一条规则,追加到列表
+  末尾(MATCH 仍钉底);与「导入机场规则」「导入托管规则」并列。
+
 ## [0.3.0] - 2026-06-27
 
 ### 变更

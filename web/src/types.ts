@@ -70,7 +70,7 @@ export interface ProfileDetail extends ProfileSummary {
   groups: CustomGroup[];
 }
 
-/** 全局规则集(「规则托管」):面板托管,订阅以 RULE-SET 引用。 */
+/** 全局规则集(「规则托管」,② 用户库 / 导入源)。0.4 起 ② 仅作模板:不再公开托管、不参与生成。 */
 export interface RuleSet {
   id: string;
   name: string;
@@ -79,14 +79,31 @@ export interface RuleSet {
   source: "manual" | "remote";
   content: string;
   enabled: boolean;
-  /** 规则条数(manual=payload 行数;remote=最近成功镜像的行数)。 */
+  /** 规则条数(manual=payload 行数;remote 模板为 0)。 */
   count: number;
-  /** 面板托管链接。 */
-  url: string;
   /** 远程来源 URL(已脱敏);manual 为 null。 */
   remote_url_masked: string | null;
   interval_hours: number;
-  /** 远程是否本地缓存二次托管。 */
+  /** 远程是否本地缓存二次托管(导入到订阅 ③ 后由订阅镜像)。 */
+  cache: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 订阅自有规则集(③ 托管规则库):随订阅自包含,按订阅 token 隔离托管。 */
+export interface ProfileRuleSet {
+  id: string;
+  name: string;
+  behavior: "domain" | "ipcidr" | "classical";
+  format: "yaml" | "text" | "mrs";
+  source: "manual" | "remote";
+  content: string;
+  enabled: boolean;
+  count: number;
+  /** 按订阅 token 隔离的面板托管链接。 */
+  url: string;
+  remote_url_masked: string | null;
+  interval_hours: number;
   cache: boolean;
   last_fetch_status: string | null;
   created_at: string;
