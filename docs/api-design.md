@@ -31,7 +31,7 @@
 
 ## 认证
 
-凭据来自 `ADMIN_USERNAME` / `ADMIN_PASSWORD`(1Panel 表单 → compose)。登录签发会话 Cookie
+凭据来自 `ADMIN_USERNAME` / `ADMIN_PASSWORD`(compose 环境变量)。登录签发会话 Cookie
 (`HttpOnly`、`SameSite=Lax`,HTTPS 加 `Secure`);登录失败按 IP + 账户限流。除 `/health`、
 登录、公开端点外,所有路由需有效会话(否则 `401`)。
 
@@ -59,9 +59,12 @@ GET  /api/auth/session -> 200 {username} | 401
 | GET / POST | `/api/global-nodes` | 是 | 全局自定义节点池(跨订阅共享,自动追加到每条配置) |
 | PUT / DELETE | `/api/global-nodes/:id` | 是 | 单个全局节点 |
 | PUT | `/api/global-nodes/order` | 是 | 全局自定义块顺序;立即重排所有配置缓存 |
-| GET / POST | `/api/rule-sets` | 是 | 全局规则集库(面板托管,跨订阅以 `RULE-SET` 引用) |
-| PUT / DELETE | `/api/rule-sets/:id` | 是 | 单个规则集 |
-| PUT | `/api/rule-sets/order` | 是 | 规则集库显示顺序(仅展示序,不动缓存) |
+| GET / POST | `/api/rule-sets` | 是 | 全局用户规则库(② 模板 / 导入源;不托管、不参与生成) |
+| PUT / DELETE | `/api/rule-sets/:id` | 是 | 单个全局规则集 |
+| PUT | `/api/rule-sets/order` | 是 | 全局库显示顺序(仅展示序) |
+| GET / POST | `/api/profiles/:id/rule-sets` | 是 | 订阅自有规则库(③);生成只读此处 |
+| PUT / DELETE | `/api/profiles/:id/rule-sets/:rsid` | 是 | 单个订阅规则集 |
+| POST | `/api/profiles/:id/rule-sets/import` | 是 | 从全局 ② 复制规则集进本订阅 ③ + 追加 `RULE-SET` 规则行 |
 | GET / POST | `/api/profiles/:id/groups` | 是 | 自定义分组 |
 | PUT / DELETE | `/api/profiles/:id/groups/:group_id` | 是 | 单个分组 |
 | POST | `/api/profiles/:id/import-provider-groups` | 是 | 导入机场 `proxy-groups` 为可编辑自定义分组(实时,跳过同名/不支持类型) |
@@ -71,7 +74,7 @@ GET  /api/auth/session -> 200 {username} | 401
 | GET | `/api/settings` | 是 | 应用设置 |
 | POST | `/api/settings/reset-public-path` | 是 | 重置公共路径前缀 |
 | GET | `/:public_path_prefix/api/sub/:token` | 否 | 公开订阅下载 |
-| GET | `/:public_path_prefix/r/:name/:file` | 否 | 公开规则集托管(`:file` = `<behavior>.<format>`) |
+| GET | `/:public_path_prefix/api/sub/:token/r/:name/:file` | 否 | 公开规则集托管(③,按订阅 token 隔离;`:file` = `<behavior>.<format>`) |
 
 ## Profile 资源
 
@@ -112,25 +115,42 @@ POST /api/profiles/:id/groups { name, group_type, members, options?, enabled? }
 - 全局节点为单一共享池:新建落末尾、`name` 全局唯一;增删改在下次生成(公共链接每拉取即重生)
   进入各配置输出,排序见下立即生效。
 
-## 规则集库(规则托管)
+## 规则集库(三规则库模型)
+
+规则下发与订阅**解耦**为三个库:① 机场原始规则(`GET .../provider-rules`,「导入机场规则」)、
+② 全局用户规则库(`/api/rule-sets`)、③ 每订阅托管规则库(`/api/profiles/:id/rule-sets`)。**下发只读
+③**;①② 仅作导入源。
+
+### ② 全局用户规则库(模板 / 导入源)
 
 ```text
-GET    /api/rule-sets                                  # 列表,每项含 count、url(托管链接)、source、remote_url_masked、cache、last_fetch_status
+GET    /api/rule-sets                                  # 列表;每项含 count、source、remote_url_masked、cache(无托管链接)
 POST   /api/rule-sets   { name, behavior, source?, format, ... }
    # name 全局唯一(重名 409)且限 [A-Za-z0-9._-];behavior∈domain/ipcidr/classical;source∈manual(默认)/remote
    # source=manual: { content }                 format∈yaml/text
    # source=remote: { url, interval_hours?=24, cache?=true }   format∈yaml/text/mrs;url 须 http(s)
-PUT    /api/rule-sets/:id   { ...同上 }                 # 整体替换;remote 编辑 url 留空则沿用原值(已脱敏不回显)
+PUT    /api/rule-sets/:id   { ...同上 }                 # remote 编辑 url 留空则沿用原值(已脱敏不回显)
 DELETE /api/rule-sets/:id
-PUT    /api/rule-sets/order { order: [规则集名] }        # 仅展示序,未列出落末尾;不动缓存
+PUT    /api/rule-sets/order { order: [规则集名] }        # 仅展示序,未列出落末尾
 ```
 
-- manual:`content` 为 payload(每行一条),托管端点按 `format` 渲染(`yaml`→`payload:` 列表,`text`
-  逐行)。remote:面板按 `interval_hours` 懒镜像上游(`cache=1` 二次托管;`cache=0` 转换时直接注入上游
-  URL),`mrs` 二进制原样透传。
-- 规则集为全局库,被某配置的 `RULE-SET,<name>` 规则引用时,生成会注入指向托管链接(remote 关缓存时
-  指向上游 URL)的 `rule-providers:` 条目(公共链接每拉取即重生,故增删改即时生效);未被引用不注入。
-- 注入时若自定义规则集名与机场 `rule-providers` 已有条目**撞名**,用面板托管版**覆盖**机场版;生成端点
+② 不再公开托管、不再参与生成,仅是可复用模板。通过 ③ 的导入端点复制进某订阅后才生效。
+
+### ③ 每订阅托管规则库(下发来源)
+
+```text
+GET    /api/profiles/:id/rule-sets                     # 列表;每项含 url(按订阅 token 隔离的托管链接)、count、source、remote_url_masked、cache、last_fetch_status
+POST   /api/profiles/:id/rule-sets   { name, behavior, source?, format, ... }   # name 在本订阅内唯一(重名 409);字段同 ②
+PUT    /api/profiles/:id/rule-sets/:rsid   { ...同上 }
+DELETE /api/profiles/:id/rule-sets/:rsid
+POST   /api/profiles/:id/rule-sets/import  { names: [②规则集名], policy }   # 复制 ② 定义进 ③(含真实远程 URL)+ 为未引用名追加 RULE-SET,<name>,<policy> 行;返回 { imported }
+```
+
+- manual / remote 行为与 ② 一致(校验/渲染/镜像同一套逻辑)。托管在按订阅 token 隔离的链接
+  `/<prefix>/api/sub/<token>/r/<name>/<behavior>.<format>`;remote 关缓存则转换时直接注入上游 URL。
+- 被本订阅 `RULE-SET,<name>` 规则引用时注入指向该托管链接的 `rule-providers:` 条目(公共链接每拉取即
+  重生,故定义改动即时生效);未被引用不注入。
+- 注入时若名与机场 `rule-providers` 已有条目**撞名**,用本订阅托管版**覆盖**机场版;生成端点
   (`POST .../generate`)在响应 `ruleset_conflicts` 列出撞名的名字,详情页据此告警,避免静默替换。
 
 ## 节点/分组预览与排序
@@ -182,16 +202,16 @@ PUT /api/profiles/:id/group-order         { order: [分组名] }              # 
 | `proxies` | 机场块(上游序)+ 自定义块(启用全局节点按 `global_nodes.position` 排),按 `node_section_order` 拼接 |
 | `proxy-groups` | 整体替换为启用的自定义分组(机场分组不透传,需「导入机场分组」),按 `group_order` 重排 |
 | `rules` | 整体替换为用户规则 |
-| `rule-providers` | 机场原样透传;另把被 `RULE-SET` 引用、面板托管的全局规则集合并在上(同名覆盖,指向托管链接) |
+| `rule-providers` | 机场原样透传;另把被 `RULE-SET` 引用、本订阅自有(③)规则集合并在上(同名覆盖,指向按订阅 token 隔离的托管链接) |
 | `proxy-providers` | **剥离**(会让客户端拉取绕过 SSRF/缓存的 URL,可能暴露机场 URL) |
 | 其余(`port`/`dns`/`tun`/`sniffer`…) | 原样透传(新 Mihomo 选项无需改转换器) |
 
 - `import-provider-groups`:实时拉取机场,把 `proxy-groups` 解析为可编辑自定义分组写入
   (`name`/`type`/`proxies`→成员,其余→`options`;跳过同名/不支持类型),返回 `{imported,skipped}`;
   只改 `custom_groups`,需重新生成才进输出;鉴权 + SSRF 同 `provider-rules`。
-- 规则集:除透传机场自带 `rule-providers` 外,面板还托管**全局规则集库**(见「规则集库」);
-  `RULE-SET,<name>,<policy>` 既可引用机场条目名,也可引用全局规则集名(后者生成时注入指向托管
-  链接的条目)。
+- 规则集:除透传机场自带 `rule-providers` 外,面板按 `RULE-SET,<name>,<policy>` 注入**本订阅自有规则库
+  (③)**中同名条目(见「规则集库」),指向按订阅 token 隔离的托管链接;`<name>` 也可仍引用机场条目名。
+  全局 ② 库不参与生成。
 
 ## 公开订阅端点
 
@@ -214,14 +234,14 @@ GET /:public_path_prefix/api/sub/:token
 ## 公开规则集托管端点
 
 ```text
-GET /:public_path_prefix/r/:name/:file
-  -> 200 text/plain | application/octet-stream(mrs)   前缀匹配 + 名存在且启用 + :file=="<behavior>.<format>" + 已托管
+GET /:public_path_prefix/api/sub/:token/r/:name/:file
+  -> 200 text/plain | application/octet-stream(mrs)   前缀+token 匹配 + 名在该订阅存在且启用 + :file=="<behavior>.<format>" + 已托管
   -> 503             remote 镜像首拉失败且无缓存
-  -> 404             其余一切(统一,含前缀错/名不存在/未启用/文件名不符/remote 关缓存未托管)
+  -> 404             其余一切(统一,含前缀错/token 错/名不存在/未启用/文件名不符/remote 关缓存未托管)
 ```
 
-- 按名公开、无 token,与订阅端点共用 `public_path_prefix`(重置公共路径同样使其失效)。规则集是
-  规则清单、非私密,按名可枚举可接受;仍按来源 IP 限流。
+- 托管本订阅自有规则库(③),**按订阅 token 隔离**,与订阅端点共用 `public_path_prefix`(重置公共路径同样
+  使其失效)。规则集是规则清单、非私密,按名可枚举可接受;仍按来源 IP 限流。全局 ② 库不再公开托管。
 - manual:`yaml`→Mihomo `payload:` 列表、`text`→逐行(均忽略空行与 `#` 注释)。remote(`cache=1`):
   single-flight 懒刷新——缓存超 `interval_hours` 才回源(SSRF 安全字节),失败回退旧缓存、无缓存 `503`;
   字节原样托管(`mrs` 为 `application/octet-stream`)。remote(`cache=0`)不在此托管,统一 `404`。

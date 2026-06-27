@@ -267,6 +267,29 @@
 .icon-btn.danger:hover {
   color: var(--danger);
 }
+.icon-btn:disabled {
+  color: var(--text-4);
+  cursor: not-allowed;
+}
+.icon-btn:disabled:hover {
+  color: var(--text-4);
+  background: none;
+}
+/* 禁用图标上叠一道对角斜杠(如 MATCH 不可删除) */
+.icon-slash {
+  position: relative;
+}
+.icon-slash::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 17px;
+  height: 1.5px;
+  background: currentColor;
+  border-radius: 1px;
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
 
 /* pill / 标签 */
 .tag-mono {
@@ -280,8 +303,6 @@
 }
 .tag-proto {
   flex-shrink: 0;
-  width: 90px;
-  text-align: right;
 }
 .tag-proto.custom {
   background: var(--primary-bg);
@@ -318,6 +339,36 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 规则编辑弹窗(RuleComposer) */
+.composer-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.rule-cat-badge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 5px;
+  background: var(--fill);
+  color: var(--text-3);
+}
+.composer-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--text-4);
+}
+.rule-match-note {
+  font-size: 12.5px;
+  color: var(--text-3);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  padding: 11px 13px;
+  line-height: 1.6;
 }
 
 /* 节点两块分区(机场 / 自定义) */

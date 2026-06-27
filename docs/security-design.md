@@ -28,7 +28,7 @@ https://<PUBLIC_BASE_URL>/<PUBLIC_PATH_PREFIX>/api/sub/<profile_token>
 
 ## 管理员认证
 
-- 凭据来自 `ADMIN_USERNAME` / `ADMIN_PASSWORD`(1Panel 表单 → compose),未设置拒绝启动;
+- 凭据来自 `ADMIN_USERNAME` / `ADMIN_PASSWORD`(compose 环境变量),未设置拒绝启动;
   恒定时间比较;登录失败按 IP + 账户限流。
 - 会话 Cookie:≥128 位 CSPRNG ID、`HttpOnly` + `SameSite=Lax`、HTTPS 加 `Secure`;存内存
   (重启失效)、空闲超时默认 7 天。`Secure` 由 `https://` 的 `PUBLIC_BASE_URL` 推断;TLS 终止

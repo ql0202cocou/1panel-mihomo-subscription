@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button, Input, InputNumber, Modal, Popconfirm, Switch, message } from "antd";
 import {
-  CopyOutlined,
   DeleteOutlined,
   EditOutlined,
   HolderOutlined,
-  LinkOutlined,
   PlusOutlined,
 } from "@ant-design/icons";
 import {
@@ -27,13 +25,15 @@ import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../api";
 import type { RuleSet } from "../types";
 import { TypeChips } from "./detail/fields";
+import {
+  RULE_SET_BEHAVIORS as BEHAVIORS,
+  RULE_SET_MANUAL_FORMATS as MANUAL_FORMATS,
+  RULE_SET_REMOTE_FORMATS as REMOTE_FORMATS,
+  RULE_SET_SOURCES as SOURCES,
+} from "./detail/ruleSetConstants";
 import "./detail/detail.css";
 import "./RuleSets.css";
 
-const BEHAVIORS = ["domain", "ipcidr", "classical"] as const;
-const MANUAL_FORMATS = ["yaml", "text"] as const;
-const REMOTE_FORMATS = ["yaml", "text", "mrs"] as const;
-const SOURCES = ["manual", "remote"] as const;
 const NAME_RE = /^[A-Za-z0-9._-]+$/;
 
 interface FormState {
@@ -144,11 +144,6 @@ export default function RuleSets() {
     await load();
   }
 
-  async function copyLink(rs: RuleSet) {
-    await navigator.clipboard.writeText(rs.url);
-    message.success(t("ruleSets.copied"));
-  }
-
   async function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -171,7 +166,6 @@ export default function RuleSets() {
   }
 
   const formatOptions = form.source === "remote" ? REMOTE_FORMATS : MANUAL_FORMATS;
-  const hostedPreview = `…/r/${form.name.trim() || "{name}"}/${form.behavior}.${form.format}`;
 
   return (
     <div className="page-list">
@@ -195,13 +189,7 @@ export default function RuleSets() {
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={rows.map((n) => n.name)} strategy={verticalListSortingStrategy}>
               {rows.map((rs) => (
-                <RuleSetRow
-                  key={rs.name}
-                  rs={rs}
-                  onEdit={startEdit}
-                  onRemove={remove}
-                  onCopy={copyLink}
-                />
+                <RuleSetRow key={rs.name} rs={rs} onEdit={startEdit} onRemove={remove} />
               ))}
             </SortableContext>
           </DndContext>
@@ -308,38 +296,20 @@ export default function RuleSets() {
               <div className="rs-hint">{t("ruleSets.cacheHint")}</div>
             </div>
           )}
-
-          <div className="rs-linkbox">
-            <LinkOutlined />
-            <code className="rs-url">{hostedPreview}</code>
-            {!editing && <span className="rs-link-pending">{t("ruleSets.linkPending")}</span>}
-          </div>
         </div>
       </Modal>
     </div>
   );
 }
 
-/** last_fetch_status → 展示文案 + 颜色变量。 */
-function fetchStatus(rs: RuleSet, t: (k: string) => string): { text: string; color: string } | null {
-  if (rs.source !== "remote") return null;
-  if (rs.last_fetch_status === null)
-    return { text: t("ruleSets.fetchNever"), color: "var(--text-4)" };
-  if (rs.last_fetch_status === "success")
-    return { text: t("ruleSets.fetchOk"), color: "var(--success)" };
-  return { text: t("ruleSets.fetchFail"), color: "var(--danger)" };
-}
-
 function RuleSetRow({
   rs,
   onEdit,
   onRemove,
-  onCopy,
 }: {
   rs: RuleSet;
   onEdit: (rs: RuleSet) => void;
   onRemove: (rs: RuleSet) => void;
-  onCopy: (rs: RuleSet) => void;
 }) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -350,9 +320,6 @@ function RuleSetRow({
     transition,
     background: isDragging ? "var(--bg-subtle)" : undefined,
   };
-  const status = fetchStatus(rs, t);
-  // 二次托管(manual / remote+cache)展示托管链接;remote 关缓存则展示上游(脱敏)。
-  const link = rs.source === "remote" && !rs.cache ? (rs.remote_url_masked ?? "") : rs.url;
   return (
     <div className="rs-row" ref={setNodeRef} style={style}>
       <span className="row-grab" {...attributes} {...listeners} aria-label="drag">
@@ -361,30 +328,20 @@ function RuleSetRow({
       <div className="rs-main">
         <div className="rs-line1">
           <span className="rs-name">{rs.name}</span>
-          <span className="tag-mono tag-proto custom">
-            {rs.behavior}/{rs.format}
-          </span>
           <span className="rs-count">{t("ruleSets.count", { count: rs.count })}</span>
-          {status && (
-            <span className="rs-status" style={{ color: status.color }}>
-              {status.text}
-            </span>
-          )}
         </div>
-        <div className="rs-line2">
-          <LinkOutlined />
-          <code className="rs-url">{link}</code>
-          {rs.source === "remote" && rs.cache && rs.remote_url_masked && (
-            <span className="rs-mirror">
-              · {t("ruleSets.mirrorFrom")} {rs.remote_url_masked}
-            </span>
-          )}
-        </div>
+        {rs.source === "remote" && rs.remote_url_masked && (
+          <div className="rs-line2">
+            <code className="rs-url">
+              {t("ruleSets.mirrorFrom")} {rs.remote_url_masked}
+            </code>
+          </div>
+        )}
       </div>
       <span className="row-actions">
-        <button className="icon-btn" onClick={() => onCopy(rs)} aria-label={t("ruleSets.copyLink")}>
-          <CopyOutlined />
-        </button>
+        <span className="tag-mono tag-proto custom">
+          {rs.behavior}/{rs.format}
+        </span>
         <button className="icon-btn" onClick={() => onEdit(rs)} aria-label={t("ruleSets.manage")}>
           <EditOutlined />
         </button>
