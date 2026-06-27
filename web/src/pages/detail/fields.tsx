@@ -25,10 +25,13 @@ export function TypeChips({
   options,
   value,
   onChange,
+  labels,
 }: {
   options: readonly string[];
   value: string;
   onChange: (value: string) => void;
+  /** 可选:把选项值映射为展示文案(如 manual→手动);缺省直接显示值。 */
+  labels?: Record<string, string>;
 }) {
   return (
     <div className="type-chips">
@@ -38,7 +41,7 @@ export function TypeChips({
           className={`type-chip${value === o ? " active" : ""}`}
           onClick={() => onChange(o)}
         >
-          {o}
+          {labels?.[o] ?? o}
         </span>
       ))}
     </div>

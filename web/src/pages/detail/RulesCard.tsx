@@ -49,10 +49,12 @@ import type {
 } from "../../types";
 import { BUILTIN_POLICIES } from "./groupSchema";
 import { TypeChips } from "./fields";
-
-const RS_BEHAVIORS = ["domain", "ipcidr", "classical"] as const;
-const RS_MANUAL_FORMATS = ["yaml", "text"] as const;
-const RS_REMOTE_FORMATS = ["yaml", "text", "mrs"] as const;
+import {
+  RULE_SET_BEHAVIORS as RS_BEHAVIORS,
+  RULE_SET_MANUAL_FORMATS as RS_MANUAL_FORMATS,
+  RULE_SET_REMOTE_FORMATS as RS_REMOTE_FORMATS,
+  RULE_SET_SOURCES as RS_SOURCES,
+} from "./ruleSetConstants";
 
 interface Props {
   profileId: string;
@@ -235,11 +237,16 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
     }
   }, [profileId]);
 
+  // 全局 ② 库与 generatedAt 无关,单独加载,避免每次生成都重拉。
+  useEffect(() => {
+    void loadRuleSets();
+  }, [loadRuleSets]);
+
+  // 策略候选(机场代理随生成变化)与 ③ 库随 generatedAt 刷新。
   useEffect(() => {
     void loadPolicies();
-    void loadRuleSets();
     void loadProfileRuleSets();
-  }, [loadPolicies, loadRuleSets, loadProfileRuleSets, generatedAt]);
+  }, [loadPolicies, loadProfileRuleSets, generatedAt]);
 
   // 保存规则 + 钉底的 MATCH(始终在最后)。
   const persist = useCallback(
@@ -399,23 +406,6 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
     }
   }
 
-  // 扁平去重的策略名(「导入托管规则」的引用策略下拉用)。
-  const policyFlat = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          [
-            ...proxyNames,
-            ...nodes.map((n) => n.name),
-            ...groups.map((g) => g.name),
-            ...providerGroups,
-            ...BUILTIN_POLICIES,
-          ].filter((s) => s.trim() !== ""),
-        ),
-      ).map((value) => ({ value })),
-    [proxyNames, providerGroups, nodes, groups],
-  );
-
   // 按设计稿分组的策略候选(规则编辑弹窗的策略下拉用):节点 / 代理分组 / 内置策略。
   const policyGrouped = useMemo(() => {
     const uniq = (xs: string[]) => Array.from(new Set(xs.filter((s) => s.trim() !== "")));
@@ -427,6 +417,21 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
       { label: t("rules.policyGroups.builtin"), options: BUILTIN_POLICIES.map((value) => ({ value })) },
     ].filter((g) => g.options.length > 0);
   }, [proxyNames, providerGroups, nodes, groups, t]);
+
+  // 扁平去重的策略名(「导入托管规则」的引用策略下拉用)——由分组候选展平,单一来源。
+  const policyFlat = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { value: string }[] = [];
+    for (const g of policyGrouped) {
+      for (const o of g.options) {
+        if (!seen.has(o.value)) {
+          seen.add(o.value);
+          out.push(o);
+        }
+      }
+    }
+    return out;
+  }, [policyGrouped]);
 
   // 当前规则里已被 RULE-SET 引用的规则集名(导入弹窗据此标记「已引用」)。
   const referenced = useMemo(() => {
@@ -901,17 +906,12 @@ function RuleSetDefBlock({
         </div>
       </div>
       <Typography.Text type="secondary">{t("ruleSets.source")}</Typography.Text>
-      <div className="type-chips">
-        {(["manual", "remote"] as const).map((s) => (
-          <span
-            key={s}
-            className={`type-chip${model.rsSource === s ? " active" : ""}`}
-            onClick={() => setSource(s)}
-          >
-            {s === "manual" ? t("ruleSets.sourceManual") : t("ruleSets.sourceRemote")}
-          </span>
-        ))}
-      </div>
+      <TypeChips
+        options={RS_SOURCES}
+        value={model.rsSource}
+        onChange={(v) => setSource(v as "manual" | "remote")}
+        labels={{ manual: t("ruleSets.sourceManual"), remote: t("ruleSets.sourceRemote") }}
+      />
       {model.rsSource === "remote" ? (
         <div style={{ marginTop: 12 }}>
           <Typography.Text type="secondary">{t("ruleSets.remoteUrl")}</Typography.Text>

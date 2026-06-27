@@ -341,7 +341,7 @@ function SortableGroupRow({
       <span className="row-grab" {...attributes} {...listeners} aria-label="drag">
         <HolderOutlined />
       </span>
-      <span style={{ width: 150, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <span style={{ width: 600, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         <span style={{ fontSize: 13.5, color: "var(--text)", fontWeight: 550 }}>{row.name}</span>
         <span className="row-sub">{t("groups.membersCount", { count: group.members.length })}</span>
       </span>

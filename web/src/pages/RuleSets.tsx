@@ -25,13 +25,15 @@ import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../api";
 import type { RuleSet } from "../types";
 import { TypeChips } from "./detail/fields";
+import {
+  RULE_SET_BEHAVIORS as BEHAVIORS,
+  RULE_SET_MANUAL_FORMATS as MANUAL_FORMATS,
+  RULE_SET_REMOTE_FORMATS as REMOTE_FORMATS,
+  RULE_SET_SOURCES as SOURCES,
+} from "./detail/ruleSetConstants";
 import "./detail/detail.css";
 import "./RuleSets.css";
 
-const BEHAVIORS = ["domain", "ipcidr", "classical"] as const;
-const MANUAL_FORMATS = ["yaml", "text"] as const;
-const REMOTE_FORMATS = ["yaml", "text", "mrs"] as const;
-const SOURCES = ["manual", "remote"] as const;
 const NAME_RE = /^[A-Za-z0-9._-]+$/;
 
 interface FormState {

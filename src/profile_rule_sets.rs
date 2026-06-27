@@ -232,6 +232,20 @@ pub struct ImportResult {
     imported: usize,
 }
 
+/// 从全局 ② 库复制一行所需的字段(含 `rule_count`,直接沿用,免重算)。
+#[derive(FromRow)]
+struct GlobalRuleSet {
+    name: String,
+    behavior: String,
+    format: String,
+    source: String,
+    content: String,
+    url: Option<String>,
+    interval_hours: i64,
+    cache: bool,
+    rule_count: i64,
+}
+
 /// `POST /api/profiles/:id/rule-sets/import` —— 从全局 ② 复制选中规则集进本订阅 ③(含真实远程 URL,
 /// 前端拿不到脱敏后的 URL,故由后端复制),并为尚未引用的名追加 `RULE-SET,<name>,<policy>` 规则行,
 /// 随后重缝缓存使其立即生效。已存在的定义/已引用的规则行跳过。
@@ -241,46 +255,29 @@ pub async fn import(
     Json(body): Json<ImportBody>,
 ) -> ApiResult<impl IntoResponse> {
     let _ = profile_token(&state, &profile_id).await?;
+    let names = dedup(&body.names);
 
-    // 复制定义:逐个把 ② 行复制进 ③(本订阅已有同名则跳过)。
-    for name in dedup(&body.names) {
+    // 复制定义:逐个把 ② 行复制进 ③(本订阅已有同名则跳过);rule_count 直接沿用 ② 的值。
+    for name in &names {
         let exists = sqlx::query_scalar::<_, String>(
             "SELECT id FROM profile_rule_sets WHERE profile_id = ? AND name = ?",
         )
         .bind(&profile_id)
-        .bind(&name)
+        .bind(name)
         .fetch_optional(&state.db)
         .await?;
         if exists.is_some() {
             continue;
         }
-        let global = sqlx::query_as::<
-            _,
-            (
-                String,
-                String,
-                String,
-                String,
-                String,
-                Option<String>,
-                i64,
-                bool,
-            ),
-        >(
-            "SELECT name, behavior, format, source, content, url, interval_hours, cache \
+        let Some(g) = sqlx::query_as::<_, GlobalRuleSet>(
+            "SELECT name, behavior, format, source, content, url, interval_hours, cache, rule_count \
              FROM rule_sets WHERE name = ?",
         )
-        .bind(&name)
+        .bind(name)
         .fetch_optional(&state.db)
-        .await?;
-        let Some((name, behavior, format, source, content, url, interval_hours, cache)) = global
+        .await?
         else {
             continue;
-        };
-        let rule_count = if source == "manual" {
-            rulelib::payload_count(&content)
-        } else {
-            0
         };
         let id = uuid::Uuid::new_v4().to_string();
         let ts = now();
@@ -291,15 +288,15 @@ pub async fn import(
         )
         .bind(&id)
         .bind(&profile_id)
-        .bind(&name)
-        .bind(&behavior)
-        .bind(&format)
-        .bind(&source)
-        .bind(&content)
-        .bind(rule_count)
-        .bind(&url)
-        .bind(interval_hours)
-        .bind(cache)
+        .bind(&g.name)
+        .bind(&g.behavior)
+        .bind(&g.format)
+        .bind(&g.source)
+        .bind(&g.content)
+        .bind(g.rule_count)
+        .bind(&g.url)
+        .bind(g.interval_hours)
+        .bind(g.cache)
         .bind(&ts)
         .bind(&ts)
         .execute(&state.db)
@@ -307,7 +304,7 @@ pub async fn import(
     }
 
     // 追加规则行:仅为尚未被 RULE-SET 引用的名追加,统一指向 `policy`。
-    let content =
+    let mut content =
         sqlx::query_scalar::<_, String>("SELECT content FROM rulesets WHERE profile_id = ?")
             .bind(&profile_id)
             .fetch_optional(&state.db)
@@ -315,21 +312,19 @@ pub async fn import(
             .unwrap_or_default();
     let referenced = crate::converter::ruleset_refs(&content);
     let policy = body.policy.trim();
-    let mut lines: Vec<String> = Vec::new();
-    for name in dedup(&body.names) {
-        if !referenced.iter().any(|r| r == &name) {
-            lines.push(format!("RULE-SET,{name},{policy}"));
-        }
-    }
+    let lines: Vec<String> = names
+        .iter()
+        .filter(|n| !referenced.iter().any(|r| r == *n))
+        .map(|n| format!("RULE-SET,{n},{policy}"))
+        .collect();
     let imported = lines.len();
     if imported > 0 {
-        let mut next = content.clone();
-        if !next.is_empty() && !next.ends_with('\n') {
-            next.push('\n');
+        if !content.is_empty() && !content.ends_with('\n') {
+            content.push('\n');
         }
-        next.push_str(&lines.join("\n"));
+        content.push_str(&lines.join("\n"));
         sqlx::query("UPDATE rulesets SET content = ?, updated_at = ? WHERE profile_id = ?")
-            .bind(&next)
+            .bind(&content)
             .bind(now())
             .bind(&profile_id)
             .execute(&state.db)
