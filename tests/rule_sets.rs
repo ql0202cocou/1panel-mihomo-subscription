@@ -19,18 +19,32 @@ use common::{test_state_with_fetcher, TempDb};
 const PROVIDER_YAML: &str =
     "proxies:\n  - { name: hk-1, type: ss, server: 1.2.3.4, port: 8388 }\nrules:\n  - MATCH,DIRECT\n";
 
-#[derive(Clone, Default)]
-struct FakeFetcher;
+/// 固定 body 的 fetcher;默认回 `PROVIDER_YAML`,撞名测试传 `PROVIDER_WITH_RULE_PROVIDERS`。
+#[derive(Clone)]
+struct FakeFetcher {
+    body: &'static str,
+}
+
+impl Default for FakeFetcher {
+    fn default() -> Self {
+        Self {
+            body: PROVIDER_YAML,
+        }
+    }
+}
 
 #[async_trait::async_trait]
 impl SubscriptionFetcher for FakeFetcher {
     async fn fetch(&self, _url: &str) -> Result<Fetched, FetchError> {
         Ok(Fetched {
-            body: PROVIDER_YAML.to_string(),
+            body: self.body.to_string(),
             subscription_userinfo: None,
         })
     }
 }
+
+/// 机场自带一个名为 `ads` 的 `rule-provider`,用于撞名告警测试。
+const PROVIDER_WITH_RULE_PROVIDERS: &str = "proxies:\n  - { name: hk-1, type: ss, server: 1.2.3.4, port: 8388 }\nrule-providers:\n  ads: { type: http, behavior: domain, url: https://up.example/ads.yaml }\nrules:\n  - MATCH,DIRECT\n";
 
 async fn login(app: &Router) -> String {
     let resp = app
@@ -93,7 +107,7 @@ async fn create_rule_set(app: &Router, cookie: &str, body: &str) -> Value {
 #[tokio::test]
 async fn crud_exposes_hosted_link_and_count() {
     let temp = TempDb::new();
-    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher)).await);
+    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher::default())).await);
     let cookie = login(&app).await;
 
     let created = create_rule_set(
@@ -173,7 +187,7 @@ async fn crud_exposes_hosted_link_and_count() {
 #[tokio::test]
 async fn public_serve_renders_and_404s() {
     let temp = TempDb::new();
-    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher)).await);
+    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher::default())).await);
     let cookie = login(&app).await;
 
     create_rule_set(
@@ -259,7 +273,7 @@ async fn public_serve_renders_and_404s() {
 #[tokio::test]
 async fn referenced_rule_set_injected_only_when_used() {
     let temp = TempDb::new();
-    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher)).await);
+    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher::default())).await);
     let cookie = login(&app).await;
 
     // 建 profile。
@@ -269,7 +283,7 @@ async fn referenced_rule_set_injected_only_when_used() {
             "POST",
             "/api/profiles",
             &cookie,
-            r#"{"name":"P","source_type":"clash","source_url":"https://provider.example/sub"}"#,
+            r#"{"name":"P","source_url":"https://provider.example/sub"}"#,
         ))
         .await
         .unwrap();
@@ -326,9 +340,74 @@ async fn referenced_rule_set_injected_only_when_used() {
 }
 
 #[tokio::test]
+async fn rule_set_name_colliding_with_provider_is_reported() {
+    let temp = TempDb::new();
+    let app = build_router(
+        test_state_with_fetcher(
+            &temp,
+            Arc::new(FakeFetcher {
+                body: PROVIDER_WITH_RULE_PROVIDERS,
+            }),
+        )
+        .await,
+    );
+    let cookie = login(&app).await;
+
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/api/profiles",
+            &cookie,
+            r#"{"name":"P","source_url":"https://provider.example/sub"}"#,
+        ))
+        .await
+        .unwrap();
+    let id = json(resp).await["id"].as_str().unwrap().to_string();
+
+    // 引用 `ads`,并建一个同名自定义规则集 `ads`(与机场 rule-provider 撞名)。
+    app.clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/api/profiles/{id}/rules"),
+            &cookie,
+            r#"{"content":"RULE-SET,ads,DIRECT\nMATCH,DIRECT"}"#,
+        ))
+        .await
+        .unwrap();
+    create_rule_set(
+        &app,
+        &cookie,
+        r#"{"name":"ads","behavior":"domain","format":"yaml","content":"+.ad.example"}"#,
+    )
+    .await;
+
+    // 生成响应应在 `ruleset_conflicts` 里报告 `ads` 撞名(覆盖语义不变,但不再静默)。
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/api/profiles/{id}/generate"),
+            &cookie,
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = json(resp).await;
+    let conflicts: Vec<&str> = body["ruleset_conflicts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert_eq!(conflicts, vec!["ads"], "应报告与机场撞名的规则集");
+}
+
+#[tokio::test]
 async fn remote_mirror_serves_fetched_bytes() {
     let temp = TempDb::new();
-    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher)).await);
+    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher::default())).await);
     let cookie = login(&app).await;
 
     // 远程来源 + 本地缓存托管:面板拉取上游并以稳定链接二次托管。
@@ -363,7 +442,7 @@ async fn remote_mirror_serves_fetched_bytes() {
 #[tokio::test]
 async fn remote_cache_off_injects_upstream_url() {
     let temp = TempDb::new();
-    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher)).await);
+    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher::default())).await);
     let cookie = login(&app).await;
 
     let resp = app
@@ -372,7 +451,7 @@ async fn remote_cache_off_injects_upstream_url() {
             "POST",
             "/api/profiles",
             &cookie,
-            r#"{"name":"P","source_type":"clash","source_url":"https://provider.example/sub"}"#,
+            r#"{"name":"P","source_url":"https://provider.example/sub"}"#,
         ))
         .await
         .unwrap();

@@ -20,7 +20,6 @@ use crate::ssrf::{self, SsrfError};
 use crate::util::{now, random_token};
 use crate::yaml;
 
-const SOURCE_TYPES: [&str; 4] = ["mihomo", "clash", "surge", "loon"];
 const GROUP_TYPES: [&str; 5] = ["select", "url-test", "fallback", "load-balance", "relay"];
 
 // ─── DB 行类型 ─────────────────────────────────────────────────────────────────
@@ -29,11 +28,9 @@ const GROUP_TYPES: [&str; 5] = ["select", "url-test", "fallback", "load-balance"
 struct ProfileRow {
     id: String,
     name: String,
-    source_type: String,
     source_url: String,
     output_type: String,
     token: String,
-    enabled: bool,
     last_fetch_at: Option<String>,
     last_fetch_status: Option<String>,
     last_generated_at: Option<String>,
@@ -76,10 +73,8 @@ struct RulesetRow {
 pub struct ProfileSummary {
     id: String,
     name: String,
-    source_type: String,
     source_url_masked: String,
     output_type: String,
-    enabled: bool,
     subscription_url: String,
     last_fetch_at: Option<String>,
     last_fetch_status: Option<String>,
@@ -132,9 +127,7 @@ fn summary(state: &AppState, row: ProfileRow) -> ProfileSummary {
         source_url_masked: mask_url(&row.source_url),
         id: row.id,
         name: row.name,
-        source_type: row.source_type,
         output_type: row.output_type,
-        enabled: row.enabled,
         last_fetch_at: row.last_fetch_at,
         last_fetch_status: row.last_fetch_status,
         last_generated_at: row.last_generated_at,
@@ -173,18 +166,14 @@ fn group_response(row: GroupRow) -> GroupResponse {
 #[derive(Deserialize)]
 pub struct CreateProfile {
     name: String,
-    source_type: String,
     source_url: String,
-    enabled: Option<bool>,
 }
 
 #[derive(Deserialize)]
 pub struct UpdateProfile {
     name: Option<String>,
-    source_type: Option<String>,
     /// 只写:缺失或为空则保持已存 URL 不变。
     source_url: Option<String>,
-    enabled: Option<bool>,
 }
 
 /// 写入时校验机场 URL。这是纵深防御,也带来更好的错误体验——权威的 SSRF 检查仍在拉取时带 DNS
@@ -235,11 +224,6 @@ pub async fn create(
     if body.name.trim().is_empty() {
         return Err(ApiError::BadRequest("name is required".into()));
     }
-    if !SOURCE_TYPES.contains(&body.source_type.as_str()) {
-        return Err(ApiError::BadRequest(format!(
-            "source_type must be one of {SOURCE_TYPES:?}"
-        )));
-    }
     if body.source_url.trim().is_empty() {
         return Err(ApiError::BadRequest("source_url is required".into()));
     }
@@ -248,19 +232,16 @@ pub async fn create(
     let id = uuid::Uuid::new_v4().to_string();
     let token = random_token();
     let ts = now();
-    let enabled = body.enabled.unwrap_or(true);
 
     let mut tx = state.db.begin().await?;
     sqlx::query(
-        "INSERT INTO profiles (id, name, source_type, source_url, token, enabled, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO profiles (id, name, source_url, token, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(body.name.trim())
-    .bind(&body.source_type)
     .bind(body.source_url.trim())
     .bind(&token)
-    .bind(enabled)
     .bind(&ts)
     .bind(&ts)
     .execute(&mut *tx)
@@ -274,6 +255,10 @@ pub async fn create(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+
+    // 新建后自动拉取一次,使列表/详情立即反映真实 last_fetch_status(无「未拉取」中间态)。
+    // 尽力而为,拉取失败只记状态、不影响创建结果。
+    crate::generate::generate_best_effort(&state, &id).await;
 
     let row = load_profile_row(&state, &id).await?;
     Ok((StatusCode::CREATED, Json(detail(&state, row).await?)))
@@ -340,12 +325,6 @@ pub async fn update(
     let existing = load_profile_row(&state, &id).await?;
 
     let name = body.name.unwrap_or(existing.name);
-    let source_type = body.source_type.unwrap_or(existing.source_type);
-    if !SOURCE_TYPES.contains(&source_type.as_str()) {
-        return Err(ApiError::BadRequest(format!(
-            "source_type must be one of {SOURCE_TYPES:?}"
-        )));
-    }
     // 只写 URL:除非提供非空值,否则保持已存值。
     let source_url = match body.source_url {
         Some(u) if !u.trim().is_empty() => {
@@ -355,16 +334,12 @@ pub async fn update(
         }
         _ => existing.source_url,
     };
-    let enabled = body.enabled.unwrap_or(existing.enabled);
-
     sqlx::query(
-        "UPDATE profiles SET name = ?, source_type = ?, source_url = ?, enabled = ?, updated_at = ?
+        "UPDATE profiles SET name = ?, source_url = ?, updated_at = ?
          WHERE id = ?",
     )
     .bind(&name)
-    .bind(&source_type)
     .bind(&source_url)
-    .bind(enabled)
     .bind(now())
     .bind(&id)
     .execute(&state.db)

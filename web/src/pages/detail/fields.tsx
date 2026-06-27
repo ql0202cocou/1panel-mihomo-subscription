@@ -14,6 +14,7 @@ import {
   Switch,
   Typography,
 } from "antd";
+import { DownOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { FieldDef } from "./nodeSchema";
@@ -77,6 +78,7 @@ export function FieldInput({
       return (
         <AutoComplete
           style={{ width: "100%" }}
+          suffixIcon={<DownOutlined />}
           options={(def.options ?? []).map((o) => ({ value: o }))}
           value={value == null ? "" : String(value)}
           onChange={(s) => onChange(s)}

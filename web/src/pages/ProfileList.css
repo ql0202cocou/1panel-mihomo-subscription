@@ -19,7 +19,7 @@
 /* 指标条 */
 .metrics {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 14px;
   margin-bottom: 20px;
 }
@@ -36,12 +36,6 @@
   display: flex;
   align-items: center;
   gap: 7px;
-}
-.metric-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
 }
 .metric-value {
   font-size: 28px;

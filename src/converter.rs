@@ -68,8 +68,9 @@ pub enum ConvertError {
     Validation(Vec<String>),
 }
 
-/// 把机场 YAML 转换为 Mihomo 配置字符串。
-pub fn convert(input: ConvertInput) -> Result<String, ConvertError> {
+/// 把机场 YAML 转换为 Mihomo 配置字符串。返回 `(yaml, conflicts)`,`conflicts` 为注入的自定义
+/// 规则集中、覆盖了机场同名 `rule-providers` 条目的名字(供生成层告警;无撞名则为空)。
+pub fn convert(input: ConvertInput) -> Result<(String, Vec<String>), ConvertError> {
     let mut root =
         yaml::parse_mapping(input.provider_yaml).map_err(|_| ConvertError::ProviderParse)?;
 
@@ -146,20 +147,30 @@ pub fn convert(input: ConvertInput) -> Result<String, ConvertError> {
 
     // rule-providers:机场自己的 map 原样透传,使导入的机场 RULE-SET 规则仍能解析;另把被本
     // profile `RULE-SET` 规则引用到的、面板托管的自定义规则集合并在上(同名覆盖机场条目)。
+    // 撞名收集:自定义规则集注入时若覆盖了机场同名 `rule-providers` 条目(`insert` 返回旧值),
+    // 记下名字——由生成层据此告警,避免静默替换。撞名与覆盖在同一次插入里判定,无需二次解析。
+    let mut rule_provider_conflicts: Vec<String> = Vec::new();
     if !input.rule_providers.is_empty() {
         let mut map = match root.get("rule-providers") {
             Some(Value::Mapping(m)) => m.clone(),
             _ => Mapping::new(),
         };
         for rp in &input.rule_providers {
-            map.insert(Value::from(rp.name.clone()), build_rule_provider(rp));
+            if map
+                .insert(Value::from(rp.name.clone()), build_rule_provider(rp))
+                .is_some()
+            {
+                rule_provider_conflicts.push(rp.name.clone());
+            }
         }
         root.insert(Value::from("rule-providers"), Value::Mapping(map));
     }
 
     // 其余所有顶层键(dns、tun…)透传。
 
-    serde_yaml::to_string(&Value::Mapping(root)).map_err(|_| ConvertError::ProviderParse)
+    let yaml =
+        serde_yaml::to_string(&Value::Mapping(root)).map_err(|_| ConvertError::ProviderParse)?;
+    Ok((yaml, rule_provider_conflicts))
 }
 
 fn validate(
@@ -359,6 +370,28 @@ fn rule_target(line: &str) -> Option<String> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn convert_reports_rule_provider_name_collisions() {
+        // PROVIDER 的 rule-providers 含 `ads`;注入同名自定义规则集即撞名(覆盖机场版),应在
+        // convert 返回的 conflicts 中报出;名字不同则不报。
+        let rp = |name: &str| RuleProvider {
+            name: name.into(),
+            behavior: "domain".into(),
+            format: "yaml".into(),
+            url: "https://panel.example/ruleset".into(),
+        };
+
+        let mut collide = input("MATCH,DIRECT", vec![], vec![]);
+        collide.rule_providers = vec![rp("ads")];
+        let (_, conflicts) = convert(collide).expect("conversion succeeds");
+        assert_eq!(conflicts, vec!["ads".to_string()]);
+
+        let mut distinct = input("MATCH,DIRECT", vec![], vec![]);
+        distinct.rule_providers = vec![rp("MyAdBlock")];
+        let (_, conflicts) = convert(distinct).expect("conversion succeeds");
+        assert!(conflicts.is_empty());
+    }
+
     const PROVIDER: &str = r#"
 port: 7890
 proxy-providers:
@@ -396,7 +429,7 @@ rules:
     }
 
     fn out(input: ConvertInput) -> Mapping {
-        let yaml = convert(input).expect("conversion succeeds");
+        let (yaml, _) = convert(input).expect("conversion succeeds");
         serde_yaml::from_str(&yaml).unwrap()
     }
 

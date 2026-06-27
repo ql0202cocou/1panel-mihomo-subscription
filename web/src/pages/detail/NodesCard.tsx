@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button, Modal, message } from "antd";
-import {
-  HolderOutlined,
-  LockOutlined,
-  PlusOutlined,
-  ArrowRightOutlined,
-} from "@ant-design/icons";
+import { message } from "antd";
+import { HolderOutlined, LockOutlined, ArrowRightOutlined } from "@ant-design/icons";
 import {
   DndContext,
   PointerSensor,
@@ -25,7 +20,8 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../../api";
 import type { CustomNode, ProxiesResponse, ProxyPreview } from "../../types";
-import NodeForm, { modelToContent, nodeAddr, type NodeModel } from "./NodeForm";
+import { nodeAddr } from "./NodeForm";
+import { NODE_TYPE_LABELS } from "./nodeSchema";
 
 interface Props {
   profileId: string;
@@ -34,21 +30,15 @@ interface Props {
   /** 全局自定义节点池快照(此处只读;编辑在「节点配置」页)。 */
   nodes: CustomNode[];
   generatedAt: string | null;
-  onChange: () => void;
 }
 
-const EMPTY_MODEL: NodeModel = { name: "", type: "", fields: {} };
 const DEFAULT_SECTIONS = ["provider", "custom"];
 
-export default function NodesCard({ profileId, profileName, nodes, generatedAt, onChange }: Props) {
+export default function NodesCard({ profileId, profileName, nodes, generatedAt }: Props) {
   const { t } = useTranslation();
   const [providers, setProviders] = useState<ProxyPreview[]>([]);
   const [generated, setGenerated] = useState(true);
   const [sectionOrder, setSectionOrder] = useState<string[]>(DEFAULT_SECTIONS);
-
-  const [open, setOpen] = useState(false);
-  const [model, setModel] = useState<NodeModel>(EMPTY_MODEL);
-  const [formKey, setFormKey] = useState("new");
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -98,34 +88,6 @@ export default function NodesCard({ profileId, profileName, nodes, generatedAt, 
     }
   }
 
-  function startAdd() {
-    setModel(EMPTY_MODEL);
-    setFormKey(`new-${Date.now()}`);
-    setOpen(true);
-  }
-
-  async function save() {
-    if (!model.name.trim() || !model.type.trim()) {
-      message.error(t("nodes.nameTypeRequired"));
-      return;
-    }
-    try {
-      await api(`/api/global-nodes`, {
-        method: "POST",
-        body: JSON.stringify({
-          name: model.name.trim(),
-          node_type: model.type.trim(),
-          content: modelToContent(model),
-          enabled: true,
-        }),
-      });
-      setOpen(false);
-      onChange();
-    } catch (e) {
-      message.error((e as ApiError).message ?? t("common.saveFailed"));
-    }
-  }
-
   const total = providerNodes.length + nodes.length;
 
   return (
@@ -158,7 +120,11 @@ export default function NodesCard({ profileId, profileName, nodes, generatedAt, 
                         <LockOutlined />
                       </span>
                       <span className="row-name">{p.name}</span>
-                      {p.type && <span className="tag-mono tag-proto">{p.type}</span>}
+                      {p.type && (
+                        <span className="tag-mono tag-proto">
+                          {NODE_TYPE_LABELS[p.type] ?? p.type}
+                        </span>
+                      )}
                     </div>
                   ))
                 )}
@@ -170,11 +136,6 @@ export default function NodesCard({ profileId, profileName, nodes, generatedAt, 
                 title={t("nodes.customGroup")}
                 sub={t("nodes.customReadonly")}
                 count={nodes.length}
-                extra={
-                  <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={startAdd}>
-                    {t("nodes.add")}
-                  </Button>
-                }
               >
                 {nodes.length === 0 ? (
                   <div className="empty-line">{t("nodes.customEmpty")}</div>
@@ -185,7 +146,11 @@ export default function NodesCard({ profileId, profileName, nodes, generatedAt, 
                         <LockOutlined />
                       </span>
                       <span className="row-name">{n.name}</span>
-                      {n.node_type && <span className="tag-mono tag-proto custom">{n.node_type}</span>}
+                      {n.node_type && (
+                        <span className="tag-mono tag-proto custom">
+                          {NODE_TYPE_LABELS[n.node_type] ?? n.node_type}
+                        </span>
+                      )}
                       <span className="tag-addr">{nodeAddr(n.content)}</span>
                     </div>
                   ))
@@ -201,18 +166,6 @@ export default function NodesCard({ profileId, profileName, nodes, generatedAt, 
         {t("nodes.manageHint")} <Link to="/nodes">{t("nav.nodes")}</Link>
       </div>
 
-      <Modal
-        title={t("nodes.add")}
-        open={open}
-        onCancel={() => setOpen(false)}
-        onOk={save}
-        width={680}
-        okText={t("common.save")}
-        cancelText={t("common.cancel")}
-        destroyOnClose
-      >
-        <NodeForm key={formKey} value={model} onChange={setModel} />
-      </Modal>
     </div>
   );
 }

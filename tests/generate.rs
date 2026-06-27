@@ -3,7 +3,7 @@
 //! hosted link works; the public endpoint coalesces concurrent refreshes
 //! (single-flight), falls back to stale cache on fetch failure, returns a
 //! generic 503 when there is no cache and the fetch fails, and a uniform 404
-//! for a wrong prefix / unknown token / disabled profile.
+//! for a wrong prefix / unknown token.
 
 mod common;
 
@@ -97,8 +97,7 @@ async fn text(resp: Response<Body>) -> String {
 }
 
 async fn create_profile(app: &Router, cookie: &str) -> Value {
-    let body =
-        r#"{"name":"P","source_type":"clash","source_url":"https://provider.example/sub?token=x"}"#;
+    let body = r#"{"name":"P","source_url":"https://provider.example/sub?token=x"}"#;
     let resp = app
         .clone()
         .oneshot(authed("POST", "/api/profiles", cookie, body))
@@ -125,6 +124,8 @@ async fn generate_populates_cache_and_public_link_serves_it() {
     let profile = create_profile(&app, &cookie).await;
     let id = profile["id"].as_str().unwrap();
     let sub = sub_path(profile["subscription_url"].as_str().unwrap());
+    // 新建已自动拉取一次;归零计数器,下面只统计 generate / 公开拉取触发的拉取。
+    fetcher.calls.store(0, Ordering::SeqCst);
 
     // Generate: one fetch, cache populated.
     let resp = app
@@ -177,7 +178,7 @@ async fn proxies_endpoint_reflects_generated_cache() {
     let profile = create_profile(&app, &cookie).await;
     let id = profile["id"].as_str().unwrap();
 
-    // Before generation: no cache, so the preview reports `generated: false`.
+    // 新建即自动生成一次:缓存已存在,含机场代理 hk-1,但尚无自定义节点。
     let resp = app
         .clone()
         .oneshot(authed(
@@ -190,8 +191,18 @@ async fn proxies_endpoint_reflects_generated_cache() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let body = json(resp).await;
-    assert_eq!(body["generated"], false);
-    assert_eq!(body["proxies"].as_array().unwrap().len(), 0);
+    assert_eq!(body["generated"], true);
+    let names: Vec<&str> = body["proxies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["name"].as_str().unwrap())
+        .collect();
+    assert!(
+        names.contains(&"hk-1"),
+        "provider proxy present after create"
+    );
+    assert!(!names.contains(&"my-vmess"), "custom node not added yet");
 
     // Add a custom node, then generate.
     let node = r#"{"name":"my-vmess","node_type":"vmess","content":"{ name: my-vmess, type: vmess, server: 9.9.9.9, port: 443, uuid: abc }"}"#;
@@ -426,9 +437,8 @@ async fn global_node_applies_to_every_profile() {
 
     // Two distinct profiles; the global node is appended to each one's output.
     for name in ["alpha", "beta"] {
-        let body = format!(
-            r#"{{"name":"{name}","source_type":"clash","source_url":"https://provider.example/sub?token=x"}}"#
-        );
+        let body =
+            format!(r#"{{"name":"{name}","source_url":"https://provider.example/sub?token=x"}}"#);
         let resp = app
             .clone()
             .oneshot(authed("POST", "/api/profiles", &cookie, &body))
@@ -465,6 +475,8 @@ async fn reorder_applies_to_the_cache_immediately_without_a_fetch() {
 
     let profile = create_profile(&app, &cookie).await;
     let id = profile["id"].as_str().unwrap();
+    // 新建已自动拉取一次;归零计数器以便断言后续仅 generate 触发 1 次拉取。
+    fetcher.calls.store(0, Ordering::SeqCst);
 
     // Custom node + generate: cached order is provider-first [hk-1, mine].
     let node = r#"{"name":"mine","node_type":"ss","content":"{ name: mine, type: ss, server: 9.9.9.9, port: 1080 }"}"#;
@@ -941,8 +953,10 @@ async fn concurrent_public_requests_coalesce_into_one_fetch() {
 
     let profile = create_profile(&app, &cookie).await;
     let sub = sub_path(profile["subscription_url"].as_str().unwrap());
+    // 新建已自动拉取一次;归零计数器以隔离下面并发拉取的次数。
+    fetcher.calls.store(0, Ordering::SeqCst);
 
-    // No cache yet: fire 10 concurrent public requests.
+    // 公开端点每次拉取都尝试刷新;10 个并发命中经单飞合并为一次上游拉取。
     let mut handles = Vec::new();
     for _ in 0..10 {
         let app = app.clone();
@@ -1049,14 +1063,13 @@ async fn public_downloads_are_rate_limited_per_ip_across_tokens() {
 }
 
 #[tokio::test]
-async fn wrong_prefix_unknown_token_and_disabled_are_404() {
+async fn wrong_prefix_and_unknown_token_are_404() {
     let temp = TempDb::new();
     let fetcher = Arc::new(FakeFetcher::default());
     let app = build_router(test_state_with_fetcher(&temp, fetcher).await);
     let cookie = login(&app).await;
 
     let profile = create_profile(&app, &cookie).await;
-    let id = profile["id"].as_str().unwrap();
     let sub = sub_path(profile["subscription_url"].as_str().unwrap());
     let token = sub.rsplit('/').next().unwrap().to_string();
 
@@ -1080,22 +1093,6 @@ async fn wrong_prefix_unknown_token_and_disabled_are_404() {
                 .body(Body::empty())
                 .unwrap(),
         )
-        .await
-        .unwrap();
-    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-
-    // Disabled profile.
-    app.clone()
-        .oneshot(authed(
-            "PUT",
-            &format!("/api/profiles/{id}"),
-            &cookie,
-            r#"{"enabled":false}"#,
-        ))
-        .await
-        .unwrap();
-    let resp = app
-        .oneshot(Request::get(&sub).body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);

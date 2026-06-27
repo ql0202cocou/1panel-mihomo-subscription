@@ -48,7 +48,9 @@ impl Drop for TempDb {
 
 /// Build an `AppState` backed by a fresh temp database, with fixed admin
 /// credentials `admin` / `s3cret` and a known base URL and path prefix. Uses a
-/// real (never-called in CRUD tests) HTTP fetcher.
+/// real HTTP fetcher: profile creation auto-fetches once, but the `*.example`
+/// provider URLs are RFC 2606 reserved (guaranteed NXDOMAIN), so it fails fast,
+/// best-effort, without real network egress.
 pub async fn test_state(temp: &TempDb) -> Arc<AppState> {
     let fetcher = Arc::new(HttpFetcher {
         timeout: Duration::from_secs(5),

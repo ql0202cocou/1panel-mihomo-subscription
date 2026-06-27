@@ -23,8 +23,8 @@ https://<PUBLIC_BASE_URL>/<PUBLIC_PATH_PREFIX>/api/sub/<profile_token>
 
 ## Token 轮换
 
-重置单配置 token、重置全局 `PUBLIC_PATH_PREFIX`(使所有链接失效)、禁用配置(链接立即失效)
-均支持;机场变化时链接保持稳定,除非显式重置。
+重置单配置 token、重置全局 `PUBLIC_PATH_PREFIX`(使所有链接失效)均支持;机场变化时链接保持
+稳定,除非显式重置。
 
 ## 管理员认证
 
@@ -83,6 +83,6 @@ https://<PUBLIC_BASE_URL>/<PUBLIC_PATH_PREFIX>/api/sub/<profile_token>
 
 ## 错误处理
 
-- 公共端点:无效路径 / token / 禁用 → 通用 `404`;有效但无缓存且拉取失败 → 通用 `503`
+- 公共端点:无效路径 / token → 通用 `404`;有效但无缓存且拉取失败 → 通用 `503`
   (体内无上游细节);不透露 token 是否存在。
 - 管理 API:返回有用校验错误但不含机场秘密;内部细节脱敏后入日志。

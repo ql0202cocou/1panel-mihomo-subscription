@@ -14,10 +14,10 @@ import {
 import {
   ArrowRightOutlined,
   DeleteOutlined,
+  DownOutlined,
   EditOutlined,
   HolderOutlined,
   LockOutlined,
-  PlusOutlined,
 } from "@ant-design/icons";
 import {
   DndContext,
@@ -68,6 +68,9 @@ const RULE_TYPE_GROUPS: { key: string; types: string[] }[] = [
   { key: "logical", types: ["AND", "OR", "NOT", "SUB-RULE"] },
   { key: "fallback", types: ["MATCH"] },
 ];
+
+// 全部已知规则类型集合。用于:输入恰为某完整类型(默认值/已选值)时不收窄下拉,以便浏览切换。
+const ALL_RULE_TYPES = new Set(RULE_TYPE_GROUPS.flatMap((g) => g.types));
 
 const NETWORK_OPTIONS = ["tcp", "udp"];
 const IN_TYPE_OPTIONS = ["HTTP", "HTTPS", "SOCKS", "SOCKS4", "SOCKS5", "MIXED", "REDIR", "TPROXY", "TUN"];
@@ -219,11 +222,6 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
     message.success(t("rules.orderSaved"));
   }
 
-  function openAdd() {
-    setEditing(null);
-    setModel(EMPTY_RULE);
-    setModalOpen(true);
-  }
   function openEdit(index: number) {
     setEditing(index);
     setModel(parseRule(rules[index]));
@@ -258,7 +256,8 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
       void persist([...rules, line], null);
       return;
     }
-    const next = editing === null ? [...rules, line] : rules.map((l, i) => (i === editing ? line : l));
+    // 走到这里 editing 必为被编辑行的下标(单条新增入口已移除,MATCH 情况已在上面返回)。
+    const next = rules.map((l, i) => (i === editing ? line : l));
     void persist(next, matchLine);
   }
 
@@ -298,8 +297,6 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
       ).map((value) => ({ value })),
     [policies, nodes, groups],
   );
-
-  const ruleSetNames = useMemo(() => ruleSets.map((r) => r.name), [ruleSets]);
 
   // 当前规则里已被 RULE-SET 引用的规则集名(导入弹窗据此标记「已引用」)。
   const referenced = useMemo(() => {
@@ -354,9 +351,6 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
           <Popconfirm title={t("rules.importConfirm")} onConfirm={importProviderRules}>
             <Button loading={importing}>{t("rules.importProvider")}</Button>
           </Popconfirm>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
-            {t("rules.add")}
-          </Button>
         </div>
       </div>
 
@@ -370,7 +364,7 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
       )}
 
       {rules.length === 0 && !matchLine ? (
-        <div className="empty-line">{t("rules.empty")}</div>
+        <div className="empty-line">{t("rules.emptyHint")}</div>
       ) : (
         <>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
@@ -396,10 +390,10 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
 
       <Modal
         open={modalOpen}
-        title={editing === null ? t("rules.add") : t("rules.edit")}
+        title={t("rules.edit")}
         onOk={submit}
         onCancel={closeModal}
-        okText={editing === null ? t("rules.add") : t("common.save")}
+        okText={t("common.save")}
         cancelText={t("common.cancel")}
         destroyOnClose
       >
@@ -407,7 +401,6 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
           model={model}
           onChange={setModel}
           policyOptions={policyOptions}
-          ruleSetOptions={ruleSetNames.map((value) => ({ value }))}
         />
       </Modal>
 
@@ -547,10 +540,9 @@ interface ComposerProps {
   model: RuleModel;
   onChange: (m: RuleModel) => void;
   policyOptions: { value: string }[];
-  ruleSetOptions: { value: string }[];
 }
 
-function RuleComposer({ model, onChange, policyOptions, ruleSetOptions }: ComposerProps) {
+function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
   const { t } = useTranslation();
   const upperType = model.type.trim().toUpperCase();
   const isMatch = upperType === "MATCH";
@@ -569,6 +561,7 @@ function RuleComposer({ model, onChange, policyOptions, ruleSetOptions }: Compos
         input: (
           <AutoComplete
             style={{ width: "100%" }}
+            suffixIcon={<DownOutlined />}
             options={NETWORK_OPTIONS.map((value) => ({ value }))}
             value={model.payload}
             onChange={(payload) => onChange({ ...model, payload })}
@@ -583,6 +576,7 @@ function RuleComposer({ model, onChange, policyOptions, ruleSetOptions }: Compos
         input: (
           <AutoComplete
             style={{ width: "100%" }}
+            suffixIcon={<DownOutlined />}
             options={IN_TYPE_OPTIONS.map((value) => ({ value }))}
             value={model.payload}
             onChange={(payload) => onChange({ ...model, payload })}
@@ -598,16 +592,12 @@ function RuleComposer({ model, onChange, policyOptions, ruleSetOptions }: Compos
       return {
         label: t("rules.ruleSetLabel"),
         input: (
-          // 从全局规则集库选名(「规则托管」),仍允许自由输入以兼容机场自带规则集名。
-          <AutoComplete
+          // 独立规则:直接填规则集名(rule-provider 条目名),不耦合「规则托管」库与机场规则。
+          <Input
             style={{ width: "100%" }}
-            options={ruleSetOptions}
             value={model.payload}
-            onChange={(payload) => onChange({ ...model, payload })}
+            onChange={(e) => onChange({ ...model, payload: e.target.value })}
             placeholder={t("rules.ruleSetPayloadHint")}
-            filterOption={(input, opt) =>
-              String(opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
-            }
           />
         ),
       };
@@ -648,13 +638,19 @@ function RuleComposer({ model, onChange, policyOptions, ruleSetOptions }: Compos
         <Typography.Text type="secondary">{t("rules.ruleType")}</Typography.Text>
         <AutoComplete
           style={{ width: "100%" }}
+          suffixIcon={<DownOutlined />}
           options={typeOptions}
           value={model.type}
           onChange={(type) => onChange({ ...model, type })}
           placeholder={t("rules.ruleType")}
-          filterOption={(input, opt) =>
-            String((opt as { value?: string })?.value ?? "").toLowerCase().includes(input.toLowerCase())
-          }
+          filterOption={(input, opt) => {
+            // 输入恰为某个完整类型(默认的 DOMAIN-SUFFIX 或已选值)时不收窄下拉,展示全部以便浏览
+            // 切换;否则按子串过滤。不然预填的默认值会把下拉收成只剩它自己。
+            if (ALL_RULE_TYPES.has(input)) return true;
+            return String((opt as { value?: string })?.value ?? "")
+              .toLowerCase()
+              .includes(input.toLowerCase());
+          }}
         />
       </div>
       {isMatch ? (
@@ -684,6 +680,7 @@ function RuleComposer({ model, onChange, policyOptions, ruleSetOptions }: Compos
         <Typography.Text type="secondary">{t("rules.policy")}</Typography.Text>
         <AutoComplete
           style={{ width: "100%" }}
+          suffixIcon={<DownOutlined />}
           options={policyOptions}
           value={model.policy}
           onChange={(policy) => onChange({ ...model, policy })}

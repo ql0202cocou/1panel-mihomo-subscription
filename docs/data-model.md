@@ -47,11 +47,9 @@ CREATE TABLE app_settings (
 CREATE TABLE profiles (
     id          TEXT    PRIMARY KEY,
     name        TEXT    NOT NULL,
-    source_type TEXT    NOT NULL CHECK (source_type IN ('mihomo','clash','surge','loon')),
     source_url  TEXT    NOT NULL,
     output_type TEXT    NOT NULL DEFAULT 'mihomo',
     token       TEXT    NOT NULL,
-    enabled     INTEGER NOT NULL DEFAULT 1,
     last_fetch_at     TEXT,
     last_fetch_status TEXT,
     node_order  TEXT,
@@ -63,7 +61,6 @@ CREATE TABLE profiles (
 
 CREATE UNIQUE INDEX idx_profiles_token ON profiles (token);
 CREATE UNIQUE INDEX idx_profiles_name  ON profiles (name);
-CREATE INDEX idx_profiles_enabled      ON profiles (enabled);
 ```
 
 - `token`:≥32 随机字节、URL-safe;自托管单用户场景明文存储以便展示完整链接(有意不哈希)。

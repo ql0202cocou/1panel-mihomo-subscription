@@ -174,7 +174,7 @@ export default function RuleSets() {
   const hostedPreview = `…/r/${form.name.trim() || "{name}"}/${form.behavior}.${form.format}`;
 
   return (
-    <div className="page-detail" style={{ maxWidth: 1080 }}>
+    <div className="page-list">
       <p className="detail-context" style={{ marginTop: 4 }}>
         {t("ruleSets.help")}
       </p>

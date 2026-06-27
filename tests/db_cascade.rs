@@ -12,8 +12,8 @@ use sqlx::SqlitePool;
 async fn seed_profile_with_children(pool: &SqlitePool, profile_id: &str) {
     let now = "2026-06-12T00:00:00Z";
     sqlx::query(
-        "INSERT INTO profiles (id, name, source_type, source_url, token, created_at, updated_at)
-         VALUES (?, 'p', 'clash', 'https://example.com/sub?token=x', 'tok', ?, ?)",
+        "INSERT INTO profiles (id, name, source_url, token, created_at, updated_at)
+         VALUES (?, 'p', 'https://example.com/sub?token=x', 'tok', ?, ?)",
     )
     .bind(profile_id)
     .bind(now)

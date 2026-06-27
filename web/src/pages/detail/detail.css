@@ -290,7 +290,7 @@
 .tag-addr {
   flex-shrink: 0;
   width: 200px;
-  text-align: right;
+  text-align: left;
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-3);

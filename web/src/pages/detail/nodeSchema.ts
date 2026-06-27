@@ -51,6 +51,22 @@ export const NODE_TYPES = [
   "snell",
 ];
 
+/** 协议类型的全称展示名,仅用于下拉标签;保存值仍是上面的字面量 key(Mihomo 必需)。 */
+export const NODE_TYPE_LABELS: Record<string, string> = {
+  ss: "Shadowsocks",
+  ssr: "ShadowsocksR",
+  vmess: "VMess",
+  vless: "VLESS",
+  trojan: "Trojan",
+  hysteria2: "Hysteria2",
+  hysteria: "Hysteria",
+  tuic: "TUIC",
+  wireguard: "WireGuard",
+  http: "HTTP",
+  socks5: "SOCKS5",
+  snell: "Snell",
+};
+
 /** 所有类型都显示的字段,排在类型专属字段之前。 */
 export const BASE_FIELDS: FieldDef[] = [
   { key: "server", kind: "text", placeholder: "example.com / 1.2.3.4" },

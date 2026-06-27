@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Button, Form, Input, Modal, Select, message } from "antd";
+import { Button, Form, Input, Modal, message } from "antd";
 import { CopyOutlined, PlusOutlined, RightOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../api";
-import type { ProfileSummary, SourceType } from "../types";
+import type { ProfileSummary } from "../types";
 import "./ProfileList.css";
-
-const SOURCE_TYPES: SourceType[] = ["mihomo", "clash", "surge", "loon"];
 
 export default function ProfileList() {
   const { t } = useTranslation();
@@ -29,11 +27,7 @@ export default function ProfileList() {
     void load();
   }, []);
 
-  async function onCreate(values: {
-    name: string;
-    source_type: SourceType;
-    source_url: string;
-  }) {
+  async function onCreate(values: { name: string; source_url: string }) {
     try {
       await api<ProfileSummary>("/api/profiles", {
         method: "POST",
@@ -58,12 +52,11 @@ export default function ProfileList() {
 
   const metrics = useMemo(() => {
     const total = profiles.length;
-    const enabled = profiles.filter((p) => p.enabled).length;
     // 拉取异常:有拉取记录且非 success(从未拉取的 null 不计为异常)。
     const errored = profiles.filter(
       (p) => p.last_fetch_status && p.last_fetch_status !== "success",
     ).length;
-    return { total, enabled, errored };
+    return { total, errored };
   }, [profiles]);
 
   return (
@@ -86,19 +79,7 @@ export default function ProfileList() {
           <div className="metric-value">{metrics.total}</div>
         </div>
         <div className="metric">
-          <div className="metric-label">
-            <span className="metric-dot" style={{ background: "var(--success)" }} />
-            {t("profiles.metricEnabled")}
-          </div>
-          <div className="metric-value" style={{ color: "var(--success)" }}>
-            {metrics.enabled}
-          </div>
-        </div>
-        <div className="metric">
-          <div className="metric-label">
-            <span className="metric-dot" style={{ background: "var(--danger)" }} />
-            {t("profiles.metricError")}
-          </div>
+          <div className="metric-label">{t("profiles.metricError")}</div>
           <div className="metric-value" style={{ color: "var(--danger)" }}>
             {metrics.errored}
           </div>
@@ -144,14 +125,6 @@ export default function ProfileList() {
             <Input />
           </Form.Item>
           <Form.Item
-            name="source_type"
-            label={t("profiles.sourceType")}
-            initialValue="clash"
-            rules={[{ required: true }]}
-          >
-            <Select options={SOURCE_TYPES.map((s) => ({ value: s, label: s }))} />
-          </Form.Item>
-          <Form.Item
             name="source_url"
             label={t("profiles.sourceUrl")}
             rules={[{ required: true }]}
@@ -172,19 +145,23 @@ function ProfileBar({
   onCopy: () => void;
 }) {
   const { t } = useTranslation();
+  // 新建后会自动拉取一次,故订阅恒带真实状态;无「未拉取」中间态(状态为空则不显示徽章)。
   const status = profile.last_fetch_status;
-  const { label, cls } = !status
-    ? { label: t("profiles.fetchNever"), cls: "status-never" }
-    : status === "success"
+  const badge =
+    status === "success"
       ? { label: t("profiles.fetchOk"), cls: "status-ok" }
-      : { label: t("profiles.fetchFail"), cls: "status-fail" };
+      : status
+        ? { label: t("profiles.fetchFail"), cls: "status-fail" }
+        : null;
 
   return (
     <div className="profile-bar">
       <div className="profile-main">
         <div className="profile-name-row">
           <span className="profile-name">{profile.name}</span>
-          <span className={`profile-status ${cls}`}>{label}</span>
+          {badge && (
+            <span className={`profile-status ${badge.cls}`}>{badge.label}</span>
+          )}
         </div>
         <div className="profile-url">{profile.source_url_masked}</div>
       </div>

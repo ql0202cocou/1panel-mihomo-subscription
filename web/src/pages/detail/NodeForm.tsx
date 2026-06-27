@@ -1,8 +1,15 @@
-import { AutoComplete, Form, Input } from "antd";
+import { Form, Input, Select } from "antd";
 import { useTranslation } from "react-i18next";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import { commonFields, commonKeys, groupsFor, NODE_TYPES, type FieldDef } from "./nodeSchema";
-import { AdvancedFields, FieldInput, TypeChips, getPath, isEmptyValue, setPath, splitAdvanced } from "./fields";
+import {
+  commonFields,
+  commonKeys,
+  groupsFor,
+  NODE_TYPES,
+  NODE_TYPE_LABELS,
+  type FieldDef,
+} from "./nodeSchema";
+import { AdvancedFields, FieldInput, getPath, isEmptyValue, setPath, splitAdvanced } from "./fields";
 
 export interface NodeModel {
   name: string;
@@ -113,20 +120,21 @@ export default function NodeForm({ value, onChange }: Props) {
         />
       </Form.Item>
       <Form.Item label={t("nodes.type")} required>
-        <TypeChips
-          options={NODE_TYPES}
-          value={value.type}
-          onChange={(type) => onChange({ ...value, type })}
-        />
-        <AutoComplete
+        <Select
+          showSearch
           style={{ width: "100%" }}
-          options={NODE_TYPES.map((o) => ({ value: o }))}
-          value={value.type}
+          options={NODE_TYPES.map((o) => ({ value: o, label: NODE_TYPE_LABELS[o] ?? o }))}
+          value={value.type || undefined}
           onChange={(s) => onChange({ ...value, type: s })}
-          placeholder="ss / vmess / vless / trojan / hysteria2"
-          filterOption={(input, opt) =>
-            (opt?.value ?? "").toLowerCase().includes(input.toLowerCase())
-          }
+          placeholder={t("nodes.typePlaceholder")}
+          filterOption={(input, opt) => {
+            // 按全称或字面量过滤,输入「shadow」或「ss」都能搜到;底层值仍是字面量。
+            const q = input.toLowerCase();
+            return (
+              String(opt?.label ?? "").toLowerCase().includes(q) ||
+              String(opt?.value ?? "").toLowerCase().includes(q)
+            );
+          }}
         />
       </Form.Item>
 

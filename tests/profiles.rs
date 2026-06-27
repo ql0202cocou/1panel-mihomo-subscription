@@ -63,7 +63,7 @@ fn authed(method: &str, path: &str, cookie: &str, body: &str) -> Request<Body> {
 
 async fn create_profile(app: &Router, cookie: &str, name: &str) -> Value {
     let body = format!(
-        r#"{{"name":"{name}","source_type":"clash","source_url":"https://provider.example/sub?token=secret123"}}"#
+        r#"{{"name":"{name}","source_url":"https://provider.example/sub?token=secret123"}}"#
     );
     let resp = send(app, authed("POST", "/api/profiles", cookie, &body)).await;
     assert_eq!(resp.status(), StatusCode::CREATED);
@@ -117,20 +117,9 @@ async fn duplicate_name_conflicts() {
     let cookie = login(&app).await;
 
     create_profile(&app, &cookie, "dup").await;
-    let body = r#"{"name":"dup","source_type":"clash","source_url":"https://x.example/s?t=1"}"#;
+    let body = r#"{"name":"dup","source_url":"https://x.example/s?t=1"}"#;
     let resp = send(&app, authed("POST", "/api/profiles", &cookie, body)).await;
     assert_eq!(resp.status(), StatusCode::CONFLICT);
-}
-
-#[tokio::test]
-async fn invalid_source_type_is_bad_request() {
-    let temp = TempDb::new();
-    let app = build_router(test_state(&temp).await);
-    let cookie = login(&app).await;
-
-    let body = r#"{"name":"x","source_type":"sing-box","source_url":"https://x.example/s?t=1"}"#;
-    let resp = send(&app, authed("POST", "/api/profiles", &cookie, body)).await;
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -146,8 +135,7 @@ async fn disallowed_source_url_is_rejected_at_write_time() {
         "http://localhost/sub",
         "http://127.0.0.1/sub",
     ] {
-        let body =
-            format!(r#"{{"name":"bad-{url:?}","source_type":"clash","source_url":"{url}"}}"#);
+        let body = format!(r#"{{"name":"bad-{url:?}","source_url":"{url}"}}"#);
         let resp = send(&app, authed("POST", "/api/profiles", &cookie, &body)).await;
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "url={url}");
     }

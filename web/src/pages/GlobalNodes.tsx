@@ -25,6 +25,7 @@ import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../api";
 import type { CustomNode } from "../types";
 import NodeForm, { contentToModel, modelToContent, nodeAddr, type NodeModel } from "./detail/NodeForm";
+import { NODE_TYPE_LABELS } from "./detail/nodeSchema";
 import "./detail/detail.css";
 
 const EMPTY_MODEL: NodeModel = { name: "", type: "", fields: {} };
@@ -113,7 +114,7 @@ export default function GlobalNodes() {
   }
 
   return (
-    <div className="page-detail" style={{ maxWidth: 1080 }}>
+    <div className="page-list">
       <p className="detail-context" style={{ marginTop: 4 }}>
         {t("nodes.globalHelper")}
       </p>
@@ -181,7 +182,11 @@ function NodeRow({
         <HolderOutlined />
       </span>
       <span className="row-name">{node.name}</span>
-      {node.node_type && <span className="tag-mono tag-proto custom">{node.node_type}</span>}
+      {node.node_type && (
+        <span className="tag-mono tag-proto custom">
+          {NODE_TYPE_LABELS[node.node_type] ?? node.node_type}
+        </span>
+      )}
       <span className="tag-addr">{nodeAddr(node.content)}</span>
       <span className="row-actions">
         <button className="icon-btn" onClick={() => onEdit(node)} aria-label={t("basic.edit")}>

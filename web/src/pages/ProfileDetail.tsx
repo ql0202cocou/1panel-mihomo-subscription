@@ -7,9 +7,7 @@ import {
   Modal,
   Popconfirm,
   QRCode,
-  Select,
   Spin,
-  Switch,
   Tabs,
   message,
 } from "antd";
@@ -21,13 +19,11 @@ import {
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../api";
-import type { ProfileDetail as Detail, SourceType } from "../types";
+import type { ProfileDetail as Detail } from "../types";
 import NodesCard from "./detail/NodesCard";
 import GroupsCard from "./detail/GroupsCard";
 import RulesCard from "./detail/RulesCard";
 import "./detail/detail.css";
-
-const SOURCE_TYPES: SourceType[] = ["mihomo", "clash", "surge", "loon"];
 
 export default function ProfileDetail() {
   const { t } = useTranslation();
@@ -35,6 +31,7 @@ export default function ProfileDetail() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [generating, setGenerating] = useState(false);
   const [genErrors, setGenErrors] = useState<string[]>([]);
+  const [genWarnings, setGenWarnings] = useState<string[]>([]);
 
   const reload = useCallback(async () => {
     if (id) setDetail(await api<Detail>(`/api/profiles/${id}`));
@@ -50,9 +47,13 @@ export default function ProfileDetail() {
     if (!id) return;
     setGenerating(true);
     setGenErrors([]);
+    setGenWarnings([]);
     try {
-      await api(`/api/profiles/${id}/generate`, { method: "POST" });
+      const res = await api<{ ruleset_conflicts?: string[] }>(`/api/profiles/${id}/generate`, {
+        method: "POST",
+      });
       message.success(t("detail.generateSuccess"));
+      setGenWarnings(res.ruleset_conflicts ?? []);
       await reload();
     } catch (e) {
       const err = e as ApiError;
@@ -84,7 +85,6 @@ export default function ProfileDetail() {
           profileName={detail.name}
           nodes={detail.nodes}
           generatedAt={detail.last_generated_at}
-          onChange={reload}
         />
       ),
     },
@@ -131,9 +131,6 @@ export default function ProfileDetail() {
       </Link>
       <div className="detail-head">
         <span className="detail-name">{detail.name}</span>
-        <span className={`pill ${detail.enabled ? "pill-success" : "pill-muted"}`}>
-          {detail.enabled ? t("profiles.enabled") : t("profiles.disabled")}
-        </span>
       </div>
       <div className="detail-context">{t("detail.context")}</div>
 
@@ -147,6 +144,12 @@ export default function ProfileDetail() {
               <li key={i}>{e}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {genWarnings.length > 0 && (
+        <div className="warn-banner" style={{ marginBottom: 16 }}>
+          {t("detail.rulesetConflict")}:{genWarnings.join("、")}
         </div>
       )}
 
@@ -215,31 +218,20 @@ function BasicInfo({
 }) {
   const { t } = useTranslation();
   const [editOpen, setEditOpen] = useState(false);
-  const [urlOpen, setUrlOpen] = useState(false);
-  const [url, setUrl] = useState("");
   const [form] = Form.useForm();
 
-  async function saveBasic(values: { name: string; enabled: boolean; source_type: SourceType }) {
-    await api(`/api/profiles/${detail.id}`, { method: "PUT", body: JSON.stringify(values) });
+  async function saveBasic(values: { name: string; source_url?: string }) {
+    // 机场订阅 URL 为写敏感字段(响应恒脱敏、不回显):留空表示保持不变,填入则整体替换。
+    const body: Record<string, unknown> = { name: values.name };
+    const nextUrl = values.source_url?.trim();
+    if (nextUrl) body.source_url = nextUrl;
+    await api(`/api/profiles/${detail.id}`, { method: "PUT", body: JSON.stringify(body) });
     setEditOpen(false);
-    onSaved();
-  }
-
-  async function saveUrl() {
-    await api(`/api/profiles/${detail.id}`, {
-      method: "PUT",
-      body: JSON.stringify({ source_url: url }),
-    });
-    setUrlOpen(false);
-    setUrl("");
     onSaved();
   }
 
   const rows: [string, string, boolean?][] = [
     [t("basic.name"), detail.name],
-    [t("basic.enabled"), detail.enabled ? "✓" : "—"],
-    [t("basic.outputType"), detail.output_type, true],
-    [t("source.type"), detail.source_type, true],
     [t("source.url"), detail.source_url_masked, true],
     [
       t("source.lastFetch"),
@@ -258,15 +250,13 @@ function BasicInfo({
             onClick={() => {
               form.setFieldsValue({
                 name: detail.name,
-                enabled: detail.enabled,
-                source_type: detail.source_type,
+                source_url: "",
               });
               setEditOpen(true);
             }}
           >
             {t("basic.edit")}
           </Button>
-          <Button onClick={() => setUrlOpen(true)}>{t("source.newUrl")}</Button>
           <Button type="primary" icon={<ReloadOutlined />} loading={refreshing} onClick={onRefresh}>
             {t("source.refresh")}
           </Button>
@@ -294,25 +284,10 @@ function BasicInfo({
           <Form.Item name="name" label={t("basic.name")} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="source_type" label={t("source.type")}>
-            <Select options={SOURCE_TYPES.map((s) => ({ value: s, label: s }))} />
-          </Form.Item>
-          <Form.Item name="enabled" label={t("basic.enabled")} valuePropName="checked">
-            <Switch />
+          <Form.Item name="source_url" label={t("source.newUrl")} extra={t("source.urlHint")}>
+            <Input placeholder="https://..." />
           </Form.Item>
         </Form>
-      </Modal>
-
-      <Modal
-        title={t("source.newUrl")}
-        open={urlOpen}
-        onCancel={() => setUrlOpen(false)}
-        onOk={saveUrl}
-        okText={t("common.save")}
-        cancelText={t("common.cancel")}
-      >
-        <p style={{ marginTop: 0, color: "var(--text-3)" }}>{t("source.urlHint")}</p>
-        <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." />
       </Modal>
     </div>
   );

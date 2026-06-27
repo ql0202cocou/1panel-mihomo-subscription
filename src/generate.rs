@@ -34,7 +34,6 @@ struct ProfileCore {
     name: String,
     source_url: String,
     token: String,
-    enabled: bool,
 }
 
 #[derive(FromRow, Clone)]
@@ -49,6 +48,8 @@ struct Built {
     userinfo: Option<String>,
     content_hash: String,
     generated_at: String,
+    /// 生成期的非致命告警(目前:自定义规则集与机场 `rule-providers` 撞名,已覆盖)。
+    warnings: Vec<String>,
 }
 
 /// 一次刷新尝试的结果,用于选择公开响应。
@@ -63,6 +64,8 @@ enum BuildError {
 pub struct GenerateResponse {
     subscription_url: String,
     generated_at: String,
+    /// 与机场 `rule-providers` 撞名、已被面板托管版覆盖的自定义规则集名(空表示无冲突)。
+    ruleset_conflicts: Vec<String>,
 }
 
 /// `POST /api/profiles/:id/generate` —— 校验、拉取、转换、持久化。
@@ -82,7 +85,19 @@ pub async fn generate(
     Ok(Json(GenerateResponse {
         subscription_url: state.subscription_url(&profile.token),
         generated_at: built.generated_at,
+        ruleset_conflicts: built.warnings,
     }))
+}
+
+/// 新建订阅后自动拉取一次。尽力而为:拉取/转换失败仅由 `fetch_and_convert` 记录 `last_fetch_status`,
+/// 绝不让创建本身失败。供 `profiles::create` 复用,使新订阅立即带有真实拉取状态(无「未拉取」中间态)。
+pub async fn generate_best_effort(state: &AppState, id: &str) {
+    let Some(profile) = load_core(state, id).await.ok().flatten() else {
+        return;
+    };
+    if let Ok(built) = fetch_and_convert(state, &profile).await {
+        let _ = persist_cache(state, &profile.id, &built).await;
+    }
 }
 
 /// `GET /api/profiles/:id/preview` —— 只读的生成 YAML。有新鲜缓存则返回,否则实时生成、不持久化、
@@ -105,7 +120,7 @@ pub async fn preview(
         .fetch(&profile.source_url)
         .await
         .map_err(|e| ApiError::Upstream(e.status_label()))?;
-    let yaml = convert(&state, &profile.id, &fetched.body)
+    let (yaml, _) = convert(&state, &profile.id, &fetched.body)
         .await?
         .map_err(map_convert_err)?;
     Ok(yaml_body(yaml))
@@ -154,7 +169,7 @@ pub async fn public_sub(
         .into();
     let profile = load_core_by_token(&state, &token).await.ok().flatten();
 
-    let access_ok = prefix_ok && profile.as_ref().is_some_and(|p| p.enabled);
+    let access_ok = prefix_ok && profile.is_some();
     if !access_ok {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -239,13 +254,20 @@ async fn fetch_and_convert(state: &AppState, profile: &ProfileCore) -> Result<Bu
     };
     let _ = update_last_fetch(state, &profile.id, "success").await;
 
-    let yaml = convert(state, &profile.id, &fetched.body)
+    let (yaml, warnings) = convert(state, &profile.id, &fetched.body)
         .await
         .map_err(|_| BuildError::Upstream("internal".to_string()))?
         .map_err(|e| match e {
             ConvertError::Validation(v) => BuildError::Validation(v),
             ConvertError::ProviderParse => BuildError::Upstream("provider_parse".to_string()),
         })?;
+    if !warnings.is_empty() {
+        tracing::warn!(
+            profile = %profile.id,
+            conflicts = ?warnings,
+            "custom rule-sets override same-named provider rule-providers",
+        );
+    }
 
     let content_hash = hash_inputs(&fetched.body, &yaml);
     Ok(Built {
@@ -253,6 +275,7 @@ async fn fetch_and_convert(state: &AppState, profile: &ProfileCore) -> Result<Bu
         userinfo: fetched.subscription_userinfo,
         content_hash,
         generated_at: now(),
+        warnings,
     })
 }
 
@@ -261,7 +284,7 @@ async fn convert(
     state: &AppState,
     profile_id: &str,
     provider_yaml: &str,
-) -> ApiResult<Result<String, ConvertError>> {
+) -> ApiResult<Result<(String, Vec<String>), ConvertError>> {
     let rules =
         sqlx::query_scalar::<_, String>("SELECT content FROM rulesets WHERE profile_id = ?")
             .bind(profile_id)
@@ -337,6 +360,7 @@ async fn convert(
     .map(|(s, g)| (parse_order(s), parse_order(g)))
     .unwrap_or_default();
 
+    // 转换器在注入自定义规则集时一并报出与机场 `rule-providers` 撞名(覆盖)的名字,无需二次解析。
     Ok(converter::convert(ConvertInput {
         provider_yaml,
         rules: &rules,
@@ -367,7 +391,7 @@ fn map_convert_err(e: ConvertError) -> ApiError {
 
 async fn load_core(state: &AppState, id: &str) -> ApiResult<Option<ProfileCore>> {
     Ok(sqlx::query_as::<_, ProfileCore>(
-        "SELECT id, name, source_url, token, enabled FROM profiles WHERE id = ?",
+        "SELECT id, name, source_url, token FROM profiles WHERE id = ?",
     )
     .bind(id)
     .fetch_optional(&state.db)
@@ -376,7 +400,7 @@ async fn load_core(state: &AppState, id: &str) -> ApiResult<Option<ProfileCore>>
 
 async fn load_core_by_token(state: &AppState, token: &str) -> ApiResult<Option<ProfileCore>> {
     Ok(sqlx::query_as::<_, ProfileCore>(
-        "SELECT id, name, source_url, token, enabled FROM profiles WHERE token = ?",
+        "SELECT id, name, source_url, token FROM profiles WHERE token = ?",
     )
     .bind(token)
     .fetch_optional(&state.db)
