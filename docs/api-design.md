@@ -33,7 +33,8 @@
 
 凭据来自 `ADMIN_USERNAME` / `ADMIN_PASSWORD`(compose 环境变量)。登录签发会话 Cookie
 (`HttpOnly`、`SameSite=Lax`,HTTPS 加 `Secure`);登录失败按 IP + 账户限流。除 `/health`、
-登录、公开端点外,所有路由需有效会话(否则 `401`)。
+登录、公开端点外,所有路由需有效会话(否则 `401`)。所有状态变更请求(含登录/登出)必须带同源
+`Origin`;生产环境按 `PUBLIC_BASE_URL` 的完整 origin(scheme + host + port)校验,否则 `403`。
 
 ```text
 POST /api/auth/login  {username,password} -> 204+Set-Cookie | 401 | 429
@@ -225,9 +226,10 @@ GET /:public_path_prefix/api/sub/:token
 响应头:`content-type: text/yaml`、`content-disposition: attachment; filename="<name>.yaml"`、
 `subscription-userinfo`(从机场透传,无则省略)、`profile-update-interval: 24`(小时,MVP 固定)。
 
-- **每次拉取都重拉机场重新生成**(永得最新节点),无 TTL 短路;并发拉取由 per-profile
-  single-flight 合并为一次机场拉取。`generated_cache` 仅作拉取失败兜底(返陈旧缓存,无则
-  `503`)。无「生成配置」按钮(链接始终实时);响应/错误绝不含机场 URL;按 token + 来源 IP 限流。
+- 公共拉取在 `PUBLIC_REFRESH_MIN_SECONDS`(默认 30 秒)下限内复用最近生成缓存,降低 token 泄露后
+  高频请求对机场的回源放大;下限外回源拉取并重新生成。并发拉取由 per-profile single-flight 合并为
+  一次机场拉取。`generated_cache` 仍作拉取失败兜底(返陈旧缓存,无则 `503`)。无「生成配置」按钮;
+  响应/错误绝不含机场 URL;按 token + 来源 IP 限流。
 
 兼容:早期 `/api/v1/subscriptions*`、`/api/v1/merged` 已移除,无兼容层。
 

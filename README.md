@@ -57,7 +57,9 @@ services:
       - FETCH_TIMEOUT_SECONDS=15                     # 机场拉取超时 / provider fetch timeout
       - MAX_SUBSCRIPTION_SIZE_MB=8                   # 机场响应大小上限 / provider size cap
       - CACHE_TTL_MINUTES=15                         # 生成结果缓存 / generated cache TTL
-      - TRUSTED_PROXY_HOPS=1                          # 信任的反代跳数 / trusted reverse-proxy hops
+      - PUBLIC_REFRESH_MIN_SECONDS=30                # 公开订阅回源刷新下限 / public refresh floor
+      - TRUSTED_PROXY_HOPS=0                          # 默认不信任 XFF / do not trust XFF by default
+      - TRUSTED_PROXY_CIDRS=                          # 可信反代 CIDR,留空忽略 XFF / trusted proxy CIDRs
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
@@ -74,15 +76,20 @@ networks:
 start without `ADMIN_USERNAME`/`ADMIN_PASSWORD`; see the env-var table in
 [docs/1panel-app.md](docs/1panel-app.md) for every variable.
 
-**2. 反向代理 / Reverse proxy** — 在 1Panel「网站 → 反向代理」指向该容器,并**保留
-原始 Host 头**,否则管理 API 的 `Origin`/`Host` 同源校验会让登录/写操作返回 `403`。
+**2. 反向代理 / Reverse proxy** — `PUBLIC_BASE_URL` 必须等于浏览器访问的外部 origin,
+并在 1Panel「网站 → 反向代理」指向该容器时**保留原始 Host 头**,否则管理 API 的 `Origin`
+同源校验会让登录/写操作返回 `403`。
 In 1Panel **Websites → Reverse Proxy**, point a site at the container and
-**preserve the original Host header**, or the management API's `Origin`/`Host`
+**preserve the original Host header**, and make `PUBLIC_BASE_URL` match the
+browser-visible origin, or the management API's `Origin`
 check rejects every login/write with `403`:
 
 ```nginx
 proxy_set_header Host $host;
 ```
+
+默认配置会忽略 `X-Forwarded-For`,按 TCP 对端做登录/下载限流。若后端端口不会被公网直连,且需要按
+真实客户端 IP 限流,同时设置 `TRUSTED_PROXY_HOPS=1` 与反向代理所在的 `TRUSTED_PROXY_CIDRS`。
 
 部署后管理界面在站点根路径。 After deploy, the admin UI is at the site root.
 
@@ -117,6 +124,10 @@ settings to invalidate all links at once.
 Reference docs are in [docs/](docs/); CI gates are in
 [.github/workflows/ci.yml](.github/workflows/ci.yml), and release/change rules
 are in [docs/release.md](docs/release.md).
+
+前端本地构建需 Node `^20.19.0 || >=22.12.0`;CI 与 Docker 镜像构建使用 Node 22。
+Local frontend builds require Node `^20.19.0 || >=22.12.0`;CI and Docker image
+builds use Node 22.
 
 ## 许可证 / License
 

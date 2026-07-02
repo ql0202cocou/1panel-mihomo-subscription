@@ -10,6 +10,7 @@ use axum::{
     routing::{get, post, put},
     Json, Router,
 };
+use ipnet::IpNet;
 use sqlx::SqlitePool;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
@@ -41,10 +42,15 @@ pub struct AppState {
     pub fetcher: Arc<dyn SubscriptionFetcher>,
     /// 生成缓存的 TTL。
     pub cache_ttl: Duration,
+    /// 公开订阅端点两次真实回源刷新之间的最小间隔。间隔内复用最近缓存,避免泄露 token 后被
+    /// 单个客户端高频拉取放大为机场请求压力。
+    pub public_refresh_min_interval: Duration,
     /// per-profile 的刷新合并。
     pub single_flight: SingleFlight,
     /// 推导客户端 IP 时信任的反向代理跳数。
     pub trusted_proxy_hops: usize,
+    /// 允许提供可信 `X-Forwarded-For` 的直接 TCP 对端网段。
+    pub trusted_proxy_cidrs: Vec<IpNet>,
     /// 登录尝试限流器(按客户端 IP)。
     pub login_limiter: Arc<RateLimiter>,
     /// 公开下载限流器(按客户端 IP;抑制枚举)。
@@ -186,7 +192,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     let api = Router::new()
         .route("/auth/login", login_route)
         .merge(protected)
-        .layer(middleware::from_fn(auth::check_origin))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::check_origin,
+        ))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES));
 
     let spa = ServeDir::new(&state.web_dir)
@@ -195,7 +204,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(health))
         .nest("/api", api)
-        // 公开订阅下载:无鉴权,路径前缀 + token,但按客户端 IP + 路径限流。
+        // 公开订阅下载:无鉴权,路径前缀 + token,但按客户端 IP 限流。
         .route(
             "/:public_path_prefix/api/sub/:token",
             get(generate::public_sub).layer(middleware::from_fn_with_state(
@@ -213,6 +222,47 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             )),
         )
         .fallback_service(spa)
-        .layer(TraceLayer::new_for_http())
+        .layer(
+            TraceLayer::new_for_http().make_span_with(|request: &axum::http::Request<_>| {
+                tracing::debug_span!(
+                    "request",
+                    method = %request.method(),
+                    path = %redacted_trace_path(request.uri().path()),
+                    version = ?request.version(),
+                )
+            }),
+        )
         .with_state(state)
+}
+
+fn redacted_trace_path(path: &str) -> String {
+    let mut parts: Vec<&str> = path.split('/').collect();
+    for i in 0..parts.len().saturating_sub(2) {
+        if parts[i] == "api" && parts[i + 1] == "sub" {
+            if i > 0 && !parts[i - 1].is_empty() {
+                parts[i - 1] = "<prefix>";
+            }
+            parts[i + 2] = "<token>";
+            break;
+        }
+    }
+    parts.join("/")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::redacted_trace_path;
+
+    #[test]
+    fn trace_path_redacts_public_subscription_secrets() {
+        assert_eq!(
+            redacted_trace_path("/abc123/api/sub/token-value"),
+            "/<prefix>/api/sub/<token>"
+        );
+        assert_eq!(
+            redacted_trace_path("/abc123/api/sub/token-value/r/ads/domain.yaml"),
+            "/<prefix>/api/sub/<token>/r/ads/domain.yaml"
+        );
+        assert_eq!(redacted_trace_path("/api/profiles"), "/api/profiles");
+    }
 }

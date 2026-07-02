@@ -18,6 +18,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
+use url::Url;
 
 use crate::app::AppState;
 
@@ -173,29 +174,78 @@ pub async fn require_session(
     }
 }
 
-/// 针对 CSRF 的纵深防御:状态变更请求带 `Origin` 头时,它必须匹配请求的 `Host`。同源 SPA 请求
-/// 满足此条件;跨站表单提交不满足。无 `Origin` 的请求交由 `SameSite=Lax` cookie 属性兜底。
-pub async fn check_origin(req: Request, next: Next) -> Response {
+/// 针对 CSRF 的纵深防御:状态变更请求必须带同源 `Origin`。生产环境优先按 `PUBLIC_BASE_URL`
+/// 的完整 origin 校验;未配置时退回到 `Origin` host 与请求 `Host` 一致(用于本地开发)。
+pub async fn check_origin(
+    State(state): State<Arc<AppState>>,
+    req: Request,
+    next: Next,
+) -> Response {
     let state_changing = matches!(
         *req.method(),
         Method::POST | Method::PUT | Method::DELETE | Method::PATCH
     );
     if state_changing {
-        if let Some(origin) = req.headers().get(header::ORIGIN) {
-            let host = req.headers().get(header::HOST);
-            if !origin_matches_host(origin.to_str().ok(), host.and_then(|h| h.to_str().ok())) {
-                return StatusCode::FORBIDDEN.into_response();
-            }
+        let origin = req.headers().get(header::ORIGIN);
+        let host = req.headers().get(header::HOST);
+        if !origin_is_allowed(
+            origin.and_then(|o| o.to_str().ok()),
+            host.and_then(|h| h.to_str().ok()),
+            &state.public_base_url,
+        ) {
+            return StatusCode::FORBIDDEN.into_response();
         }
     }
     next.run(req).await
 }
 
-fn origin_matches_host(origin: Option<&str>, host: Option<&str>) -> bool {
-    match (origin, host) {
-        (Some(origin), Some(host)) => origin.split_once("://").map(|(_, a)| a) == Some(host),
+fn origin_is_allowed(origin: Option<&str>, host: Option<&str>, public_base_url: &str) -> bool {
+    let Some(origin) = origin else {
+        return false;
+    };
+
+    let configured_origin = public_base_url.trim();
+    if !configured_origin.is_empty() {
+        let Some(expected) = parse_origin(configured_origin) else {
+            return false;
+        };
+        return parse_origin(origin) == Some(expected);
+    }
+
+    // 本地开发或测试未配置 PUBLIC_BASE_URL 时,仍要求 Origin 是 http(s),且 host:port 与请求 Host
+    // 完全一致。生产部署建议始终配置 PUBLIC_BASE_URL,以同时固定 scheme。
+    let Some(parsed) = Url::parse(origin).ok() else {
+        return false;
+    };
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return false;
+    }
+    match (
+        origin.split_once("://").map(|(_, authority)| authority),
+        host,
+    ) {
+        (Some(origin_host), Some(host)) => origin_host == host,
         _ => false,
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct OriginParts {
+    scheme: String,
+    host: String,
+    port: u16,
+}
+
+fn parse_origin(value: &str) -> Option<OriginParts> {
+    let parsed = Url::parse(value).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return None;
+    }
+    Some(OriginParts {
+        scheme: parsed.scheme().to_string(),
+        host: parsed.host_str()?.to_ascii_lowercase(),
+        port: parsed.port_or_known_default()?,
+    })
 }
 
 // ─── Cookie 辅助 ───────────────────────────────────────────────────────────────
@@ -247,16 +297,55 @@ mod tests {
     }
 
     #[test]
-    fn origin_must_match_host() {
-        assert!(origin_matches_host(
+    fn origin_must_match_configured_public_origin() {
+        assert!(origin_is_allowed(
             Some("https://sub.example.com"),
-            Some("sub.example.com")
+            Some("sub.example.com"),
+            "https://sub.example.com"
         ));
-        assert!(!origin_matches_host(
+        assert!(origin_is_allowed(
+            Some("https://sub.example.com:443"),
+            Some("sub.example.com"),
+            "https://sub.example.com"
+        ));
+        assert!(!origin_is_allowed(
+            Some("http://sub.example.com"),
+            Some("sub.example.com"),
+            "https://sub.example.com"
+        ));
+        assert!(!origin_is_allowed(
             Some("https://evil.example.org"),
-            Some("sub.example.com")
+            Some("sub.example.com"),
+            "https://sub.example.com"
         ));
-        assert!(!origin_matches_host(None, Some("sub.example.com")));
-        assert!(!origin_matches_host(Some("https://sub.example.com"), None));
+        assert!(!origin_is_allowed(
+            None,
+            Some("sub.example.com"),
+            "https://sub.example.com"
+        ));
+        assert!(origin_is_allowed(
+            Some("https://sub.example.com"),
+            None,
+            "https://sub.example.com"
+        ));
+        assert!(!origin_is_allowed(
+            Some("https://sub.example.com"),
+            Some("sub.example.com"),
+            "sub.example.com"
+        ));
+    }
+
+    #[test]
+    fn origin_falls_back_to_host_when_public_base_url_is_empty() {
+        assert!(origin_is_allowed(
+            Some("http://localhost:5173"),
+            Some("localhost:5173"),
+            ""
+        ));
+        assert!(!origin_is_allowed(
+            Some("file://localhost:5173"),
+            Some("localhost:5173"),
+            ""
+        ));
     }
 }

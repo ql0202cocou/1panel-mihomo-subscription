@@ -5,14 +5,15 @@
 //! 的惯用做法——故 `ON DELETE CASCADE` 不会在池中某些连接上被静默禁用。`journal_mode = WAL`
 //! 只设一次,随数据库文件持久化。
 
-use std::time::Duration;
+use std::{error::Error, time::Duration};
 
-use anyhow::Result;
 use base64::Engine;
 use sqlx::sqlite::{
     SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteSynchronous,
 };
 use uuid::Uuid;
+
+type DbResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 /// 为数据库文件路径构建规范的每连接选项。
 pub fn connect_options(path: &str) -> SqliteConnectOptions {
@@ -26,7 +27,7 @@ pub fn connect_options(path: &str) -> SqliteConnectOptions {
 }
 
 /// 用给定选项打开连接池并运行待执行的迁移。
-pub async fn connect_with(options: SqliteConnectOptions) -> Result<SqlitePool> {
+pub async fn connect_with(options: SqliteConnectOptions) -> DbResult<SqlitePool> {
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect_with(options)
@@ -36,7 +37,7 @@ pub async fn connect_with(options: SqliteConnectOptions) -> Result<SqlitePool> {
 }
 
 /// 为 `path` 处的数据库文件打开连接池并运行待执行的迁移。
-pub async fn connect(path: &str) -> Result<SqlitePool> {
+pub async fn connect(path: &str) -> DbResult<SqlitePool> {
     connect_with(connect_options(path)).await
 }
 
@@ -45,7 +46,7 @@ pub async fn connect(path: &str) -> Result<SqlitePool> {
 pub async fn seed_public_path_prefix(
     pool: &SqlitePool,
     env_seed: Option<String>,
-) -> Result<String> {
+) -> DbResult<String> {
     if let Some((prefix,)) =
         sqlx::query_as::<_, (String,)>("SELECT public_path_prefix FROM app_settings WHERE id = 1")
             .fetch_optional(pool)

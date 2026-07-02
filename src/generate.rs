@@ -189,18 +189,21 @@ struct Served {
 }
 
 async fn serve_or_refresh(state: &AppState, profile: &ProfileCore) -> Option<Served> {
-    // 每次拉取都重拉机场,使客户端总能拿到最新节点;缓存仅在机场拉取失败时作兜底。
+    // 公开拉取在一个较短的最小刷新间隔内复用最近缓存,避免 token 泄露后被高频请求放大为机场
+    // 回源压力;间隔外仍尽力实时回源,失败时用缓存兜底。
     let arrived = now();
 
     // 把该 profile 的并发拉取合并为一次机场拉取。
     let lock = state.single_flight.lock_for(&profile.id);
     let _guard = lock.lock().await;
 
-    // 若本批里另一个请求在我们等锁期间已刷新过(缓存在我们到达时或之后被重生),就提供它而非
-    // 再次拉取——这正是把突发限制为单次上游拉取的关键。
+    // 若缓存仍处于公开刷新最小间隔内,直接提供它;否则如果本批里另一个请求在我们等锁期间已刷新过
+    // (缓存在我们到达时或之后被重生),也提供它而非再次拉取。
     let stale = load_cache(state, &profile.id).await.ok().flatten();
     if let Some(cache) = &stale {
-        if generated_since(&cache.generated_at, &arrived) {
+        if is_fresh(&cache.generated_at, state.public_refresh_min_interval)
+            || generated_since(&cache.generated_at, &arrived)
+        {
             return Some(cache.clone().into());
         }
     }

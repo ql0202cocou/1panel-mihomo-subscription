@@ -241,8 +241,9 @@ CREATE TABLE generated_cache (
 );
 ```
 
-- 每 profile 仅留最新一份。**公共端点每次拉取都重拉机场重新生成**,本缓存仅作机场拉取失败兜底;
-  `CACHE_TTL_MINUTES`(默认 15,按 `generated_at`)仅管理端 `preview`。
+- 每 profile 仅留最新一份。公共端点在 `PUBLIC_REFRESH_MIN_SECONDS`(默认 30 秒)下限内复用最近缓存,
+  下限外回源重新生成;本缓存也作机场拉取失败兜底。`CACHE_TTL_MINUTES`(默认 15,按 `generated_at`)
+  仅管理端 `preview`。
 - `subscription_userinfo`:机场响应头原文,随缓存保存并在公共端点透传(无则 NULL)。
   `content_hash`:对「输入 + 机场内容」的哈希,跳过无变化重复生成。
 
