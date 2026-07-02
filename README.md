@@ -18,10 +18,10 @@ UI with login, SSRF protection, and provider-URL masking.
 ## 在 1Panel 中部署 / Deploy in 1Panel
 
 镜像发布在 **Docker Hub**(`quinlanhoo/mihomo-subscription`,多架构 amd64+arm64),
-1Panel 主机直接拉取,无需本地构建。离线/内网请参见 `docs/release.md` 的本地构建备选。
+1Panel 主机直接拉取,无需本地构建。离线/内网请参见 `docs/deploy.md` 的本地构建备选。
 The image is published on **Docker Hub** (`quinlanhoo/mihomo-subscription`,
 multi-arch amd64+arm64); the 1Panel host pulls it directly, no local build
-needed. For offline/intranet, see the local-build fallback in `docs/release.md`.
+needed. For offline/intranet, see the local-build fallback in `docs/deploy.md`.
 
 最简单的方式是手写 Compose:在 1Panel「容器 → 编排」新建,把下面整段粘贴进去,
 **只改 4 个标注 `← 修改` 的值**,创建即部署。
@@ -36,7 +36,7 @@ services:
   mihomo-subscription:
     image: quinlanhoo/mihomo-subscription:latest
     container_name: mihomo-subscription
-    restart: always
+    restart: unless-stopped
     networks: [1panel-network]
     ports:
       - "8080:8080"                                  # 宿主:容器 / host:container
@@ -72,9 +72,9 @@ networks:
 ```
 
 缺少 `ADMIN_USERNAME`/`ADMIN_PASSWORD` 时服务会拒绝启动;每个变量的含义见
-[docs/1panel-app.md](docs/1panel-app.md) 的环境变量表。 The service refuses to
+[docs/deploy.md](docs/deploy.md) 的环境变量表。 The service refuses to
 start without `ADMIN_USERNAME`/`ADMIN_PASSWORD`; see the env-var table in
-[docs/1panel-app.md](docs/1panel-app.md) for every variable.
+[docs/deploy.md](docs/deploy.md) for every variable.
 
 **2. 反向代理 / Reverse proxy** — `PUBLIC_BASE_URL` 必须等于浏览器访问的外部 origin,
 并在 1Panel「网站 → 反向代理」指向该容器时**保留原始 Host 头**,否则管理 API 的 `Origin`
@@ -96,8 +96,8 @@ proxy_set_header Host $host;
 ## 使用 / Usage
 
 1. 用 compose 里的管理员账户登录。 Log in with the admin account from compose.
-2. 新建订阅配置:选择来源类型(`mihomo`/`clash`)、填写机场订阅 URL。
-   Create a profile: pick the source type (`mihomo`/`clash`) and enter the
+2. 新建订阅配置，填写机场订阅 URL。
+   Create a profile and enter the provider subscription URL.
    provider subscription URL.
 3. (可选)编辑分流规则、追加自定义节点和代理分组。
    Optionally edit rules and append custom nodes/proxy groups.
@@ -114,16 +114,14 @@ settings to invalidate all links at once.
 
 ## 文档与开发 / Docs & development
 
-参考文档见 [docs/](docs/)([api-design](docs/api-design.md)、
-[data-model](docs/data-model.md)、[security-design](docs/security-design.md)、
-[1panel-app](docs/1panel-app.md)、[release](docs/release.md)、
-[changelog](docs/changelog.md))。CI 门禁见
-[.github/workflows/ci.yml](.github/workflows/ci.yml),发布与变更规则见
-[docs/release.md](docs/release.md)。
+参考文档见 [docs/](docs/)（[architecture](docs/architecture.md)、
+[deploy](docs/deploy.md)、[changelog](docs/changelog.md)）。CI 门禁见
+[.github/workflows/ci.yml](.github/workflows/ci.yml)，发布与变更规则见
+[docs/deploy.md](docs/deploy.md)。
 
 Reference docs are in [docs/](docs/); CI gates are in
 [.github/workflows/ci.yml](.github/workflows/ci.yml), and release/change rules
-are in [docs/release.md](docs/release.md).
+are in [docs/deploy.md](docs/deploy.md).
 
 前端本地构建需 Node `^20.19.0 || >=22.12.0`;CI 与 Docker 镜像构建使用 Node 22。
 Local frontend builds require Node `^20.19.0 || >=22.12.0`;CI and Docker image

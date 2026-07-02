@@ -47,6 +47,10 @@
 
 ## [Unreleased]
 
+### 文档
+
+- 合并文档：`api-design.md` + `data-model.md` + `security-design.md` → `architecture.md`；`1panel-app.md` + `release.md` → `deploy.md`。保留 `changelog.md`，删除 `docs/README.md`。
+
 ## [0.5.1] - 2026-07-02
 
 ### 变更

@@ -2,8 +2,12 @@
 target/
 *.db
 
-# Local-only Claude Code project guide (kept out of version control by request).
+# Local-only AI assistant project guides (kept out of version control by request).
 CLAUDE.md
+AGENTS.md
+
+# Local-only IDE / editor configurations.
+.claude/
 
 # Local-only scratch / audit notes (not for the public repo).
 plan-*.md
