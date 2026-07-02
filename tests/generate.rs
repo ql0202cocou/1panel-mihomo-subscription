@@ -54,6 +54,8 @@ async fn login(app: &Router) -> String {
         .oneshot(
             Request::post("/api/auth/login")
                 .header(header::CONTENT_TYPE, "application/json")
+                .header(header::HOST, "sub.example.com")
+                .header(header::ORIGIN, "https://sub.example.com")
                 .body(Body::from(r#"{"username":"admin","password":"s3cret"}"#))
                 .unwrap(),
         )
@@ -166,6 +168,33 @@ async fn generate_populates_cache_and_public_link_serves_it() {
     let body = text(resp).await;
     assert!(body.contains("hk-1"), "provider proxy preserved");
     assert!(!body.contains("Proxy"), "provider group not passed through");
+}
+
+#[tokio::test]
+async fn public_pull_reuses_cache_within_refresh_floor() {
+    let temp = TempDb::new();
+    let fetcher = Arc::new(FakeFetcher::default());
+    let mut state = test_state_with_fetcher(&temp, fetcher.clone()).await;
+    Arc::get_mut(&mut state)
+        .unwrap()
+        .public_refresh_min_interval = Duration::from_secs(60);
+    let app = build_router(state);
+    let cookie = login(&app).await;
+
+    let profile = create_profile(&app, &cookie).await;
+    let sub = sub_path(profile["subscription_url"].as_str().unwrap());
+    fetcher.calls.store(0, Ordering::SeqCst);
+
+    let resp = app
+        .oneshot(Request::get(&sub).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(
+        fetcher.calls.load(Ordering::SeqCst),
+        0,
+        "public pull inside the refresh floor uses the generated cache"
+    );
 }
 
 #[tokio::test]

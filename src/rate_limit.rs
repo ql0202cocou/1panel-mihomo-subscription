@@ -87,7 +87,12 @@ fn client_ip(state: &AppState, req: &Request) -> String {
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
         .map(|ci| ci.0.ip());
-    net::client_ip_string(xff, peer, state.trusted_proxy_hops)
+    net::client_ip_string(
+        xff,
+        peer,
+        state.trusted_proxy_hops,
+        &state.trusted_proxy_cidrs,
+    )
 }
 
 /// 按客户端 IP 限制登录尝试(暴力破解防护)。

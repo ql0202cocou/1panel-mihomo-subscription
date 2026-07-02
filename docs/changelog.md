@@ -47,6 +47,37 @@
 
 ## [Unreleased]
 
+### 文档
+
+- 合并文档：`api-design.md` + `data-model.md` + `security-design.md` → `architecture.md`；`1panel-app.md` + `release.md` → `deploy.md`。保留 `changelog.md`，删除 `docs/README.md`。
+
+## [0.5.1] - 2026-07-02
+
+### 变更
+
+- 公共订阅端点新增回源刷新下限 `PUBLIC_REFRESH_MIN_SECONDS`(默认 30 秒):同一订阅在下限内复用最近
+  生成缓存,下限外仍回源刷新并保留 single-flight 合并与失败兜底,降低公开 token 泄露后的上游拉取放大。
+
+### 安全
+
+- 客户端 IP 派生默认不再信任 `X-Forwarded-For`: `TRUSTED_PROXY_HOPS` 默认改为 `0`,并新增
+  `TRUSTED_PROXY_CIDRS`;只有 TCP 对端落在显式可信反代网段内时才读取 XFF,避免后端端口被直连时
+  伪造 XFF 绕过登录/下载限流。
+- 管理端状态变更请求现在必须带同源 `Origin`,并按 `PUBLIC_BASE_URL` 的完整 origin(scheme +
+  host + port)校验;缺失 `Origin` 也返回 `403`,减少 CSRF 防护对浏览器 `SameSite` 行为的依赖。
+- 移除项目对 `anyhow` 的直接依赖,并将 lockfile 中的 `anyhow` 升至 `1.0.103`,清除
+  `RUSTSEC-2026-0190` 审计告警。
+- 公开规则集托管端点对齐订阅端点的前缀处理:前缀使用恒定时间比较,且无论前缀是否匹配都先执行
+  token 查找,避免规则集路径泄露额外的公共前缀时序信号。
+- HTTP trace span 不再记录完整 URI,改为记录脱敏 path;公开订阅/规则集路径中的
+  `PUBLIC_PATH_PREFIX` 与 per-profile token 均替换为占位值,避免调试日志泄露长期有效链接秘密。
+- 1Panel compose 示例显式设置 `SECURE_COOKIES=true`,减少 HTTPS 反代部署误发非 Secure 会话 cookie
+  的配置风险。
+- 升级前端开发依赖 Vite / React 插件,消除 `npm audit` 报告的 Vite/esbuild 开发服务器漏洞;CI 与
+  Docker 前端构建切到 Node 22,并声明本地构建需 Node `^20.19.0 || >=22.12.0`。
+- 修复 Vite dev proxy 与新 Origin 策略不一致的问题:本地代理保留浏览器的 `Host`/`Origin`,避免
+  `npm run dev` 登录和写操作因缺失 `Origin` 返回 `403`。
+
 ## [0.5.0] - 2026-06-28
 
 ### 变更

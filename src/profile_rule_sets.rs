@@ -18,6 +18,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use subtle::ConstantTimeEq;
 
 use crate::app::AppState;
 use crate::error::{ApiError, ApiResult};
@@ -380,9 +381,10 @@ pub async fn public_serve(
     State(state): State<Arc<AppState>>,
     Path((prefix, token, name, file)): Path<(String, String, String, String)>,
 ) -> Response {
-    if prefix != state.current_prefix() {
-        return StatusCode::NOT_FOUND.into_response();
-    }
+    let prefix_ok: bool = prefix
+        .as_bytes()
+        .ct_eq(state.current_prefix().as_bytes())
+        .into();
     let profile_id =
         match sqlx::query_scalar::<_, String>("SELECT id FROM profiles WHERE token = ?")
             .bind(&token)
@@ -392,6 +394,9 @@ pub async fn public_serve(
             Ok(Some(id)) => id,
             _ => return StatusCode::NOT_FOUND.into_response(),
         };
+    if !prefix_ok {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     let row = match fetch_serve_by_name(&state, &profile_id, &name).await {
         Ok(Some(r)) => r,
         _ => return StatusCode::NOT_FOUND.into_response(),

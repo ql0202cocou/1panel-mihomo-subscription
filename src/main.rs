@@ -1,10 +1,12 @@
 use std::{
+    error::Error,
+    io,
     net::SocketAddr,
     sync::{Arc, RwLock},
     time::Duration,
 };
 
-use anyhow::Context;
+use ipnet::IpNet;
 use mihomo_subscription::{
     app::{build_router, AppState},
     auth::{AdminAuth, SessionStore, SESSION_IDLE},
@@ -14,8 +16,10 @@ use mihomo_subscription::{
     single_flight::SingleFlight,
 };
 
+type AppResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
+
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> AppResult<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -52,10 +56,20 @@ async fn main() -> anyhow::Result<()> {
     let fetch_timeout = Duration::from_secs(env_u64("FETCH_TIMEOUT_SECONDS", 15));
     let max_bytes = env_u64("MAX_SUBSCRIPTION_SIZE_MB", 8) as usize * 1024 * 1024;
     let cache_ttl = Duration::from_secs(env_u64("CACHE_TTL_MINUTES", 15) * 60);
+    let public_refresh_min_interval =
+        Duration::from_secs(env_u64("PUBLIC_REFRESH_MIN_SECONDS", 30));
     let fetch_user_agent = std::env::var("FETCH_USER_AGENT")
         .ok()
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_USER_AGENT.to_string());
+    let trusted_proxy_hops = env_u64("TRUSTED_PROXY_HOPS", 0) as usize;
+    let trusted_proxy_cidrs = trusted_proxy_cidrs()?;
+    if trusted_proxy_hops > 0 && trusted_proxy_cidrs.is_empty() {
+        tracing::warn!(
+            "TRUSTED_PROXY_HOPS is set but TRUSTED_PROXY_CIDRS is empty; ignoring \
+             X-Forwarded-For and using the TCP peer for rate limiting"
+        );
+    }
 
     let state = Arc::new(AppState {
         db: pool,
@@ -71,8 +85,10 @@ async fn main() -> anyhow::Result<()> {
             user_agent: fetch_user_agent,
         }),
         cache_ttl,
+        public_refresh_min_interval,
         single_flight: SingleFlight::new(),
-        trusted_proxy_hops: env_u64("TRUSTED_PROXY_HOPS", 1) as usize,
+        trusted_proxy_hops,
+        trusted_proxy_cidrs,
         login_limiter: Arc::new(RateLimiter::new(10, Duration::from_secs(60))),
         download_limiter: Arc::new(RateLimiter::new(120, Duration::from_secs(60))),
     });
@@ -116,11 +132,40 @@ fn env_bool(key: &str, default: bool) -> bool {
     }
 }
 
-fn require_env(key: &str) -> anyhow::Result<String> {
-    let value = std::env::var(key)
-        .with_context(|| format!("{key} must be set (configured via the 1Panel install form)"))?;
+fn trusted_proxy_cidrs() -> io::Result<Vec<IpNet>> {
+    let Some(raw) = std::env::var("TRUSTED_PROXY_CIDRS")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+    else {
+        return Ok(Vec::new());
+    };
+
+    raw.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            s.parse::<IpNet>().map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("TRUSTED_PROXY_CIDRS contains an invalid CIDR: {s}"),
+                )
+            })
+        })
+        .collect()
+}
+
+fn require_env(key: &str) -> io::Result<String> {
+    let value = std::env::var(key).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{key} must be set (configured via the 1Panel install form)"),
+        )
+    })?;
     if value.is_empty() {
-        anyhow::bail!("{key} must not be empty");
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{key} must not be empty"),
+        ));
     }
     Ok(value)
 }

@@ -27,6 +27,15 @@ fn set_cookie_value(resp_headers: &header::HeaderMap) -> String {
     raw.split(';').next().unwrap().to_string()
 }
 
+fn same_origin_post(path: &str, body: Body) -> Request<Body> {
+    Request::post(path)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::HOST, "sub.example.com")
+        .header(header::ORIGIN, "https://sub.example.com")
+        .body(body)
+        .unwrap()
+}
+
 #[tokio::test]
 async fn health_requires_no_auth() {
     let temp = TempDb::new();
@@ -63,12 +72,10 @@ async fn login_with_wrong_credentials_is_401() {
     let app = build_router(test_state(&temp).await);
 
     let resp = app
-        .oneshot(
-            Request::post("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(login_body("admin", "wrong"))
-                .unwrap(),
-        )
+        .oneshot(same_origin_post(
+            "/api/auth/login",
+            login_body("admin", "wrong"),
+        ))
         .await
         .unwrap();
 
@@ -83,12 +90,10 @@ async fn login_then_access_session_then_logout() {
     // Log in.
     let resp = app
         .clone()
-        .oneshot(
-            Request::post("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(login_body("admin", "s3cret"))
-                .unwrap(),
-        )
+        .oneshot(same_origin_post(
+            "/api/auth/login",
+            login_body("admin", "s3cret"),
+        ))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
@@ -117,6 +122,8 @@ async fn login_then_access_session_then_logout() {
         .oneshot(
             Request::post("/api/auth/logout")
                 .header(header::COOKIE, &cookie)
+                .header(header::HOST, "sub.example.com")
+                .header(header::ORIGIN, "https://sub.example.com")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -155,23 +162,19 @@ async fn repeated_failed_logins_are_rate_limited() {
     for _ in 0..3 {
         let resp = app
             .clone()
-            .oneshot(
-                Request::post("/api/auth/login")
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .body(login_body("admin", "wrong"))
-                    .unwrap(),
-            )
+            .oneshot(same_origin_post(
+                "/api/auth/login",
+                login_body("admin", "wrong"),
+            ))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
     let resp = app
-        .oneshot(
-            Request::post("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(login_body("admin", "wrong"))
-                .unwrap(),
-        )
+        .oneshot(same_origin_post(
+            "/api/auth/login",
+            login_body("admin", "wrong"),
+        ))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
@@ -188,6 +191,45 @@ async fn cross_site_origin_on_login_is_forbidden() {
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::HOST, "sub.example.com")
                 .header(header::ORIGIN, "https://evil.example.org")
+                .body(login_body("admin", "s3cret"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn wrong_scheme_origin_on_login_is_forbidden() {
+    let temp = TempDb::new();
+    let app = build_router(test_state(&temp).await);
+
+    let resp = app
+        .oneshot(
+            Request::post("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::HOST, "sub.example.com")
+                .header(header::ORIGIN, "http://sub.example.com")
+                .body(login_body("admin", "s3cret"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn missing_origin_on_state_change_is_forbidden() {
+    let temp = TempDb::new();
+    let app = build_router(test_state(&temp).await);
+
+    let resp = app
+        .oneshot(
+            Request::post("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::HOST, "sub.example.com")
                 .body(login_body("admin", "s3cret"))
                 .unwrap(),
         )

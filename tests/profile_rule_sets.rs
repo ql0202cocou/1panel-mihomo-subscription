@@ -38,6 +38,8 @@ async fn login(app: &Router) -> String {
         .oneshot(
             Request::post("/api/auth/login")
                 .header(header::CONTENT_TYPE, "application/json")
+                .header(header::HOST, "sub.example.com")
+                .header(header::ORIGIN, "https://sub.example.com")
                 .body(Body::from(r#"{"username":"admin","password":"s3cret"}"#))
                 .unwrap(),
         )
