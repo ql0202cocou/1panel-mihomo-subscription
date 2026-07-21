@@ -20,11 +20,8 @@ use sqlx::FromRow;
 use crate::app::AppState;
 use crate::error::{ApiError, ApiResult};
 use crate::rulelib::{self, RuleSetBody};
+use crate::util::{MAX_ORDER_ENTRIES, MAX_ORDER_NAME_LEN};
 use crate::{mask, util::now};
-
-/// 排序请求的上界,与其它排序端点保持一致。
-const MAX_ORDER_ENTRIES: usize = 5_000;
-const MAX_ORDER_NAME_LEN: usize = 256;
 
 // ─── 行 / 响应 ──────────────────────────────────────────────────────────────────
 

@@ -157,6 +157,80 @@ async fn crud_counts_and_masks_no_hosted_link() {
 }
 
 #[tokio::test]
+async fn set_order_reorders_and_appends_unlisted() {
+    let temp = TempDb::new();
+    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher)).await);
+    let cookie = login(&app).await;
+
+    // 建三个规则集:初始顺序 a, b, c。
+    for name in ["a-set", "b-set", "c-set"] {
+        let body = format!(
+            r#"{{"name":"{name}","behavior":"domain","format":"yaml","content":"+.example.com"}}"#
+        );
+        let resp = app
+            .clone()
+            .oneshot(authed("POST", "/api/rule-sets", &cookie, &body))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    // 只列出 c-set(外加一个库中不存在的名字,应被忽略):c-set 提到最前,未列出的保持原有
+    // 相对顺序落在末尾。
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/api/rule-sets/order",
+            &cookie,
+            r#"{"order":["c-set","ghost"]}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/api/rule-sets", &cookie, ""))
+        .await
+        .unwrap();
+    let list = json(resp).await;
+    let names: Vec<&str> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["c-set", "a-set", "b-set"]);
+
+    // 再排一次全量顺序,确认批量更新在一个事务内整体生效。
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/api/rule-sets/order",
+            &cookie,
+            r#"{"order":["b-set","a-set","c-set"]}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/api/rule-sets", &cookie, ""))
+        .await
+        .unwrap();
+    let list = json(resp).await;
+    let names: Vec<&str> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["b-set", "a-set", "c-set"]);
+}
+
+#[tokio::test]
 async fn remote_source_masks_url() {
     let temp = TempDb::new();
     let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher)).await);

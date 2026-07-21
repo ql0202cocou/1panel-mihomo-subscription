@@ -9,6 +9,7 @@
 //! (`cache=1` 懒刷新二次托管,支持二进制 `mrs`;`cache=0` 转换时直接注入上游 URL)。
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::{
     extract::{Path, State},
@@ -24,7 +25,7 @@ use crate::app::AppState;
 use crate::error::{ApiError, ApiResult};
 use crate::mask;
 use crate::rulelib::{self, RuleSetBody};
-use crate::util::now;
+use crate::util::{is_fresh, now};
 
 // ─── 行 / 响应 ──────────────────────────────────────────────────────────────────
 
@@ -381,22 +382,24 @@ pub async fn public_serve(
     State(state): State<Arc<AppState>>,
     Path((prefix, token, name, file)): Path<(String, String, String, String)>,
 ) -> Response {
+    // 无论前缀是否匹配都执行 token 查找,并恒定时间比较前缀,使响应时序无法单独确认路径前缀
+    // (与 `generate::public_sub` 同一模式,见 `docs/security-design.md`)。
     let prefix_ok: bool = prefix
         .as_bytes()
         .ct_eq(state.current_prefix().as_bytes())
         .into();
-    let profile_id =
-        match sqlx::query_scalar::<_, String>("SELECT id FROM profiles WHERE token = ?")
-            .bind(&token)
-            .fetch_optional(&state.db)
-            .await
-        {
-            Ok(Some(id)) => id,
-            _ => return StatusCode::NOT_FOUND.into_response(),
-        };
-    if !prefix_ok {
+    let profile_id = sqlx::query_scalar::<_, String>("SELECT id FROM profiles WHERE token = ?")
+        .bind(&token)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten();
+
+    let access_ok = prefix_ok && profile_id.is_some();
+    if !access_ok {
         return StatusCode::NOT_FOUND.into_response();
     }
+    let profile_id = profile_id.expect("checked by access_ok");
     let row = match fetch_serve_by_name(&state, &profile_id, &name).await {
         Ok(Some(r)) => r,
         _ => return StatusCode::NOT_FOUND.into_response(),
@@ -439,42 +442,54 @@ async fn fetch_serve_by_id(state: &AppState, id: &str) -> ApiResult<Option<Serve
 }
 
 /// 远程镜像的懒刷新托管:单飞合并并发;缓存超 `interval_hours` 才回源拉取(SSRF 安全字节);拉取失败
-/// 回退旧缓存,无缓存则 `503`。与全局库 `rule_sets::serve_remote` 同构,但作用于 per-profile 表。
+/// 回退旧缓存,无缓存则 `503`。作用于 per-profile 表(③);全局库 ② 不再对外托管。
 async fn serve_remote(state: &AppState, row: ServeRow) -> Response {
     let Some(url) = row.url.clone() else {
         return StatusCode::NOT_FOUND.into_response();
     };
 
-    let lock = state
-        .single_flight
-        .lock_for(&format!("profile-ruleset:{}", row.id));
-    let _guard = lock.lock().await;
+    let key = format!("profile-ruleset:{}", row.id);
+    let lock = state.single_flight.lock_for(&key);
+    // guard 在块尾 drop,之后才归还锁条目(见 `SingleFlight::release` 的前提)。
+    let resp = {
+        let _guard = lock.lock().await;
 
-    // 等锁期间可能已被另一个请求刷新过——重读最新行。
-    let row = match fetch_serve_by_id(state, &row.id).await {
-        Ok(Some(r)) => r,
-        _ => return StatusCode::NOT_FOUND.into_response(),
+        // 等锁期间可能已被另一个请求刷新过——重读最新行。
+        let row = fetch_serve_by_id(state, &row.id).await.ok().flatten();
+        let fresh_cached = row
+            .as_ref()
+            .and_then(|r| match (&r.cached_body, &r.cached_at) {
+                (Some(body), Some(at)) if is_fresh(at, mirror_ttl(r.interval_hours)) => {
+                    Some((r.format.clone(), body.clone()))
+                }
+                _ => None,
+            });
+        match (row, fresh_cached) {
+            (None, _) => StatusCode::NOT_FOUND.into_response(),
+            (Some(_), Some((format, body))) => rulelib::serve_bytes(&format, body),
+            (Some(row), None) => match state.fetcher.fetch_bytes(&url).await {
+                Ok(bytes) => {
+                    let count = rulelib::body_count(&bytes, &row.format);
+                    let _ = persist_remote_cache(state, &row.id, &bytes, count).await;
+                    rulelib::serve_bytes(&row.format, bytes)
+                }
+                Err(e) => {
+                    let _ = update_fetch_status(state, &row.id, &e.status_label()).await;
+                    match row.cached_body {
+                        Some(b) => rulelib::serve_bytes(&row.format, b), // 回退旧缓存
+                        None => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+                    }
+                }
+            },
+        }
     };
-    if let (Some(body), Some(at)) = (&row.cached_body, &row.cached_at) {
-        if rulelib::is_fresh(at, row.interval_hours) {
-            return rulelib::serve_bytes(&row.format, body.clone());
-        }
-    }
+    state.single_flight.release(&key, &lock);
+    resp
+}
 
-    match state.fetcher.fetch_bytes(&url).await {
-        Ok(bytes) => {
-            let count = rulelib::body_count(&bytes, &row.format);
-            let _ = persist_remote_cache(state, &row.id, &bytes, count).await;
-            rulelib::serve_bytes(&row.format, bytes)
-        }
-        Err(e) => {
-            let _ = update_fetch_status(state, &row.id, &e.status_label()).await;
-            match row.cached_body {
-                Some(b) => rulelib::serve_bytes(&row.format, b), // 回退旧缓存
-                None => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-            }
-        }
-    }
+/// 镜像回源的最小间隔:`interval_hours` 转 `Duration`,下限 1 小时(与校验一致)。
+fn mirror_ttl(interval_hours: i64) -> Duration {
+    Duration::from_secs(interval_hours.max(1) as u64 * 3600)
 }
 
 async fn persist_remote_cache(

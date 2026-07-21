@@ -10,8 +10,12 @@ ignore = [
     # -i rsa` is empty and rsa is never compiled into the binary. No fixed
     # upgrade is available upstream.
     "RUSTSEC-2023-0071",
-    # rustls-pemfile unmaintained (informational, not a vulnerability). A
-    # transitive dependency of reqwest 0.11; the rustls stack is not compiled in
-    # this build (provider fetch uses native-tls; sqlite needs no TLS).
-    "RUSTSEC-2025-0134",
 ]
+
+# serde_yaml is unmaintained upstream (deprecated since 0.9.34). Assessed:
+# deferred migration — usage is wide (converter/yaml layer), and src/yaml.rs
+# already provides an independent defense layer (anchor/alias counting plus
+# depth/node limits) in front of parsing. No RUSTSEC advisory id exists for
+# serde_yaml itself (RUSTSEC-2025-0068 covers the different `serde_yml`
+# crate), so this is recorded as a comment only. Re-evaluate on dependency
+# bumps.

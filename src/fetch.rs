@@ -125,19 +125,31 @@ async fn fetch_raw(
 ) -> Result<(Vec<u8>, Option<String>), FetchError> {
     let mut url = Url::parse(raw_url).map_err(|_| FetchError::Ssrf(SsrfError::Host))?;
 
+    // 客户端跨跳复用:仅在钉定的 (host, addr) 变化时(重定向到新主机)才重建,无重定向的常规
+    // 路径整个循环只构建一次。IP 钉定仍按跳传递(`.resolve(host, addr)`)。
+    let mut pinned: Option<(String, SocketAddr)> = None;
+    let mut client: Option<reqwest::Client> = None;
+
     for _ in 0..=MAX_REDIRECTS {
         ssrf::validate_url(&url)?;
         let addr = resolve_validated(&url).await?;
 
         let host = url.host_str().ok_or(FetchError::Ssrf(SsrfError::Host))?;
-        let client = reqwest::Client::builder()
-            .connect_timeout(CONNECT_TIMEOUT)
-            .timeout(total_timeout)
-            .user_agent(user_agent) // 许多面板以 Clash 家族 UA 作为订阅门槛
-            .redirect(Policy::none()) // 手动跟随重定向,以便逐跳重新校验
-            .resolve(host, addr) // 固定到已校验的 IP
-            .build()
-            .map_err(|_| FetchError::Network)?;
+        let pin = (host.to_string(), addr);
+        if pinned.as_ref() != Some(&pin) {
+            client = Some(
+                reqwest::Client::builder()
+                    .connect_timeout(CONNECT_TIMEOUT)
+                    .timeout(total_timeout)
+                    .user_agent(user_agent) // 许多面板以 Clash 家族 UA 作为订阅门槛
+                    .redirect(Policy::none()) // 手动跟随重定向,以便逐跳重新校验
+                    .resolve(host, addr) // 固定到已校验的 IP
+                    .build()
+                    .map_err(|_| FetchError::Network)?,
+            );
+            pinned = Some(pin);
+        }
+        let client = client.as_ref().expect("built above for this pin");
 
         let resp = client
             .get(url.clone())

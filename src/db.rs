@@ -7,11 +7,11 @@
 
 use std::{error::Error, time::Duration};
 
-use base64::Engine;
 use sqlx::sqlite::{
     SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteSynchronous,
 };
-use uuid::Uuid;
+
+use crate::util::random_path_prefix;
 
 type DbResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -65,9 +65,4 @@ pub async fn seed_public_path_prefix(
         .execute(pool)
         .await?;
     Ok(prefix)
-}
-
-/// 随机 URL-safe 路径段(22 字符),落在 `docs/security-design.md` 推荐的 16-24 字符区间内。
-fn random_path_prefix() -> String {
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(Uuid::new_v4().into_bytes())
 }

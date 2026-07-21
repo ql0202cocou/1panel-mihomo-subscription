@@ -83,7 +83,7 @@ impl SessionStore {
     /// 创建新会话并返回其 ID(256 位 CSPRNG 熵)。
     pub fn create(&self) -> String {
         let mut bytes = [0u8; 32];
-        rand::rngs::OsRng.fill_bytes(&mut bytes);
+        rand::rng().fill_bytes(&mut bytes);
         let id = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
         let mut map = self.inner.lock().unwrap();
         // 创建时清扫过期会话。否则空闲/过期条目会一直滞留,直到同一 ID 再次被校验(对被遗弃的
@@ -134,7 +134,6 @@ pub struct SessionResponse {
 }
 
 pub async fn login(State(state): State<Arc<AppState>>, Json(body): Json<LoginRequest>) -> Response {
-    // 注:登录失败限流由 rate-limit 任务(#8)添加。
     if state.admin.verify(&body.username, &body.password) {
         let id = state.sessions.create();
         let cookie = build_cookie(&id, state.secure_cookies, SESSION_IDLE.as_secs());
@@ -213,7 +212,8 @@ fn origin_is_allowed(origin: Option<&str>, host: Option<&str>, public_base_url: 
     }
 
     // 本地开发或测试未配置 PUBLIC_BASE_URL 时,仍要求 Origin 是 http(s),且 host:port 与请求 Host
-    // 完全一致。生产部署建议始终配置 PUBLIC_BASE_URL,以同时固定 scheme。
+    // 一致(主机名大小写不敏感,与 `parse_origin` 的 lowercase 对齐)。生产部署建议始终配置
+    // PUBLIC_BASE_URL,以同时固定 scheme。
     let Some(parsed) = Url::parse(origin).ok() else {
         return false;
     };
@@ -224,7 +224,7 @@ fn origin_is_allowed(origin: Option<&str>, host: Option<&str>, public_base_url: 
         origin.split_once("://").map(|(_, authority)| authority),
         host,
     ) {
-        (Some(origin_host), Some(host)) => origin_host == host,
+        (Some(origin_host), Some(host)) => origin_host.eq_ignore_ascii_case(host),
         _ => false,
     }
 }

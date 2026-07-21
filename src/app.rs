@@ -113,25 +113,25 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/auth/session", get(auth::session))
         .route("/profiles", get(profiles::list).post(profiles::create))
         .route(
-            "/profiles/:id",
+            "/profiles/{id}",
             get(profiles::get)
                 .put(profiles::update)
                 .delete(profiles::delete),
         )
-        .route("/profiles/:id/reset-token", post(profiles::reset_token))
-        .route("/profiles/:id/generate", post(generate::generate))
-        .route("/profiles/:id/preview", get(generate::preview))
+        .route("/profiles/{id}/reset-token", post(profiles::reset_token))
+        .route("/profiles/{id}/generate", post(generate::generate))
+        .route("/profiles/{id}/preview", get(generate::preview))
         .route(
-            "/profiles/:id/provider-rules",
+            "/profiles/{id}/provider-rules",
             get(generate::provider_rules),
         )
-        .route("/profiles/:id/rules", put(profiles::put_rules))
-        .route("/profiles/:id/proxies", get(profiles::list_proxies))
+        .route("/profiles/{id}/rules", put(profiles::put_rules))
+        .route("/profiles/{id}/proxies", get(profiles::list_proxies))
         .route(
-            "/profiles/:id/node-section-order",
+            "/profiles/{id}/node-section-order",
             put(profiles::set_node_section_order),
         )
-        .route("/profiles/:id/group-order", put(profiles::set_group_order))
+        .route("/profiles/{id}/group-order", put(profiles::set_group_order))
         // 全局自定义节点(跨订阅池):增删改 + 排序。
         .route(
             "/global-nodes",
@@ -139,39 +139,39 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         )
         .route("/global-nodes/order", put(global_nodes::set_order))
         .route(
-            "/global-nodes/:id",
+            "/global-nodes/{id}",
             put(global_nodes::update).delete(global_nodes::delete),
         )
         // 全局规则集库(「规则托管」,② 用户库 / 导入源):增删改 + 排序。
         .route("/rule-sets", get(rule_sets::list).post(rule_sets::create))
         .route("/rule-sets/order", put(rule_sets::set_order))
         .route(
-            "/rule-sets/:id",
+            "/rule-sets/{id}",
             put(rule_sets::update).delete(rule_sets::delete),
         )
         // 订阅自有规则集(③ 托管规则库):增删改 + 从 ② 导入。
         .route(
-            "/profiles/:id/rule-sets",
+            "/profiles/{id}/rule-sets",
             get(profile_rule_sets::list).post(profile_rule_sets::create),
         )
         .route(
-            "/profiles/:id/rule-sets/import",
+            "/profiles/{id}/rule-sets/import",
             post(profile_rule_sets::import),
         )
         .route(
-            "/profiles/:id/rule-sets/:rsid",
+            "/profiles/{id}/rule-sets/{rsid}",
             put(profile_rule_sets::update).delete(profile_rule_sets::delete),
         )
         .route(
-            "/profiles/:id/groups",
+            "/profiles/{id}/groups",
             get(profiles::list_groups).post(profiles::create_group),
         )
         .route(
-            "/profiles/:id/import-provider-groups",
+            "/profiles/{id}/import-provider-groups",
             post(profiles::import_provider_groups),
         )
         .route(
-            "/profiles/:id/groups/:group_id",
+            "/profiles/{id}/groups/{group_id}",
             put(profiles::update_group).delete(profiles::delete_group),
         )
         .route("/settings", get(settings::get))
@@ -206,7 +206,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .nest("/api", api)
         // 公开订阅下载:无鉴权,路径前缀 + token,但按客户端 IP 限流。
         .route(
-            "/:public_path_prefix/api/sub/:token",
+            "/{public_path_prefix}/api/sub/{token}",
             get(generate::public_sub).layer(middleware::from_fn_with_state(
                 state.clone(),
                 rate_limit::download,
@@ -215,7 +215,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         // 公开规则集托管(③ 按订阅 token 隔离):无鉴权,前缀 + token + 名 + `<behavior>.<format>`,
         // 同样按客户端 IP 限流。② 全局库不再公开托管。
         .route(
-            "/:public_path_prefix/api/sub/:token/r/:name/:file",
+            "/{public_path_prefix}/api/sub/{token}/r/{name}/{file}",
             get(profile_rule_sets::public_serve).layer(middleware::from_fn_with_state(
                 state.clone(),
                 rate_limit::download,

@@ -95,10 +95,16 @@ async fn main() -> AppResult<()> {
 
     let app = build_router(state);
 
-    let port: u16 = std::env::var("PORT")
-        .unwrap_or_else(|_| "8080".to_string())
-        .parse()
-        .unwrap_or(8080);
+    // 非法 PORT 拒绝启动(与 TRUSTED_PROXY_CIDRS 同一严格度),而非静默回退 8080。
+    let port: u16 = match std::env::var("PORT") {
+        Ok(raw) => raw.parse().map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("PORT is not a valid port number: {raw}"),
+            )
+        })?,
+        Err(_) => 8080,
+    };
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
 
     let listener = tokio::net::TcpListener::bind(addr).await?;

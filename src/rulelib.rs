@@ -173,12 +173,3 @@ pub fn serve_bytes(format: &str, bytes: Vec<u8>) -> axum::response::Response {
     };
     ([(header::CONTENT_TYPE, ct)], bytes).into_response()
 }
-
-/// 缓存是否仍在 `interval_hours` 新鲜窗口内。
-pub fn is_fresh(cached_at: &str, interval_hours: i64) -> bool {
-    let Ok(at) = chrono::DateTime::parse_from_rfc3339(cached_at) else {
-        return false;
-    };
-    let age = chrono::Utc::now().signed_duration_since(at.with_timezone(&chrono::Utc));
-    age < chrono::Duration::hours(interval_hours.max(1))
-}

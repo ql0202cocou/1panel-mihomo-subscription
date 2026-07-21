@@ -17,7 +17,7 @@ use crate::app::AppState;
 use crate::error::{ApiError, ApiResult};
 use crate::mask::mask_url;
 use crate::ssrf::{self, SsrfError};
-use crate::util::{now, random_token};
+use crate::util::{now, random_token, MAX_ORDER_ENTRIES, MAX_ORDER_NAME_LEN};
 use crate::yaml;
 
 const GROUP_TYPES: [&str; 5] = ["select", "url-test", "fallback", "load-balance", "relay"];
@@ -508,26 +508,38 @@ fn extract_previews(root: &serde_yaml::Value, key: &str) -> Vec<ProxyPreview> {
 
 /// 请求针对哪一列手动排序。映射到固定列名,使 SQL 永不由调用方输入拼接。
 #[derive(Clone, Copy)]
-enum OrderKind {
+pub(crate) enum OrderKind {
     Group,
     /// 两个节点块的顺序(`node_section_order`):provider / custom。
     Section,
 }
 
+/// 解析存储的 `node_order`/`group_order` JSON 数组;NULL 或异常值返回空列表(= 默认顺序)。
+/// 生成(`src/generate.rs`)与预览共用此实现。
+pub(crate) fn parse_order(stored: Option<String>) -> Vec<String> {
+    stored
+        .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+        .unwrap_or_default()
+}
+
 /// 读取 profile 持久化的手动顺序(proxy-group 或 section 名)。缺失/NULL 或异常 JSON 返回空列表
-/// (= 默认顺序)。
-async fn load_order(state: &AppState, profile_id: &str, kind: OrderKind) -> ApiResult<Vec<String>> {
+/// (= 默认顺序)。生成(`src/generate.rs`)与预览共用此实现。
+pub(crate) async fn load_order(
+    state: &AppState,
+    profile_id: &str,
+    kind: OrderKind,
+) -> ApiResult<Vec<String>> {
     let sql = match kind {
         OrderKind::Group => "SELECT group_order FROM profiles WHERE id = ?",
         OrderKind::Section => "SELECT node_section_order FROM profiles WHERE id = ?",
     };
-    Ok(sqlx::query_scalar::<_, Option<String>>(sql)
-        .bind(profile_id)
-        .fetch_optional(&state.db)
-        .await?
-        .flatten()
-        .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
-        .unwrap_or_default())
+    Ok(parse_order(
+        sqlx::query_scalar::<_, Option<String>>(sql)
+            .bind(profile_id)
+            .fetch_optional(&state.db)
+            .await?
+            .flatten(),
+    ))
 }
 
 /// 已保存的 node-section 顺序,或默认 `["provider","custom"]`。
@@ -545,10 +557,6 @@ pub struct OrderBody {
     /// 有序的名字(provider + custom)。profile 中不存在的名字在生成时忽略;空数组清除手动顺序。
     order: Vec<String>,
 }
-
-/// 用于把单个 profile 的持久化顺序保持得小、请求校验便宜的上界。现实中 profile 的条目数远低于此。
-const MAX_ORDER_ENTRIES: usize = 5_000;
-const MAX_ORDER_NAME_LEN: usize = 256;
 
 /// 为给定列校验并持久化一个手动顺序。同时驱动生成输出(在下次生成时应用)与预览列表。
 async fn set_order(

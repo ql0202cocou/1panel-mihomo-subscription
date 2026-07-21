@@ -14,12 +14,8 @@ use sqlx::FromRow;
 
 use crate::app::AppState;
 use crate::error::{ApiError, ApiResult};
-use crate::util::now;
+use crate::util::{now, MAX_ORDER_ENTRIES, MAX_ORDER_NAME_LEN};
 use crate::yaml;
-
-/// 排序请求的上界,与 per-profile 的排序端点保持一致。
-const MAX_ORDER_ENTRIES: usize = 5_000;
-const MAX_ORDER_NAME_LEN: usize = 256;
 
 #[derive(FromRow)]
 struct GlobalNodeRow {

@@ -6,7 +6,6 @@
 //! 返回通用 `503`。见 `docs/api-design.md` 与 `docs/security-design.md`。
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use axum::{
     extract::{Path, State},
@@ -22,7 +21,8 @@ use subtle::ConstantTimeEq;
 use crate::app::AppState;
 use crate::converter::{self, ConvertError, ConvertInput, CustomGroup, CustomNode, RuleProvider};
 use crate::error::{ApiError, ApiResult};
-use crate::util::now;
+use crate::profiles::{self, OrderKind};
+use crate::util::{is_fresh, now};
 
 const UPDATE_INTERVAL_HOURS: u32 = 24;
 
@@ -56,6 +56,8 @@ struct Built {
 enum BuildError {
     Validation(Vec<String>),
     Upstream(String),
+    /// DB 等内部错误(已由 `convert` 经 `ApiError::Internal` 脱敏并记日志);不再误报为机场拉取失败。
+    Internal,
 }
 
 // ─── 处理器 ────────────────────────────────────────────────────────────────────
@@ -79,6 +81,7 @@ pub async fn generate(
         Ok(b) => b,
         Err(BuildError::Validation(errors)) => return Err(ApiError::Validation(errors)),
         Err(BuildError::Upstream(label)) => return Err(ApiError::Upstream(label)),
+        Err(BuildError::Internal) => return Err(ApiError::Internal),
     };
 
     persist_cache(&state, &profile.id, &built).await?;
@@ -195,43 +198,48 @@ async fn serve_or_refresh(state: &AppState, profile: &ProfileCore) -> Option<Ser
 
     // 把该 profile 的并发拉取合并为一次机场拉取。
     let lock = state.single_flight.lock_for(&profile.id);
-    let _guard = lock.lock().await;
+    // guard 在块尾 drop,之后才归还锁条目(见 `SingleFlight::release` 的前提)。
+    let served = {
+        let _guard = lock.lock().await;
 
-    // 若缓存仍处于公开刷新最小间隔内,直接提供它;否则如果本批里另一个请求在我们等锁期间已刷新过
-    // (缓存在我们到达时或之后被重生),也提供它而非再次拉取。
-    let stale = load_cache(state, &profile.id).await.ok().flatten();
-    if let Some(cache) = &stale {
-        if is_fresh(&cache.generated_at, state.public_refresh_min_interval)
-            || generated_since(&cache.generated_at, &arrived)
-        {
-            return Some(cache.clone().into());
-        }
-    }
-
-    match fetch_and_convert(state, profile).await {
-        Ok(built) => {
-            if persist_cache(state, &profile.id, &built).await.is_err() {
-                tracing::error!(profile = %profile.id, "failed to persist generated cache");
-            }
-            Some(Served {
-                yaml: built.yaml,
-                userinfo: built.userinfo,
-            })
-        }
-        Err(err) => {
-            if let BuildError::Upstream(label) = &err {
-                let _ = update_last_fetch(state, &profile.id, label).await;
-            }
-            // 有陈旧缓存就提供;否则给出 503。
-            match stale {
-                Some(cache) => {
-                    tracing::warn!(profile = %profile.id, "refresh failed; serving stale cache");
-                    Some(cache.into())
+        // 若缓存仍处于公开刷新最小间隔内,直接提供它;否则如果本批里另一个请求在我们等锁期间已刷新过
+        // (缓存在我们到达时或之后被重生),也提供它而非再次拉取。
+        let stale = load_cache(state, &profile.id).await.ok().flatten();
+        let use_stale = stale.as_ref().is_some_and(|cache| {
+            is_fresh(&cache.generated_at, state.public_refresh_min_interval)
+                || generated_since(&cache.generated_at, &arrived)
+        });
+        if use_stale {
+            stale.map(Served::from)
+        } else {
+            match fetch_and_convert(state, profile).await {
+                Ok(built) => {
+                    if persist_cache(state, &profile.id, &built).await.is_err() {
+                        tracing::error!(profile = %profile.id, "failed to persist generated cache");
+                    }
+                    Some(Served {
+                        yaml: built.yaml,
+                        userinfo: built.userinfo,
+                    })
                 }
-                None => None,
+                Err(err) => {
+                    if let BuildError::Upstream(label) = &err {
+                        let _ = update_last_fetch(state, &profile.id, label).await;
+                    }
+                    // 有陈旧缓存就提供;否则给出 503。
+                    match stale {
+                        Some(cache) => {
+                            tracing::warn!(profile = %profile.id, "refresh failed; serving stale cache");
+                            Some(cache.into())
+                        }
+                        None => None,
+                    }
+                }
             }
         }
-    }
+    };
+    state.single_flight.release(&profile.id, &lock);
+    served
 }
 
 impl From<CacheRow> for Served {
@@ -259,7 +267,8 @@ async fn fetch_and_convert(state: &AppState, profile: &ProfileCore) -> Result<Bu
 
     let (yaml, warnings) = convert(state, &profile.id, &profile.token, &fetched.body)
         .await
-        .map_err(|_| BuildError::Upstream("internal".to_string()))?
+        // DB 错误已被 `From<sqlx::Error>` 脱敏并记日志;传播为内部错误,不再误报为机场拉取失败。
+        .map_err(|_| BuildError::Internal)?
         .map_err(|e| match e {
             ConvertError::Validation(v) => BuildError::Validation(v),
             ConvertError::ProviderParse => BuildError::Upstream("provider_parse".to_string()),
@@ -303,30 +312,40 @@ async fn convert(
     let rule_providers: Vec<RuleProvider> = if refs.is_empty() {
         Vec::new()
     } else {
-        sqlx::query_as::<_, (String, String, String, String, Option<String>, bool)>(
-            "SELECT name, behavior, format, source, url, cache FROM profile_rule_sets \
+        let collected =
+            sqlx::query_as::<_, (String, String, String, String, Option<String>, bool)>(
+                "SELECT name, behavior, format, source, url, cache FROM profile_rule_sets \
              WHERE profile_id = ? AND enabled = 1",
-        )
-        .bind(profile_id)
-        .fetch_all(&state.db)
-        .await?
-        .into_iter()
-        .filter(|(name, ..)| refs.iter().any(|r| r == name))
-        .map(|(name, behavior, format, source, url, cache)| {
-            // remote 且关闭本地缓存托管:直接注入上游 URL;否则指向按订阅隔离的面板托管链接。
-            let link = if source == "remote" && !cache {
-                url.unwrap_or_default()
-            } else {
-                state.profile_rule_set_url(token, &name, &behavior, &format)
-            };
-            RuleProvider {
-                url: link,
-                name,
-                behavior,
-                format,
-            }
-        })
-        .collect()
+            )
+            .bind(profile_id)
+            .fetch_all(&state.db)
+            .await?
+            .into_iter()
+            .filter(|(name, ..)| refs.iter().any(|r| r == name))
+            .map(|(name, behavior, format, source, url, cache)| {
+                // remote 且关闭本地缓存托管:直接注入上游 URL;否则指向按订阅隔离的面板托管链接。
+                let link = if source == "remote" && !cache {
+                    // remote 必须有上游 URL;缺失(脏数据)报明确校验错误,而非注入空 URL。
+                    url.filter(|u| !u.trim().is_empty()).ok_or_else(|| {
+                        ConvertError::Validation(vec![format!(
+                            "rule-set `{name}` is remote without cache but has no upstream URL"
+                        )])
+                    })?
+                } else {
+                    state.profile_rule_set_url(token, &name, &behavior, &format)
+                };
+                Ok(RuleProvider {
+                    url: link,
+                    name,
+                    behavior,
+                    format,
+                })
+            })
+            .collect::<Result<Vec<_>, ConvertError>>();
+        match collected {
+            Ok(v) => v,
+            Err(e) => return Ok(Err(e)),
+        }
     };
 
     // 自定义节点是单一全局池(模型 C),追加到每条 profile 的输出,且查询已按自定义块顺序
@@ -364,7 +383,7 @@ async fn convert(
     .bind(profile_id)
     .fetch_optional(&state.db)
     .await?
-    .map(|(s, g)| (parse_order(s), parse_order(g)))
+    .map(|(s, g)| (profiles::parse_order(s), profiles::parse_order(g)))
     .unwrap_or_default();
 
     // 转换器在注入自定义规则集时一并报出与机场 `rule-providers` 撞名(覆盖)的名字,无需二次解析。
@@ -378,13 +397,6 @@ async fn convert(
         group_order,
         rule_providers,
     }))
-}
-
-/// 解析存储的 `node_order`/`group_order` JSON 数组;NULL 或异常值返回空列表(= 默认顺序)。
-fn parse_order(stored: Option<String>) -> Vec<String> {
-    stored
-        .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
-        .unwrap_or_default()
 }
 
 fn map_convert_err(e: ConvertError) -> ApiError {
@@ -531,7 +543,7 @@ pub async fn resync_cache(state: &AppState, profile_id: &str) -> ApiResult<()> {
     // proxies:从缓存输出重建两个块——按全局自定义节点名切分,自定义块按全局节点顺序
     // (`global_nodes.position`)重排,再按 `node_section_order` 拼接(机场块保持其缓存/上游顺序)。
     let node_order = global_node_order(state).await?;
-    let node_section_order = load_order_col(state, profile_id, "node_section_order").await?;
+    let node_section_order = profiles::load_order(state, profile_id, OrderKind::Section).await?;
     let custom = global_node_names(state).await?;
     if let Some(serde_yaml::Value::Sequence(proxies)) = root.get_mut("proxies") {
         let (mut custom_block, provider_block): (Vec<_>, Vec<_>) =
@@ -549,7 +561,7 @@ pub async fn resync_cache(state: &AppState, profile_id: &str) -> ApiResult<()> {
     }
 
     // proxy-groups:按保存的分组顺序重排。
-    let group_order = load_order_col(state, profile_id, "group_order").await?;
+    let group_order = profiles::load_order(state, profile_id, OrderKind::Group).await?;
     reorder_seq(&mut root, "proxy-groups", &group_order);
 
     // 用当前规则集替换 rules 块(顺序有意义);与转换器一致(跳过空/注释行,保持顺序)。
@@ -610,34 +622,7 @@ pub async fn resync_all_caches(state: &AppState) {
     }
 }
 
-/// 读取 profile 的 `node_section_order`/`group_order` JSON 数组(NULL/异常 → 空)。
-async fn load_order_col(
-    state: &AppState,
-    profile_id: &str,
-    column: &str,
-) -> ApiResult<Vec<String>> {
-    let sql = match column {
-        "node_section_order" => "SELECT node_section_order FROM profiles WHERE id = ?",
-        _ => "SELECT group_order FROM profiles WHERE id = ?",
-    };
-    Ok(sqlx::query_scalar::<_, Option<String>>(sql)
-        .bind(profile_id)
-        .fetch_optional(&state.db)
-        .await?
-        .flatten()
-        .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
-        .unwrap_or_default())
-}
-
 // ─── 辅助 ──────────────────────────────────────────────────────────────────────
-
-fn is_fresh(generated_at: &str, ttl: Duration) -> bool {
-    let Ok(generated) = chrono::DateTime::parse_from_rfc3339(generated_at) else {
-        return false;
-    };
-    let age = chrono::Utc::now().signed_duration_since(generated.with_timezone(&chrono::Utc));
-    age.to_std().map(|a| a < ttl).unwrap_or(false)
-}
 
 /// `generated_at` 是否在 `arrived` 当时或之后——即缓存自本请求开始等待以来被(重新)生成过,故
 /// 另一个并发拉取已刷新它。无法解析的时间戳算作「不在其后」(重新拉取)。
