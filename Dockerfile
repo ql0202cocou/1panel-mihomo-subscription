@@ -60,7 +60,7 @@ ENV WEB_DIR=/app/web/dist
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -qO- http://localhost:8080/health || exit 1
+    CMD wget -qO- "http://localhost:${PORT}/health" || exit 1
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["/app/mihomo-subscription"]

@@ -48,7 +48,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
 
       # Reads ignore rules (with rationale) from .cargo/audit.toml. Fails the
       # build on any new, non-ignored advisory.
@@ -73,5 +75,19 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
       - name: Type-check and build
         run: npm run build
+
+  docker:
+    name: Docker build smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Single-arch smoke build only; the release workflow pushes multi-arch
+      # images separately.
+      - name: Build image (no push)
+        run: docker build .

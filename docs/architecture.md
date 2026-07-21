@@ -34,7 +34,7 @@
 ### 认证
 
 凭据来自 `ADMIN_USERNAME` / `ADMIN_PASSWORD`（compose 环境变量）。登录签发会话 Cookie
-（`HttpOnly`、`SameSite=Lax`，HTTPS 加 `Secure`）；登录失败按 IP + 账户限流。除 `/health`、
+（`HttpOnly`、`SameSite=Lax`，HTTPS 加 `Secure`）；登录按来源 IP 限流（成功/失败请求均计数）。除 `/health`、
 登录、公开端点外，所有路由需有效会话（否则 `401`）。所有状态变更请求（含登录/登出）必须带同源
 `Origin`；生产环境按 `PUBLIC_BASE_URL` 的完整 origin（scheme + host + port）校验，否则 `403`。
 
@@ -231,7 +231,7 @@ GET /:public_path_prefix/api/sub/:token
 - 公共拉取在 `PUBLIC_REFRESH_MIN_SECONDS`（默认 30 秒）下限内复用最近生成缓存，降低 token 泄露后
   高频请求对机场的回源放大；下限外回源拉取并重新生成。并发拉取由 per-profile single-flight 合并为
   一次机场拉取。`generated_cache` 仍作拉取失败兜底（返陈旧缓存，无则 `503`）。无「生成配置」按钮；
-  响应/错误绝不含机场 URL；按 token + 来源 IP 限流。
+  响应/错误绝不含机场 URL；按来源 IP 限流。
 
 兼容：早期 `/api/v1/subscriptions*`、`/api/v1/merged` 已移除，无兼容层。
 
@@ -272,6 +272,7 @@ global_nodes (全局池，不挂任何 profile)
 
 profiles 1 ── 1 rulesets
 profiles 1 ── * custom_groups
+profiles 1 ── * profile_rule_sets
 profiles 1 ── 1 generated_cache
 ```
 
@@ -329,7 +330,7 @@ CREATE UNIQUE INDEX idx_profiles_name  ON profiles (name);
 
 #### rulesets
 
-每 profile 一份规则文本（`UNIQUE(profile_id)`）；保留 `priority`/`name` 备扩展。
+每 profile 一份规则文本（`UNIQUE(profile_id)`）；保留 `priority`/`name` 备扩展；`enabled` 同样是保留列（恒为 1，不参与生成与查询），仅备扩展、避免无谓迁移。
 
 ```sql
 CREATE TABLE rulesets (
@@ -539,7 +540,7 @@ https://<PUBLIC_BASE_URL>/<PUBLIC_PATH_PREFIX>/api/sub/<profile_token>
 ### 管理员认证
 
 - 凭据来自 `ADMIN_USERNAME` / `ADMIN_PASSWORD`（compose 环境变量），未设置拒绝启动；
-  恒定时间比较；登录失败按 IP + 账户限流。
+  恒定时间比较；登录按来源 IP 限流（成功/失败请求均计数）。
 - 会话 Cookie：≥128 位 CSPRNG ID、`HttpOnly` + `SameSite=Lax`、HTTPS 加 `Secure`；存内存
   （重启失效）、空闲超时默认 7 天。`Secure` 由 `https://` 的 `PUBLIC_BASE_URL` 推断；TLS 终止
   代理后（应用走 HTTP）需显式 `SECURE_COOKIES=true`，否则告警。

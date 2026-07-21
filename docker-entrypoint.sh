@@ -16,7 +16,9 @@ DATA_DIR="${DATA_DIR:-/data}"
 
 if [ "$(id -u)" = "0" ]; then
     mkdir -p "$DATA_DIR"
-    chown -R appuser:appuser "$DATA_DIR" 2>/dev/null || true
+    if ! chown -R appuser:appuser "$DATA_DIR" 2>/dev/null; then
+        echo "docker-entrypoint: warning: chown -R appuser:appuser $DATA_DIR failed; the app may be unable to write its database" >&2
+    fi
     exec gosu appuser "$@"
 fi
 

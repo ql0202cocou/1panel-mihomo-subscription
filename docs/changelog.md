@@ -47,8 +47,39 @@
 
 ## [Unreleased]
 
+### 修复
+
+- 生成/预览时数据库错误不再被误报为「机场拉取失败」（502），现按内部错误正确处理。
+- 生成时 remote 规则集缺少 URL 不再静默注入空 URL，改为明确的校验错误。
+- 无 `PUBLIC_BASE_URL` 时 Origin↔Host 回退比较改为大小写不敏感，修复 Host 大小写差异导致的误 403。
+- 前端：规则拖拽保存失败不再先弹成功提示；分组拖拽保存失败后回滚到服务端顺序。
+- 前端：补齐一批加载/操作失败时缺失的错误提示，列表/详情/设置等页失败不再静默或白页。
+- 前端：登录区分网络错误与凭据错误，网络错误给出单独文案。
+- 前端：规则集卡片计数文案修正（此前误用节点计数文案）。
+- 前端：antd 静态 `message` 统一改为 `App.useApp()`，修复暗色主题下提示不生效与 antd v5 静态函数警告。
+
+### 变更
+
+- 主依赖联动升级：axum 0.7→0.8（路由路径参数改 `{id}` 语法）、tower-http 0.5→0.6、
+  reqwest 0.11→0.12、base64 0.21→0.22、rand 0.8→0.9；rustls-pemfile 退出依赖树，
+  清理对应 audit ignore（RUSTSEC-2025-0134）。
+- 非法 `PORT` 环境变量不再静默回退 8080，启动即报错拒绝启动。
+- 移除未使用的 `tower` 依赖、`tower-http` 的 `cors` feature 与前端死依赖 `qrcode.react`；清理死 i18n key。
+- 后端内部去重：随机路径前缀生成、排序上限常量与顺序加载、缓存新鲜度判断各合并为单一实现；拉取器重定向循环复用同一 HTTP client；single-flight 锁表增加机会性清理，不再只增不减；删除陈旧注释。
+- 补充规则集排序、全局节点 CRUD、应用设置的集成测试。
+- 前端：同名 `RuleSet` 接口改名消歧；可访问性改进（拖拽手柄 `aria-label` 进 i18n、类型 chip 改 `<button>`、登录表单 label 关联输入框）；外链 Google Fonts 改为本地打包，离线可用；接入 ESLint 门禁（`npm run lint`）。
+- 容器 healthcheck 与 README compose 示例改用 `${PORT}`，不再硬编码 8080；entrypoint 在 chown 失败时向 stderr 告警（不再完全静默）。
+- CI：新增单架构 `docker build` 冒烟 job；`cargo-audit` 改用预编译二进制安装提速；前端 job 增加 `npm run lint` 步骤。
+
+### 安全
+
+- 公开规则集托管端点对齐订阅端点的防时序模式：前缀恒定时间比较，且无论前缀是否匹配都执行 token 查找。
+
 ### 文档
 
+- 修正登录限流描述为如实表述（按来源 IP、成功/失败请求均计数，此前误写为按 IP + 账户且按失败计数）；公开订阅端点限流描述统一为按来源 IP。
+- 实体关系图补 `profiles 1 ── * profile_rule_sets`；说明 `rulesets.enabled` 为备扩展保留列。
+- `CACHE_TTL_MINUTES` 注释改为如实描述（仅管理员预览缓存 TTL）。
 - 合并文档：`api-design.md` + `data-model.md` + `security-design.md` → `architecture.md`；`1panel-app.md` + `release.md` → `deploy.md`。保留 `changelog.md`，删除 `docs/README.md`。
 
 ## [0.5.1] - 2026-07-02

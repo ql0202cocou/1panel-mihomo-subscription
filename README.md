@@ -56,12 +56,12 @@ services:
       - PUBLIC_PATH_PREFIX=                          # 留空自动生成随机前缀 / blank = random
       - FETCH_TIMEOUT_SECONDS=15                     # 机场拉取超时 / provider fetch timeout
       - MAX_SUBSCRIPTION_SIZE_MB=8                   # 机场响应大小上限 / provider size cap
-      - CACHE_TTL_MINUTES=15                         # 生成结果缓存 / generated cache TTL
+      - CACHE_TTL_MINUTES=15                         # 仅管理员预览缓存 TTL / admin preview cache TTL only
       - PUBLIC_REFRESH_MIN_SECONDS=30                # 公开订阅回源刷新下限 / public refresh floor
       - TRUSTED_PROXY_HOPS=0                          # 默认不信任 XFF / do not trust XFF by default
       - TRUSTED_PROXY_CIDRS=                          # 可信反代 CIDR,留空忽略 XFF / trusted proxy CIDRs
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "wget -qO- \"http://localhost:$${PORT:-8080}/health\" || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
