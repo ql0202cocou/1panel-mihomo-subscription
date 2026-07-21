@@ -36,13 +36,14 @@ export function TypeChips({
   return (
     <div className="type-chips">
       {options.map((o) => (
-        <span
+        <button
           key={o}
+          type="button"
           className={`type-chip${value === o ? " active" : ""}`}
           onClick={() => onChange(o)}
         >
           {labels?.[o] ?? o}
-        </span>
+        </button>
       ))}
     </div>
   );

@@ -1,4 +1,4 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
 import RequireAuth from "./components/RequireAuth";
 import Login from "./pages/Login";
@@ -24,6 +24,8 @@ export default function App() {
         <Route path="/nodes" element={<GlobalNodes />} />
         <Route path="/rules" element={<RuleSets />} />
         <Route path="/settings" element={<Settings />} />
+        {/* 未知路径回到列表页(未登录会先被 RequireAuth 送去登录页) */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
   );

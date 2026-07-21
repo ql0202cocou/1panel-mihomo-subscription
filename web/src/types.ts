@@ -18,7 +18,8 @@ export type GroupType =
   | "load-balance"
   | "relay";
 
-export interface RuleSet {
+/** 订阅的规则内容(③ 规则文本整体)。 */
+export interface ProfileRules {
   content: string;
   updated_at: string;
 }
@@ -65,7 +66,7 @@ export interface CustomGroup {
 }
 
 export interface ProfileDetail extends ProfileSummary {
-  rules: RuleSet | null;
+  rules: ProfileRules | null;
   nodes: CustomNode[];
   groups: CustomGroup[];
 }

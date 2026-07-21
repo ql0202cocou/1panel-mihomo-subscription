@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Modal, Popconfirm, message } from "antd";
+import { App as AntdApp, Button, Modal, Popconfirm } from "antd";
 import {
   DeleteOutlined,
   EditOutlined,
@@ -32,6 +32,7 @@ const EMPTY_MODEL: NodeModel = { name: "", type: "", fields: {} };
 
 export default function GlobalNodes() {
   const { t } = useTranslation();
+  const { message } = AntdApp.useApp();
   const [rows, setRows] = useState<CustomNode[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<CustomNode | null>(null);
@@ -88,8 +89,12 @@ export default function GlobalNodes() {
   }
 
   async function remove(node: CustomNode) {
-    await api(`/api/global-nodes/${node.id}`, { method: "DELETE" });
-    await load();
+    try {
+      await api(`/api/global-nodes/${node.id}`, { method: "DELETE" });
+      await load();
+    } catch (e) {
+      message.error((e as ApiError).message ?? t("common.deleteFailed"));
+    }
   }
 
   async function onDragEnd(event: DragEndEvent) {
@@ -178,7 +183,7 @@ function NodeRow({
   };
   return (
     <div className="row" ref={setNodeRef} style={style}>
-      <span className="row-grab" {...attributes} {...listeners} aria-label="drag">
+      <span className="row-grab" {...attributes} {...listeners} aria-label={t("common.drag")}>
         <HolderOutlined />
       </span>
       <span className="row-name">{node.name}</span>

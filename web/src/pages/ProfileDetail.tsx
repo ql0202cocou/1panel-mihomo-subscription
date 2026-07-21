@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  App as AntdApp,
   Button,
   Form,
   Input,
@@ -9,7 +10,6 @@ import {
   QRCode,
   Spin,
   Tabs,
-  message,
 } from "antd";
 import {
   CopyOutlined,
@@ -27,21 +27,35 @@ import "./detail/detail.css";
 
 export default function ProfileDetail() {
   const { t } = useTranslation();
+  const { message } = AntdApp.useApp();
   const { id } = useParams<{ id: string }>();
   const [detail, setDetail] = useState<Detail | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [genErrors, setGenErrors] = useState<string[]>([]);
   const [genWarnings, setGenWarnings] = useState<string[]>([]);
 
   const reload = useCallback(async () => {
-    if (id) setDetail(await api<Detail>(`/api/profiles/${id}`));
+    if (!id) return;
+    try {
+      setDetail(await api<Detail>(`/api/profiles/${id}`));
+    } catch {
+      // 首屏失败给错误占位(而非白页);已有内容时保留当前页面。
+      setLoadFailed(true);
+    }
   }, [id]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  if (!detail) return null;
+  if (!detail) {
+    return loadFailed ? (
+      <div className="page-detail">
+        <div className="empty-line">{t("common.loadFailed")}</div>
+      </div>
+    ) : null;
+  }
 
   async function generate() {
     if (!id) return;
@@ -160,11 +174,16 @@ export default function ProfileDetail() {
 
 function HostedLink({ detail, onReset }: { detail: Detail; onReset: () => void }) {
   const { t } = useTranslation();
+  const { message } = AntdApp.useApp();
 
   async function resetToken() {
-    await api(`/api/profiles/${detail.id}/reset-token`, { method: "POST" });
-    message.success(t("detail.generateSuccess"));
-    onReset();
+    try {
+      await api(`/api/profiles/${detail.id}/reset-token`, { method: "POST" });
+      message.success(t("detail.generateSuccess"));
+      onReset();
+    } catch (e) {
+      message.error((e as ApiError).message ?? t("common.saveFailed"));
+    }
   }
 
   async function copyUrl() {
@@ -217,6 +236,7 @@ function BasicInfo({
   refreshing: boolean;
 }) {
   const { t } = useTranslation();
+  const { message } = AntdApp.useApp();
   const [editOpen, setEditOpen] = useState(false);
   const [form] = Form.useForm();
 
@@ -225,9 +245,13 @@ function BasicInfo({
     const body: Record<string, unknown> = { name: values.name };
     const nextUrl = values.source_url?.trim();
     if (nextUrl) body.source_url = nextUrl;
-    await api(`/api/profiles/${detail.id}`, { method: "PUT", body: JSON.stringify(body) });
-    setEditOpen(false);
-    onSaved();
+    try {
+      await api(`/api/profiles/${detail.id}`, { method: "PUT", body: JSON.stringify(body) });
+      setEditOpen(false);
+      onSaved();
+    } catch (e) {
+      message.error((e as ApiError).message ?? t("common.saveFailed"));
+    }
   }
 
   const rows: [string, string, boolean?][] = [
@@ -295,6 +319,7 @@ function BasicInfo({
 
 function PreviewCard({ profileId }: { profileId: string }) {
   const { t } = useTranslation();
+  const { message } = AntdApp.useApp();
   const [yaml, setYaml] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 

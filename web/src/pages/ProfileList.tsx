@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Button, Form, Input, Modal, message } from "antd";
+import { App as AntdApp, Button, Form, Input, Modal } from "antd";
 import { CopyOutlined, PlusOutlined, RightOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { api, type ApiError } from "../api";
@@ -9,23 +9,26 @@ import "./ProfileList.css";
 
 export default function ProfileList() {
   const { t } = useTranslation();
+  const { message } = AntdApp.useApp();
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [form] = Form.useForm();
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       setProfiles(await api<ProfileSummary[]>("/api/profiles"));
+    } catch {
+      message.error(t("profiles.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }
+  }, [message, t]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   async function onCreate(values: { name: string; source_url: string }) {
     try {
@@ -37,7 +40,7 @@ export default function ProfileList() {
       form.resetFields();
       await load();
     } catch (e) {
-      message.error((e as ApiError).message ?? "创建失败");
+      message.error((e as ApiError).message ?? t("profiles.createFailed"));
     }
   }
 

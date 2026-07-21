@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Input, InputNumber, Modal, Popconfirm, Switch, message } from "antd";
+import { App as AntdApp, Button, Input, InputNumber, Modal, Popconfirm, Switch } from "antd";
 import {
   DeleteOutlined,
   EditOutlined,
@@ -60,6 +60,7 @@ const EMPTY: FormState = {
 
 export default function RuleSets() {
   const { t } = useTranslation();
+  const { message } = AntdApp.useApp();
   const [rows, setRows] = useState<RuleSet[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<RuleSet | null>(null);
@@ -140,8 +141,12 @@ export default function RuleSets() {
   }
 
   async function remove(rs: RuleSet) {
-    await api(`/api/rule-sets/${rs.id}`, { method: "DELETE" });
-    await load();
+    try {
+      await api(`/api/rule-sets/${rs.id}`, { method: "DELETE" });
+      await load();
+    } catch (e) {
+      message.error((e as ApiError).message ?? t("common.deleteFailed"));
+    }
   }
 
   async function onDragEnd(event: DragEndEvent) {
@@ -176,7 +181,7 @@ export default function RuleSets() {
         <div className="dcard-head">
           <span className="dcard-title">
             {t("nav.rules")}{" "}
-            <span className="row-sub">{t("nodes.groupCount", { count: rows.length })}</span>
+            <span className="row-sub">{t("ruleSets.groupCount", { count: rows.length })}</span>
           </span>
           <Button type="primary" icon={<PlusOutlined />} onClick={startAdd}>
             {t("ruleSets.add")}
@@ -235,17 +240,12 @@ export default function RuleSets() {
           </div>
 
           <label className="rs-label">{t("ruleSets.source")}</label>
-          <div className="type-chips">
-            {SOURCES.map((s) => (
-              <span
-                key={s}
-                className={`type-chip${form.source === s ? " active" : ""}`}
-                onClick={() => setSource(s)}
-              >
-                {s === "manual" ? t("ruleSets.sourceManual") : t("ruleSets.sourceRemote")}
-              </span>
-            ))}
-          </div>
+          <TypeChips
+            options={SOURCES}
+            value={form.source}
+            onChange={(v) => setSource(v as "manual" | "remote")}
+            labels={{ manual: t("ruleSets.sourceManual"), remote: t("ruleSets.sourceRemote") }}
+          />
 
           {form.source === "manual" ? (
             <div className="rs-section">
@@ -322,7 +322,7 @@ function RuleSetRow({
   };
   return (
     <div className="rs-row" ref={setNodeRef} style={style}>
-      <span className="row-grab" {...attributes} {...listeners} aria-label="drag">
+      <span className="row-grab" {...attributes} {...listeners} aria-label={t("common.drag")}>
         <HolderOutlined />
       </span>
       <div className="rs-main">

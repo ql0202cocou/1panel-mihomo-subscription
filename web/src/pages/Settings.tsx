@@ -1,34 +1,43 @@
-import { useEffect, useState } from "react";
-import { Button, Input, Modal, Segmented, message } from "antd";
+import { useCallback, useEffect, useState } from "react";
+import { App as AntdApp, Button, Input, Modal, Segmented } from "antd";
 import { useTranslation } from "react-i18next";
-import { api } from "../api";
+import { api, type ApiError } from "../api";
 import type { Settings as SettingsData } from "../types";
 import { useTheme, type ThemeMode } from "../theme";
 import "./Settings.css";
 
 export default function Settings() {
   const { t } = useTranslation();
+  const { message } = AntdApp.useApp();
   const { mode, setMode } = useTheme();
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmText, setConfirmText] = useState("");
 
-  async function load() {
-    setSettings(await api<SettingsData>("/api/settings"));
-  }
+  const load = useCallback(async () => {
+    try {
+      setSettings(await api<SettingsData>("/api/settings"));
+    } catch {
+      message.error(t("common.loadFailed"));
+    }
+  }, [message, t]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   async function onReset() {
-    const next = await api<SettingsData>("/api/settings/reset-public-path", {
-      method: "POST",
-    });
-    setSettings(next);
-    setConfirming(false);
-    setConfirmText("");
-    message.success(t("settings.publicPathPrefix") + ": " + next.public_path_prefix);
+    try {
+      const next = await api<SettingsData>("/api/settings/reset-public-path", {
+        method: "POST",
+      });
+      setSettings(next);
+      setConfirming(false);
+      setConfirmText("");
+      message.success(t("settings.publicPathPrefix") + ": " + next.public_path_prefix);
+    } catch (e) {
+      message.error((e as ApiError).message ?? t("common.saveFailed"));
+    }
   }
 
   return (

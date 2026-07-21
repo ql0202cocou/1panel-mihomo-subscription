@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { message } from "antd";
+import { App as AntdApp } from "antd";
 import { HolderOutlined, LockOutlined } from "@ant-design/icons";
 import {
   DndContext,
@@ -34,6 +34,7 @@ const DEFAULT_SECTIONS = ["provider", "custom"];
 
 export default function NodesCard({ profileId, profileName, nodes, generatedAt }: Props) {
   const { t } = useTranslation();
+  const { message } = AntdApp.useApp();
   const [providers, setProviders] = useState<ProxyPreview[]>([]);
   const [generated, setGenerated] = useState(true);
   const [sectionOrder, setSectionOrder] = useState<string[]>(DEFAULT_SECTIONS);
@@ -188,7 +189,7 @@ function Section({ id, title, sub, count, extra, children }: SectionProps) {
           className="row-grab"
           {...attributes}
           {...listeners}
-          aria-label="drag section"
+          aria-label={t("common.drag")}
         >
           <HolderOutlined />
         </span>

@@ -4,7 +4,7 @@ import { Button, Input } from "antd";
 import { DeploymentUnitOutlined, ExclamationCircleFilled } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
-import type { ApiError } from "../api";
+import { ApiError } from "../api";
 import "./Login.css";
 
 export default function Login() {
@@ -27,8 +27,12 @@ export default function Login() {
       await login(username, password);
       navigate(from, { replace: true });
     } catch (err) {
-      const e = err as ApiError;
-      setError(e.status === 429 ? t("login.tooMany") : t("login.failed"));
+      // ApiError 带 status(401/429 等);无 status 的是网络层失败(fetch reject)。
+      if (err instanceof ApiError) {
+        setError(err.status === 429 ? t("login.tooMany") : t("login.failed"));
+      } else {
+        setError(t("login.networkError"));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -53,8 +57,9 @@ export default function Login() {
         )}
 
         <div className="login-field">
-          <label className="login-label">{t("login.username")}</label>
+          <label className="login-label" htmlFor="login-username">{t("login.username")}</label>
           <Input
+            id="login-username"
             size="large"
             autoComplete="username"
             value={username}
@@ -62,8 +67,9 @@ export default function Login() {
           />
         </div>
         <div className="login-field">
-          <label className="login-label">{t("login.password")}</label>
+          <label className="login-label" htmlFor="login-password">{t("login.password")}</label>
           <Input.Password
+            id="login-password"
             size="large"
             autoComplete="current-password"
             value={password}

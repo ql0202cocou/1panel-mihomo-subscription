@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button, Form, Input, Modal, Popconfirm, Select, message } from "antd";
+import { App as AntdApp, Button, Form, Input, Modal, Popconfirm, Select } from "antd";
 import { DeleteOutlined, EditOutlined, HolderOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   DndContext,
@@ -81,6 +81,7 @@ function reconcileRows(prev: GroupRow[], derived: GroupRow[]): GroupRow[] {
 
 export default function GroupsCard({ profileId, groups, nodes, generatedAt, onChange }: Props) {
   const { t } = useTranslation();
+  const { message } = AntdApp.useApp();
   const [editing, setEditing] = useState<CustomGroup | null>(null);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -129,6 +130,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
       });
       message.success(t("groups.orderSaved"));
     } catch (e) {
+      setRows(rows); // 保存失败回滚到拖拽前顺序(与 NodesCard 一致)
       message.error((e as ApiError).message ?? t("groups.orderSaveFailed"));
     } finally {
       void loadProviders();
@@ -213,8 +215,12 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
   }
 
   async function remove(group: CustomGroup) {
-    await api(`/api/profiles/${profileId}/groups/${group.id}`, { method: "DELETE" });
-    onChange();
+    try {
+      await api(`/api/profiles/${profileId}/groups/${group.id}`, { method: "DELETE" });
+      onChange();
+    } catch (e) {
+      message.error((e as ApiError).message ?? t("common.deleteFailed"));
+    }
   }
 
   const memberOptions = dedupe([
@@ -338,14 +344,13 @@ function SortableGroupRow({
   const { group } = row;
   return (
     <div className="row" ref={setNodeRef} style={style}>
-      <span className="row-grab" {...attributes} {...listeners} aria-label="drag">
+      <span className="row-grab" {...attributes} {...listeners} aria-label={t("common.drag")}>
         <HolderOutlined />
       </span>
-      <span style={{ width: 600, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        <span style={{ fontSize: 13.5, color: "var(--text)", fontWeight: 550 }}>{row.name}</span>
+      <span className="group-row-name">
+        <span className="group-row-title">{row.name}</span>
         <span className="row-sub">{t("groups.membersCount", { count: group.members.length })}</span>
       </span>
-      <span style={{ flex: 1 }} />
       <span className="tag-mono tag-policy">{group.group_type}</span>
       <span className="row-actions">
         <button className="icon-btn" onClick={() => onEdit(group)} aria-label={t("basic.edit")}>

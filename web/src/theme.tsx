@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ConfigProvider, theme as antdTheme } from "antd";
+import { App as AntdApp, ConfigProvider, theme as antdTheme } from "antd";
 import type { ThemeConfig } from "antd";
 
 // 暗色仅手动切换(不跟随系统);选择持久化到 localStorage,默认亮色。
@@ -96,7 +96,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
           components: COMPONENTS,
         }}
       >
-        {children}
+        {/* antd App 上下文:message/notification 走 App.useApp(),静态函数在暗色主题下不生效 */}
+        <AntdApp>{children}</AntdApp>
       </ConfigProvider>
     </ThemeContext.Provider>
   );

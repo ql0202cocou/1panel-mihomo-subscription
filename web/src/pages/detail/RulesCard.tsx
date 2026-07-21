@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  App as AntdApp,
   AutoComplete,
   Button,
   Checkbox,
@@ -11,7 +12,6 @@ import {
   Select,
   Switch,
   Typography,
-  message,
 } from "antd";
 import {
   ArrowRightOutlined,
@@ -172,6 +172,7 @@ type EditTarget = number | "match" | null;
 
 export default function RulesCard({ profileId, initial, nodes, groups, generatedAt, errors, onSaved }: Props) {
   const { t } = useTranslation();
+  const { message } = AntdApp.useApp();
   // MATCH 钉在底部(锁定)。`rules` 按序保存其余所有行;`matchLine` 保存唯一的 MATCH 兜底
   // (或 null)。
   const [rules, setRules] = useState<string[]>([]);
@@ -248,9 +249,9 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
     void loadProfileRuleSets();
   }, [loadPolicies, loadProfileRuleSets, generatedAt]);
 
-  // 保存规则 + 钉底的 MATCH(始终在最后)。
+  // 保存规则 + 钉底的 MATCH(始终在最后)。返回是否成功,供调用方决定后续提示。
   const persist = useCallback(
-    async (nextRules: string[], nextMatch: string | null) => {
+    async (nextRules: string[], nextMatch: string | null): Promise<boolean> => {
       setRules(nextRules);
       setMatchLine(nextMatch);
       const content = [...nextRules, ...(nextMatch ? [nextMatch] : [])].join("\n");
@@ -260,19 +261,34 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
           body: JSON.stringify({ content }),
         });
         onSaved();
+        return true;
       } catch (e) {
         message.error((e as ApiError).message ?? t("common.saveFailed"));
+        return false;
       }
     },
-    [profileId, onSaved, t],
+    [profileId, onSaved, message, t],
   );
 
-  function onDragEnd(event: DragEndEvent) {
+  // DnD id / React key 用内容派生的稳定 id(不用数组下标);重复行按出现次序加后缀保证唯一。
+  const ruleIds = useMemo(() => {
+    const seen = new Map<string, number>();
+    return rules.map((line) => {
+      const n = seen.get(line) ?? 0;
+      seen.set(line, n + 1);
+      return n === 0 ? line : `${line}#${n}`;
+    });
+  }, [rules]);
+
+  async function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const next = arrayMove(rules, Number(active.id), Number(over.id));
-    void persist(next, matchLine);
-    message.success(t("rules.orderSaved"));
+    const oldIndex = ruleIds.indexOf(String(active.id));
+    const newIndex = ruleIds.indexOf(String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    const next = arrayMove(rules, oldIndex, newIndex);
+    // 成功提示只在持久化成功后给出(失败时 persist 已弹错误)。
+    if (await persist(next, matchLine)) message.success(t("rules.orderSaved"));
   }
 
   function openEdit(index: number) {
@@ -397,8 +413,9 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
         message.info(t("rules.importNone"));
         return;
       }
-      await persist([...rules, ...incoming], matchLine);
-      message.success(t("rules.imported", { count: incoming.length }));
+      if (await persist([...rules, ...incoming], matchLine)) {
+        message.success(t("rules.imported", { count: incoming.length }));
+      }
     } catch (e) {
       message.error((e as ApiError).message ?? t("rules.importFailed"));
     } finally {
@@ -515,14 +532,11 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
       ) : (
         <>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <SortableContext
-              items={rules.map((_, i) => String(i))}
-              strategy={verticalListSortingStrategy}
-            >
+            <SortableContext items={ruleIds} strategy={verticalListSortingStrategy}>
               {rules.map((line, index) => (
                 <SortableRuleRow
-                  key={index}
-                  id={String(index)}
+                  key={ruleIds[index]}
+                  id={ruleIds[index]}
                   line={line}
                   onEdit={() => openEdit(index)}
                   onRemove={() => remove(index)}
@@ -569,11 +583,12 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
             {ruleSets.map((rs) => {
               const already = referenced.has(rs.name);
               return (
-                <label key={rs.name} className="rules-import-item">
+                <div key={rs.name} className="rules-import-item">
                   <Checkbox
                     checked={already || picked.has(rs.name)}
                     disabled={already}
                     onChange={(e) => togglePick(rs.name, e.target.checked)}
+                    aria-label={rs.name}
                   />
                   <div className="rules-import-main">
                     <div className="rules-import-name">
@@ -590,7 +605,7 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
                   </div>
                   <span className="tag-mono">{rs.behavior}</span>
                   <span className="rules-import-count">{rs.count}</span>
-                </label>
+                </div>
               );
             })}
           </div>
@@ -633,7 +648,7 @@ function SortableRuleRow({
   const r = parseRule(line);
   return (
     <div className="row" ref={setNodeRef} style={style}>
-      <span className="row-grab" {...attributes} {...listeners} aria-label="drag">
+      <span className="row-grab" {...attributes} {...listeners} aria-label={t("common.drag")}>
         <HolderOutlined />
       </span>
       {comment ? (
