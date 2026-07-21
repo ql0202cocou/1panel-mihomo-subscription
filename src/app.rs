@@ -12,6 +12,7 @@ use axum::{
 };
 use ipnet::IpNet;
 use sqlx::SqlitePool;
+use subtle::ConstantTimeEq;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
@@ -60,6 +61,16 @@ pub struct AppState {
 impl AppState {
     pub fn current_prefix(&self) -> String {
         self.public_path_prefix.read().unwrap().clone()
+    }
+
+    /// 恒定时间比较 `candidate` 与当前公开路径前缀。公开端点须配合"无论是否匹配都执行
+    /// token 查找、再合并判断"的模式使用,使响应时序无法单独确认路径前缀
+    /// (见 `docs/security-design.md`)。
+    pub fn prefix_matches(&self, candidate: &str) -> bool {
+        candidate
+            .as_bytes()
+            .ct_eq(self.current_prefix().as_bytes())
+            .into()
     }
 
     pub fn set_prefix(&self, prefix: String) {

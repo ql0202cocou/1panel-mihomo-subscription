@@ -87,7 +87,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: docker/setup-buildx-action@v3
+
       # Single-arch smoke build only; the release workflow pushes multi-arch
-      # images separately.
+      # images separately. The GHA layer cache keeps the heavy dependency
+      # layers (npm ci, cargo stub build) warm across runs.
       - name: Build image (no push)
-        run: docker build .
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -17,7 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
-import { api, type ApiError } from "../../api";
+import { api, errorMessage } from "../../api";
 import type { CustomNode, ProxiesResponse, ProxyPreview } from "../../types";
 import { NODE_TYPE_LABELS } from "./nodeSchema";
 
@@ -81,7 +81,7 @@ export default function NodesCard({ profileId, profileName, nodes, generatedAt }
       message.success(t("nodes.orderSaved"));
     } catch (e) {
       setSectionOrder(sectionOrder);
-      message.error((e as ApiError).message ?? t("nodes.orderSaveFailed"));
+      message.error(errorMessage(e, t("nodes.orderSaveFailed")));
     } finally {
       void loadProviders();
     }

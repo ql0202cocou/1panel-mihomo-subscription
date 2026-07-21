@@ -17,7 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
-import { api, type ApiError } from "../../api";
+import { api, errorMessage } from "../../api";
 import type { CustomGroup, CustomNode, GroupType, ProxiesResponse } from "../../types";
 import { AdvancedFields, FieldInput, TypeChips, splitAdvanced } from "./fields";
 import { BUILTIN_POLICIES, GROUP_TYPES, groupOptionFields, groupOptionKeys } from "./groupSchema";
@@ -131,7 +131,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
       message.success(t("groups.orderSaved"));
     } catch (e) {
       setRows(rows); // 保存失败回滚到拖拽前顺序(与 NodesCard 一致)
-      message.error((e as ApiError).message ?? t("groups.orderSaveFailed"));
+      message.error(errorMessage(e, t("groups.orderSaveFailed")));
     } finally {
       void loadProviders();
     }
@@ -148,7 +148,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
       else message.success(t("groups.imported", { count: res.imported }));
       onChange();
     } catch (e) {
-      message.error((e as ApiError).message ?? t("groups.importFailed"));
+      message.error(errorMessage(e, t("groups.importFailed")));
     } finally {
       setImporting(false);
     }
@@ -210,7 +210,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
       setOpen(false);
       onChange();
     } catch (e) {
-      message.error((e as ApiError).message ?? t("common.saveFailed"));
+      message.error(errorMessage(e, t("common.saveFailed")));
     }
   }
 
@@ -219,7 +219,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
       await api(`/api/profiles/${profileId}/groups/${group.id}`, { method: "DELETE" });
       onChange();
     } catch (e) {
-      message.error((e as ApiError).message ?? t("common.deleteFailed"));
+      message.error(errorMessage(e, t("common.deleteFailed")));
     }
   }
 

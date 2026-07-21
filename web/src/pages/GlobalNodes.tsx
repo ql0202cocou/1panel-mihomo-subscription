@@ -22,7 +22,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
-import { api, type ApiError } from "../api";
+import { api, errorMessage } from "../api";
 import type { CustomNode } from "../types";
 import NodeForm, { contentToModel, modelToContent, type NodeModel } from "./detail/NodeForm";
 import { NODE_TYPE_LABELS } from "./detail/nodeSchema";
@@ -84,7 +84,7 @@ export default function GlobalNodes() {
       setOpen(false);
       await load();
     } catch (e) {
-      message.error((e as ApiError).message ?? t("common.saveFailed"));
+      message.error(errorMessage(e, t("common.saveFailed")));
     }
   }
 
@@ -93,7 +93,7 @@ export default function GlobalNodes() {
       await api(`/api/global-nodes/${node.id}`, { method: "DELETE" });
       await load();
     } catch (e) {
-      message.error((e as ApiError).message ?? t("common.deleteFailed"));
+      message.error(errorMessage(e, t("common.deleteFailed")));
     }
   }
 
@@ -112,7 +112,7 @@ export default function GlobalNodes() {
       });
       message.success(t("nodes.orderSaved"));
     } catch (e) {
-      message.error((e as ApiError).message ?? t("nodes.orderSaveFailed"));
+      message.error(errorMessage(e, t("nodes.orderSaveFailed")));
     } finally {
       void load();
     }

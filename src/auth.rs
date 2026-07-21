@@ -212,21 +212,13 @@ fn origin_is_allowed(origin: Option<&str>, host: Option<&str>, public_base_url: 
     }
 
     // 本地开发或测试未配置 PUBLIC_BASE_URL 时,仍要求 Origin 是 http(s),且 host:port 与请求 Host
-    // 一致(主机名大小写不敏感,与 `parse_origin` 的 lowercase 对齐)。生产部署建议始终配置
-    // PUBLIC_BASE_URL,以同时固定 scheme。
-    let Some(parsed) = Url::parse(origin).ok() else {
+    // 一致。Host 头只有 authority,借用 Origin 的 scheme 归一化(大小写、缺省端口、IPv6)后与
+    // 配置路径同样走 `parse_origin` 结构化比较。生产部署建议始终配置 PUBLIC_BASE_URL,
+    // 以同时固定 scheme。
+    let (Some(origin_parts), Some(host)) = (parse_origin(origin), host) else {
         return false;
     };
-    if !matches!(parsed.scheme(), "http" | "https") {
-        return false;
-    }
-    match (
-        origin.split_once("://").map(|(_, authority)| authority),
-        host,
-    ) {
-        (Some(origin_host), Some(host)) => origin_host.eq_ignore_ascii_case(host),
-        _ => false,
-    }
+    parse_origin(&format!("{}://{}", origin_parts.scheme, host)) == Some(origin_parts)
 }
 
 #[derive(Debug, PartialEq, Eq)]

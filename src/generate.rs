@@ -16,7 +16,6 @@ use axum::{
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use sqlx::FromRow;
-use subtle::ConstantTimeEq;
 
 use crate::app::AppState;
 use crate::converter::{self, ConvertError, ConvertInput, CustomGroup, CustomNode, RuleProvider};
@@ -166,17 +165,13 @@ pub async fn public_sub(
 ) -> Response {
     // 无论前缀是否匹配都执行 token 查找,并恒定时间比较前缀,使响应时序无法单独确认路径前缀
     // (见 security-design.md)。
-    let prefix_ok: bool = prefix
-        .as_bytes()
-        .ct_eq(state.current_prefix().as_bytes())
-        .into();
+    let prefix_ok = state.prefix_matches(&prefix);
     let profile = load_core_by_token(&state, &token).await.ok().flatten();
 
-    let access_ok = prefix_ok && profile.is_some();
-    if !access_ok {
-        return StatusCode::NOT_FOUND.into_response();
-    }
-    let profile = profile.expect("checked by access_ok");
+    let profile = match profile {
+        Some(p) if prefix_ok => p,
+        _ => return StatusCode::NOT_FOUND.into_response(),
+    };
 
     match serve_or_refresh(&state, &profile).await {
         Some(served) => public_response(&profile.name, served),
@@ -197,21 +192,19 @@ async fn serve_or_refresh(state: &AppState, profile: &ProfileCore) -> Option<Ser
     let arrived = now();
 
     // 把该 profile 的并发拉取合并为一次机场拉取。
-    let lock = state.single_flight.lock_for(&profile.id);
-    // guard 在块尾 drop,之后才归还锁条目(见 `SingleFlight::release` 的前提)。
-    let served = {
-        let _guard = lock.lock().await;
-
-        // 若缓存仍处于公开刷新最小间隔内,直接提供它;否则如果本批里另一个请求在我们等锁期间已刷新过
-        // (缓存在我们到达时或之后被重生),也提供它而非再次拉取。
-        let stale = load_cache(state, &profile.id).await.ok().flatten();
-        let use_stale = stale.as_ref().is_some_and(|cache| {
-            is_fresh(&cache.generated_at, state.public_refresh_min_interval)
-                || generated_since(&cache.generated_at, &arrived)
-        });
-        if use_stale {
-            stale.map(Served::from)
-        } else {
+    state
+        .single_flight
+        .run(&profile.id, async {
+            // 若缓存仍处于公开刷新最小间隔内,直接提供它;否则如果本批里另一个请求在我们等锁期间已刷新过
+            // (缓存在我们到达时或之后被重生),也提供它而非再次拉取。
+            let stale = load_cache(state, &profile.id).await.ok().flatten();
+            let use_stale = stale.as_ref().is_some_and(|cache| {
+                is_fresh(&cache.generated_at, state.public_refresh_min_interval)
+                    || generated_since(&cache.generated_at, &arrived)
+            });
+            if use_stale {
+                return stale.map(Served::from);
+            }
             match fetch_and_convert(state, profile).await {
                 Ok(built) => {
                     if persist_cache(state, &profile.id, &built).await.is_err() {
@@ -236,10 +229,8 @@ async fn serve_or_refresh(state: &AppState, profile: &ProfileCore) -> Option<Ser
                     }
                 }
             }
-        }
-    };
-    state.single_flight.release(&profile.id, &lock);
-    served
+        })
+        .await
 }
 
 impl From<CacheRow> for Served {
@@ -312,40 +303,40 @@ async fn convert(
     let rule_providers: Vec<RuleProvider> = if refs.is_empty() {
         Vec::new()
     } else {
-        let collected =
-            sqlx::query_as::<_, (String, String, String, String, Option<String>, bool)>(
-                "SELECT name, behavior, format, source, url, cache FROM profile_rule_sets \
+        let rows = sqlx::query_as::<_, (String, String, String, String, Option<String>, bool)>(
+            "SELECT name, behavior, format, source, url, cache FROM profile_rule_sets \
              WHERE profile_id = ? AND enabled = 1",
-            )
-            .bind(profile_id)
-            .fetch_all(&state.db)
-            .await?
-            .into_iter()
-            .filter(|(name, ..)| refs.iter().any(|r| r == name))
-            .map(|(name, behavior, format, source, url, cache)| {
-                // remote 且关闭本地缓存托管:直接注入上游 URL;否则指向按订阅隔离的面板托管链接。
-                let link = if source == "remote" && !cache {
-                    // remote 必须有上游 URL;缺失(脏数据)报明确校验错误,而非注入空 URL。
-                    url.filter(|u| !u.trim().is_empty()).ok_or_else(|| {
-                        ConvertError::Validation(vec![format!(
+        )
+        .bind(profile_id)
+        .fetch_all(&state.db)
+        .await?;
+        let mut providers = Vec::new();
+        for (name, behavior, format, source, url, cache) in rows {
+            if !refs.iter().any(|r| r == &name) {
+                continue;
+            }
+            // remote 且关闭本地缓存托管:直接注入上游 URL;否则指向按订阅隔离的面板托管链接。
+            let link = if source == "remote" && !cache {
+                // remote 必须有上游 URL;缺失(脏数据)报明确校验错误,而非注入空 URL。
+                match url.filter(|u| !u.trim().is_empty()) {
+                    Some(u) => u,
+                    None => {
+                        return Ok(Err(ConvertError::Validation(vec![format!(
                             "rule-set `{name}` is remote without cache but has no upstream URL"
-                        )])
-                    })?
-                } else {
-                    state.profile_rule_set_url(token, &name, &behavior, &format)
-                };
-                Ok(RuleProvider {
-                    url: link,
-                    name,
-                    behavior,
-                    format,
-                })
-            })
-            .collect::<Result<Vec<_>, ConvertError>>();
-        match collected {
-            Ok(v) => v,
-            Err(e) => return Ok(Err(e)),
+                        )])))
+                    }
+                }
+            } else {
+                state.profile_rule_set_url(token, &name, &behavior, &format)
+            };
+            providers.push(RuleProvider {
+                url: link,
+                name,
+                behavior,
+                format,
+            });
         }
+        providers
     };
 
     // 自定义节点是单一全局池(模型 C),追加到每条 profile 的输出,且查询已按自定义块顺序

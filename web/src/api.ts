@@ -16,6 +16,12 @@ export class ApiError extends Error {
   }
 }
 
+/** catch 处的统一取文案策略:管理 API 错误用服务端消息(构造时兜底为 `HTTP <status>`),
+ *  其余异常(网络层 fetch reject 等)用调用方提供的本地化兜底文案。 */
+export function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof ApiError ? e.message : fallback;
+}
+
 let onUnauthorized: (() => void) | null = null;
 
 export function setUnauthorizedHandler(fn: (() => void) | null): void {

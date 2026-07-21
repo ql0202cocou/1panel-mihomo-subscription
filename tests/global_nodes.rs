@@ -2,73 +2,13 @@
 
 mod common;
 
-use std::sync::Arc;
-
-use axum::body::Body;
-use axum::http::{header, Request, Response, StatusCode};
+use axum::http::StatusCode;
 use axum::Router;
 use mihomo_subscription::app::build_router;
-use mihomo_subscription::fetch::{FetchError, Fetched, SubscriptionFetcher};
 use serde_json::Value;
 use tower::util::ServiceExt;
 
-use common::{test_state_with_fetcher, TempDb};
-
-#[derive(Clone, Default)]
-struct FakeFetcher;
-
-#[async_trait::async_trait]
-impl SubscriptionFetcher for FakeFetcher {
-    async fn fetch(&self, _url: &str) -> Result<Fetched, FetchError> {
-        Ok(Fetched {
-            body: "proxies: []\nrules:\n  - MATCH,DIRECT\n".to_string(),
-            subscription_userinfo: None,
-        })
-    }
-}
-
-async fn login(app: &Router) -> String {
-    let resp = app
-        .clone()
-        .oneshot(
-            Request::post("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::HOST, "sub.example.com")
-                .header(header::ORIGIN, "https://sub.example.com")
-                .body(Body::from(r#"{"username":"admin","password":"s3cret"}"#))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    resp.headers()
-        .get(header::SET_COOKIE)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .split(';')
-        .next()
-        .unwrap()
-        .to_string()
-}
-
-fn authed(method: &str, path: &str, cookie: &str, body: &str) -> Request<Body> {
-    Request::builder()
-        .method(method)
-        .uri(path)
-        .header(header::COOKIE, cookie)
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::HOST, "sub.example.com")
-        .header(header::ORIGIN, "https://sub.example.com")
-        .body(Body::from(body.to_string()))
-        .unwrap()
-}
-
-async fn json(resp: Response<Body>) -> Value {
-    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
-        .await
-        .unwrap();
-    serde_json::from_slice(&bytes).unwrap()
-}
+use common::{authed, json, login, test_state, TempDb};
 
 const NODE_CONTENT: &str =
     "{ type: ss, server: 1.2.3.4, port: 8388, cipher: aes-128-gcm, password: test }";
@@ -87,7 +27,7 @@ async fn create_node(app: &Router, cookie: &str, name: &str) -> Value {
 #[tokio::test]
 async fn list_returns_nodes_in_block_order() {
     let temp = TempDb::new();
-    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher)).await);
+    let app = build_router(test_state(&temp).await);
     let cookie = login(&app).await;
 
     // 空池返回空数组。
@@ -121,7 +61,7 @@ async fn list_returns_nodes_in_block_order() {
 #[tokio::test]
 async fn update_and_delete_by_id() {
     let temp = TempDb::new();
-    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher)).await);
+    let app = build_router(test_state(&temp).await);
     let cookie = login(&app).await;
 
     let created = create_node(&app, &cookie, "hk-1").await;

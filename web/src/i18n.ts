@@ -38,7 +38,6 @@ const zh = {
       fetchOk: "拉取成功",
       fetchFail: "拉取失败",
       createFailed: "创建失败",
-      loadFailed: "加载失败，请稍后重试",
     },
     ruleSets: {
       help: "用户规则库:维护可复用的规则集模板(手动 payload 或远程来源)。在订阅的「规则」里用「导入托管规则」复制进该订阅,由订阅自行托管生效。",

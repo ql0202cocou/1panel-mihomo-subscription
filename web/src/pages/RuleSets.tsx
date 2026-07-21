@@ -22,7 +22,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
-import { api, type ApiError } from "../api";
+import { api, errorMessage } from "../api";
 import type { RuleSet } from "../types";
 import { TypeChips } from "./detail/fields";
 import {
@@ -136,7 +136,7 @@ export default function RuleSets() {
       setOpen(false);
       await load();
     } catch (e) {
-      message.error((e as ApiError).message ?? t("common.saveFailed"));
+      message.error(errorMessage(e, t("common.saveFailed")));
     }
   }
 
@@ -145,7 +145,7 @@ export default function RuleSets() {
       await api(`/api/rule-sets/${rs.id}`, { method: "DELETE" });
       await load();
     } catch (e) {
-      message.error((e as ApiError).message ?? t("common.deleteFailed"));
+      message.error(errorMessage(e, t("common.deleteFailed")));
     }
   }
 
@@ -164,7 +164,7 @@ export default function RuleSets() {
       });
       message.success(t("ruleSets.orderSaved"));
     } catch (e) {
-      message.error((e as ApiError).message ?? t("ruleSets.orderSaveFailed"));
+      message.error(errorMessage(e, t("ruleSets.orderSaveFailed")));
     } finally {
       void load();
     }

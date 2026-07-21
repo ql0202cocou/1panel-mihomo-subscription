@@ -18,7 +18,7 @@ import {
   ReloadOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
-import { api, type ApiError } from "../api";
+import { api, ApiError, errorMessage } from "../api";
 import type { ProfileDetail as Detail } from "../types";
 import NodesCard from "./detail/NodesCard";
 import GroupsCard from "./detail/GroupsCard";
@@ -70,9 +70,9 @@ export default function ProfileDetail() {
       setGenWarnings(res.ruleset_conflicts ?? []);
       await reload();
     } catch (e) {
-      const err = e as ApiError;
-      if (err.details && err.details.length > 0) setGenErrors(err.details);
-      else message.error(err.message ?? t("detail.generateFailed"));
+      const details = e instanceof ApiError ? e.details : undefined;
+      if (details && details.length > 0) setGenErrors(details);
+      else message.error(errorMessage(e, t("detail.generateFailed")));
     } finally {
       setGenerating(false);
     }
@@ -182,7 +182,7 @@ function HostedLink({ detail, onReset }: { detail: Detail; onReset: () => void }
       message.success(t("detail.generateSuccess"));
       onReset();
     } catch (e) {
-      message.error((e as ApiError).message ?? t("common.saveFailed"));
+      message.error(errorMessage(e, t("common.saveFailed")));
     }
   }
 
@@ -250,7 +250,7 @@ function BasicInfo({
       setEditOpen(false);
       onSaved();
     } catch (e) {
-      message.error((e as ApiError).message ?? t("common.saveFailed"));
+      message.error(errorMessage(e, t("common.saveFailed")));
     }
   }
 
@@ -328,7 +328,7 @@ function PreviewCard({ profileId }: { profileId: string }) {
     try {
       setYaml(await api<string>(`/api/profiles/${profileId}/preview`));
     } catch (e) {
-      message.error((e as ApiError).message ?? t("detail.generateFailed"));
+      message.error(errorMessage(e, t("detail.generateFailed")));
     } finally {
       setLoading(false);
     }

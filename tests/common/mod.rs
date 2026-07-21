@@ -5,13 +5,18 @@
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use axum::body::Body;
+use axum::http::{header, Request, Response, StatusCode};
+use axum::Router;
 use mihomo_subscription::app::AppState;
 use mihomo_subscription::auth::{AdminAuth, SessionStore, SESSION_IDLE};
 use mihomo_subscription::db;
 use mihomo_subscription::fetch::{HttpFetcher, SubscriptionFetcher};
 use mihomo_subscription::rate_limit::RateLimiter;
 use mihomo_subscription::single_flight::SingleFlight;
+use serde_json::Value;
 use sqlx::SqlitePool;
+use tower::util::ServiceExt;
 
 /// A unique temp database path per test run; files removed on drop.
 pub struct TempDb {
@@ -85,4 +90,61 @@ pub async fn test_state_with_fetcher(
         login_limiter: Arc::new(RateLimiter::new(100, Duration::from_secs(60))),
         download_limiter: Arc::new(RateLimiter::new(1000, Duration::from_secs(60))),
     })
+}
+
+/// Log in with the fixed test admin credentials (see [`test_state_with_fetcher`])
+/// and return the session cookie as `name=value`.
+pub async fn login(app: &Router) -> String {
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::post("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::HOST, "sub.example.com")
+                .header(header::ORIGIN, "https://sub.example.com")
+                .body(Body::from(r#"{"username":"admin","password":"s3cret"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    resp.headers()
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string()
+}
+
+/// Build an authenticated JSON request carrying the Origin/Host headers the
+/// CSRF origin check requires.
+pub fn authed(method: &str, path: &str, cookie: &str, body: &str) -> Request<Body> {
+    Request::builder()
+        .method(method)
+        .uri(path)
+        .header(header::COOKIE, cookie)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::HOST, "sub.example.com")
+        .header(header::ORIGIN, "https://sub.example.com")
+        .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
+/// Read a response body and decode it as JSON.
+pub async fn json(resp: Response<Body>) -> Value {
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    serde_json::from_slice(&bytes).unwrap()
+}
+
+/// Read a response body as UTF-8 text.
+pub async fn text(resp: Response<Body>) -> String {
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    String::from_utf8(bytes.to_vec()).unwrap()
 }

@@ -19,7 +19,6 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use subtle::ConstantTimeEq;
 
 use crate::app::AppState;
 use crate::error::{ApiError, ApiResult};
@@ -384,10 +383,7 @@ pub async fn public_serve(
 ) -> Response {
     // 无论前缀是否匹配都执行 token 查找,并恒定时间比较前缀,使响应时序无法单独确认路径前缀
     // (与 `generate::public_sub` 同一模式,见 `docs/security-design.md`)。
-    let prefix_ok: bool = prefix
-        .as_bytes()
-        .ct_eq(state.current_prefix().as_bytes())
-        .into();
+    let prefix_ok = state.prefix_matches(&prefix);
     let profile_id = sqlx::query_scalar::<_, String>("SELECT id FROM profiles WHERE token = ?")
         .bind(&token)
         .fetch_optional(&state.db)
@@ -395,11 +391,10 @@ pub async fn public_serve(
         .ok()
         .flatten();
 
-    let access_ok = prefix_ok && profile_id.is_some();
-    if !access_ok {
-        return StatusCode::NOT_FOUND.into_response();
-    }
-    let profile_id = profile_id.expect("checked by access_ok");
+    let profile_id = match profile_id {
+        Some(id) if prefix_ok => id,
+        _ => return StatusCode::NOT_FOUND.into_response(),
+    };
     let row = match fetch_serve_by_name(&state, &profile_id, &name).await {
         Ok(Some(r)) => r,
         _ => return StatusCode::NOT_FOUND.into_response(),
@@ -449,25 +444,23 @@ async fn serve_remote(state: &AppState, row: ServeRow) -> Response {
     };
 
     let key = format!("profile-ruleset:{}", row.id);
-    let lock = state.single_flight.lock_for(&key);
-    // guard 在块尾 drop,之后才归还锁条目(见 `SingleFlight::release` 的前提)。
-    let resp = {
-        let _guard = lock.lock().await;
-
-        // 等锁期间可能已被另一个请求刷新过——重读最新行。
-        let row = fetch_serve_by_id(state, &row.id).await.ok().flatten();
-        let fresh_cached = row
-            .as_ref()
-            .and_then(|r| match (&r.cached_body, &r.cached_at) {
-                (Some(body), Some(at)) if is_fresh(at, mirror_ttl(r.interval_hours)) => {
-                    Some((r.format.clone(), body.clone()))
+    state
+        .single_flight
+        .run(&key, async {
+            // 等锁期间可能已被另一个请求刷新过——重读最新行。
+            let Some(mut row) = fetch_serve_by_id(state, &row.id).await.ok().flatten() else {
+                return StatusCode::NOT_FOUND.into_response();
+            };
+            let fresh = row
+                .cached_at
+                .as_deref()
+                .is_some_and(|at| is_fresh(at, mirror_ttl(row.interval_hours)));
+            if fresh {
+                if let Some(body) = row.cached_body.take() {
+                    return rulelib::serve_bytes(&row.format, body);
                 }
-                _ => None,
-            });
-        match (row, fresh_cached) {
-            (None, _) => StatusCode::NOT_FOUND.into_response(),
-            (Some(_), Some((format, body))) => rulelib::serve_bytes(&format, body),
-            (Some(row), None) => match state.fetcher.fetch_bytes(&url).await {
+            }
+            match state.fetcher.fetch_bytes(&url).await {
                 Ok(bytes) => {
                     let count = rulelib::body_count(&bytes, &row.format);
                     let _ = persist_remote_cache(state, &row.id, &bytes, count).await;
@@ -480,11 +473,9 @@ async fn serve_remote(state: &AppState, row: ServeRow) -> Response {
                         None => StatusCode::SERVICE_UNAVAILABLE.into_response(),
                     }
                 }
-            },
-        }
-    };
-    state.single_flight.release(&key, &lock);
-    resp
+            }
+        })
+        .await
 }
 
 /// 镜像回源的最小间隔:`interval_hours` 转 `Duration`,下限 1 小时(与校验一致)。

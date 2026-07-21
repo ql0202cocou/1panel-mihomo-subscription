@@ -7,14 +7,14 @@ mod common;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::http::{header, Request, Response, StatusCode};
+use axum::http::{Request, StatusCode};
 use axum::Router;
 use mihomo_subscription::app::build_router;
 use mihomo_subscription::fetch::{FetchError, Fetched, SubscriptionFetcher};
 use serde_json::Value;
 use tower::util::ServiceExt;
 
-use common::{test_state_with_fetcher, TempDb};
+use common::{authed, json, login, test_state_with_fetcher, text, TempDb};
 
 const PROVIDER_YAML: &str =
     "proxies:\n  - { name: hk-1, type: ss, server: 1.2.3.4, port: 8388 }\nrules:\n  - MATCH,DIRECT\n";
@@ -30,56 +30,6 @@ impl SubscriptionFetcher for FakeFetcher {
             subscription_userinfo: None,
         })
     }
-}
-
-async fn login(app: &Router) -> String {
-    let resp = app
-        .clone()
-        .oneshot(
-            Request::post("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::HOST, "sub.example.com")
-                .header(header::ORIGIN, "https://sub.example.com")
-                .body(Body::from(r#"{"username":"admin","password":"s3cret"}"#))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    resp.headers()
-        .get(header::SET_COOKIE)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .split(';')
-        .next()
-        .unwrap()
-        .to_string()
-}
-
-fn authed(method: &str, path: &str, cookie: &str, body: &str) -> Request<Body> {
-    Request::builder()
-        .method(method)
-        .uri(path)
-        .header(header::COOKIE, cookie)
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::HOST, "sub.example.com")
-        .header(header::ORIGIN, "https://sub.example.com")
-        .body(Body::from(body.to_string()))
-        .unwrap()
-}
-
-async fn json(resp: Response<Body>) -> Value {
-    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
-        .await
-        .unwrap();
-    serde_json::from_slice(&bytes).unwrap()
-}
-
-async fn text(resp: Response<Body>) -> String {
-    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
-        .await
-        .unwrap();
-    String::from_utf8(bytes.to_vec()).unwrap()
 }
 
 /// 建 profile,返回 (id, token, 订阅相对路径)。

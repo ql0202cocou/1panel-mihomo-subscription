@@ -38,7 +38,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
-import { api, type ApiError } from "../../api";
+import { api, errorMessage } from "../../api";
 import type {
   CustomGroup,
   CustomNode,
@@ -263,7 +263,7 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
         onSaved();
         return true;
       } catch (e) {
-        message.error((e as ApiError).message ?? t("common.saveFailed"));
+        message.error(errorMessage(e, t("common.saveFailed")));
         return false;
       }
     },
@@ -371,7 +371,7 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
         await upsertRuleSet(model);
         await loadProfileRuleSets();
       } catch (e) {
-        message.error((e as ApiError).message ?? t("common.saveFailed"));
+        message.error(errorMessage(e, t("common.saveFailed")));
         return;
       }
     }
@@ -417,7 +417,7 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
         message.success(t("rules.imported", { count: incoming.length }));
       }
     } catch (e) {
-      message.error((e as ApiError).message ?? t("rules.importFailed"));
+      message.error(errorMessage(e, t("rules.importFailed")));
     } finally {
       setImporting(false);
     }
@@ -494,7 +494,7 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
       onSaved();
       message.success(t("rules.importHostedDone", { count: res.imported }));
     } catch (e) {
-      message.error((e as ApiError).message ?? t("rules.importFailed"));
+      message.error(errorMessage(e, t("rules.importFailed")));
     }
   }
 

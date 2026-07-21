@@ -3,44 +3,11 @@
 mod common;
 
 use axum::body::Body;
-use axum::http::{header, Request, Response, StatusCode};
-use axum::Router;
+use axum::http::{header, Request, StatusCode};
 use mihomo_subscription::app::build_router;
-use serde_json::Value;
 use tower::util::ServiceExt;
 
-use common::{test_state, TempDb};
-
-async fn login(app: &Router) -> String {
-    let resp = app
-        .clone()
-        .oneshot(
-            Request::post("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::HOST, "sub.example.com")
-                .header(header::ORIGIN, "https://sub.example.com")
-                .body(Body::from(r#"{"username":"admin","password":"s3cret"}"#))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    resp.headers()
-        .get(header::SET_COOKIE)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .split(';')
-        .next()
-        .unwrap()
-        .to_string()
-}
-
-async fn json(resp: Response<Body>) -> Value {
-    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
-        .await
-        .unwrap();
-    serde_json::from_slice(&bytes).unwrap()
-}
+use common::{json, login, test_state, TempDb};
 
 #[tokio::test]
 async fn get_settings_returns_public_path_prefix() {

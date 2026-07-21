@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { App as AntdApp, Button, Form, Input, Modal } from "antd";
 import { CopyOutlined, PlusOutlined, RightOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
-import { api, type ApiError } from "../api";
+import { api, errorMessage } from "../api";
 import type { ProfileSummary } from "../types";
 import "./ProfileList.css";
 
@@ -20,7 +20,7 @@ export default function ProfileList() {
     try {
       setProfiles(await api<ProfileSummary[]>("/api/profiles"));
     } catch {
-      message.error(t("profiles.loadFailed"));
+      message.error(t("common.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -40,7 +40,7 @@ export default function ProfileList() {
       form.resetFields();
       await load();
     } catch (e) {
-      message.error((e as ApiError).message ?? t("profiles.createFailed"));
+      message.error(errorMessage(e, t("profiles.createFailed")));
     }
   }
 
