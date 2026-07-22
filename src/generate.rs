@@ -163,14 +163,10 @@ pub async fn public_sub(
     State(state): State<Arc<AppState>>,
     Path((prefix, token)): Path<(String, String)>,
 ) -> Response {
-    // 无论前缀是否匹配都执行 token 查找,并恒定时间比较前缀,使响应时序无法单独确认路径前缀
-    // (见 security-design.md)。
-    let prefix_ok = state.prefix_matches(&prefix);
-    let profile = load_core_by_token(&state, &token).await.ok().flatten();
-
-    let profile = match profile {
-        Some(p) if prefix_ok => p,
-        _ => return StatusCode::NOT_FOUND.into_response(),
+    let lookup = async { load_core_by_token(&state, &token).await.ok().flatten() };
+    let profile = match state.public_gate(&prefix, lookup).await {
+        Some(p) => p,
+        None => return StatusCode::NOT_FOUND.into_response(),
     };
 
     match serve_or_refresh(&state, &profile).await {

@@ -1,5 +1,6 @@
 //! 应用状态与 HTTP 路由组装,供二进制与集成测试共用。
 
+use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -63,14 +64,18 @@ impl AppState {
         self.public_path_prefix.read().unwrap().clone()
     }
 
-    /// 恒定时间比较 `candidate` 与当前公开路径前缀。公开端点须配合"无论是否匹配都执行
-    /// token 查找、再合并判断"的模式使用,使响应时序无法单独确认路径前缀
-    /// (见 `docs/security-design.md`)。
-    pub fn prefix_matches(&self, candidate: &str) -> bool {
-        candidate
-            .as_bytes()
-            .ct_eq(self.current_prefix().as_bytes())
-            .into()
+    /// 公开端点门:恒定时间比较 `candidate` 与当前公开路径前缀,且无论是否匹配都执行
+    /// `lookup`、再合并判断,使响应时序无法单独确认路径前缀(见 `docs/security-design.md`)。
+    pub async fn public_gate<T>(
+        &self,
+        candidate: &str,
+        lookup: impl Future<Output = Option<T>>,
+    ) -> Option<T> {
+        let prefix_ok: bool = {
+            let prefix = self.public_path_prefix.read().unwrap();
+            candidate.as_bytes().ct_eq(prefix.as_bytes()).into()
+        };
+        lookup.await.filter(|_| prefix_ok)
     }
 
     pub fn set_prefix(&self, prefix: String) {

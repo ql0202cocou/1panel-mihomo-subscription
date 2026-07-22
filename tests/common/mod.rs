@@ -135,10 +135,7 @@ pub fn authed(method: &str, path: &str, cookie: &str, body: &str) -> Request<Bod
 
 /// Read a response body and decode it as JSON.
 pub async fn json(resp: Response<Body>) -> Value {
-    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
-        .await
-        .unwrap();
-    serde_json::from_slice(&bytes).unwrap()
+    serde_json::from_str(&text(resp).await).unwrap()
 }
 
 /// Read a response body as UTF-8 text.

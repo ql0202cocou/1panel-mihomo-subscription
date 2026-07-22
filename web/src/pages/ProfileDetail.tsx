@@ -70,8 +70,7 @@ export default function ProfileDetail() {
       setGenWarnings(res.ruleset_conflicts ?? []);
       await reload();
     } catch (e) {
-      const details = e instanceof ApiError ? e.details : undefined;
-      if (details && details.length > 0) setGenErrors(details);
+      if (e instanceof ApiError && e.details?.length) setGenErrors(e.details);
       else message.error(errorMessage(e, t("detail.generateFailed")));
     } finally {
       setGenerating(false);

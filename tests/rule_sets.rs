@@ -5,36 +5,17 @@
 
 mod common;
 
-use std::sync::Arc;
-
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use mihomo_subscription::app::build_router;
-use mihomo_subscription::fetch::{FetchError, Fetched, SubscriptionFetcher};
 use tower::util::ServiceExt;
 
-use common::{authed, json, login, test_state_with_fetcher, TempDb};
-
-const PROVIDER_YAML: &str =
-    "proxies:\n  - { name: hk-1, type: ss, server: 1.2.3.4, port: 8388 }\nrules:\n  - MATCH,DIRECT\n";
-
-#[derive(Clone, Default)]
-struct FakeFetcher;
-
-#[async_trait::async_trait]
-impl SubscriptionFetcher for FakeFetcher {
-    async fn fetch(&self, _url: &str) -> Result<Fetched, FetchError> {
-        Ok(Fetched {
-            body: PROVIDER_YAML.to_string(),
-            subscription_userinfo: None,
-        })
-    }
-}
+use common::{authed, json, login, test_state, text, TempDb};
 
 #[tokio::test]
 async fn crud_counts_and_masks_no_hosted_link() {
     let temp = TempDb::new();
-    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher)).await);
+    let app = build_router(test_state(&temp).await);
     let cookie = login(&app).await;
 
     let resp = app
@@ -114,7 +95,7 @@ async fn crud_counts_and_masks_no_hosted_link() {
 #[tokio::test]
 async fn set_order_reorders_and_appends_unlisted() {
     let temp = TempDb::new();
-    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher)).await);
+    let app = build_router(test_state(&temp).await);
     let cookie = login(&app).await;
 
     // 建三个规则集:初始顺序 a, b, c。
@@ -188,7 +169,7 @@ async fn set_order_reorders_and_appends_unlisted() {
 #[tokio::test]
 async fn remote_source_masks_url() {
     let temp = TempDb::new();
-    let app = build_router(test_state_with_fetcher(&temp, Arc::new(FakeFetcher)).await);
+    let app = build_router(test_state(&temp).await);
     let cookie = login(&app).await;
 
     let resp = app
@@ -219,11 +200,8 @@ async fn remote_source_masks_url() {
         )
         .await
         .unwrap();
-    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
-        .await
-        .unwrap();
     assert!(
-        !String::from_utf8_lossy(&bytes).contains("MATCH,DIRECT"),
+        !text(resp).await.contains("MATCH,DIRECT"),
         "② 全局库不再公开托管规则内容"
     );
 }

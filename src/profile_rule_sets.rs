@@ -381,19 +381,17 @@ pub async fn public_serve(
     State(state): State<Arc<AppState>>,
     Path((prefix, token, name, file)): Path<(String, String, String, String)>,
 ) -> Response {
-    // 无论前缀是否匹配都执行 token 查找,并恒定时间比较前缀,使响应时序无法单独确认路径前缀
-    // (与 `generate::public_sub` 同一模式,见 `docs/security-design.md`)。
-    let prefix_ok = state.prefix_matches(&prefix);
-    let profile_id = sqlx::query_scalar::<_, String>("SELECT id FROM profiles WHERE token = ?")
-        .bind(&token)
-        .fetch_optional(&state.db)
-        .await
-        .ok()
-        .flatten();
-
-    let profile_id = match profile_id {
-        Some(id) if prefix_ok => id,
-        _ => return StatusCode::NOT_FOUND.into_response(),
+    let lookup = async {
+        sqlx::query_scalar::<_, String>("SELECT id FROM profiles WHERE token = ?")
+            .bind(&token)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten()
+    };
+    let profile_id = match state.public_gate(&prefix, lookup).await {
+        Some(id) => id,
+        None => return StatusCode::NOT_FOUND.into_response(),
     };
     let row = match fetch_serve_by_name(&state, &profile_id, &name).await {
         Ok(Some(r)) => r,
