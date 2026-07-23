@@ -1,3 +1,5 @@
+// SPA 入口。Provider 顺序:主题 → 路由 → 会话;401 由 api.ts 回调清空会话,跳转交给
+// RequireAuth 的 <Navigate>(AuthProvider 本身不使用路由)。
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";

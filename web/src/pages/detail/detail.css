@@ -1,3 +1,5 @@
+/* ProfileDetail 页与其 tab 卡片专用样式;跨页面共享的卡片/行样式在 components/cards.css。 */
+
 .page-detail {
   max-width: 1080px;
   margin: 0 auto;
@@ -52,11 +54,6 @@
   color: var(--primary);
   background: var(--primary-bg);
   border-color: var(--primary-border);
-}
-.detail-context {
-  font-size: 12.5px;
-  color: var(--text-3);
-  margin-bottom: 18px;
 }
 
 /* HERO 托管订阅 */
@@ -165,80 +162,12 @@
   color: var(--text-2);
 }
 
-/* 卡片(tab 内容容器) */
-.dcard {
-  background: var(--bg-container);
-  border: 1px solid var(--border-2);
-  border-radius: 12px;
-  box-shadow: var(--shadow-card);
-  padding: 18px 20px;
-}
-.dcard-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.dcard-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14.5px;
-  font-weight: 600;
-  color: var(--text);
-}
-.dcard-title .lock {
-  color: var(--text-3);
-  font-size: 13px;
-}
-.dcard-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.dcard-note {
-  font-size: 12px;
-  color: var(--text-4);
-  margin-top: 10px;
-}
-
-/* 行(节点/分组/规则共用列节奏) */
-.row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 14px;
-  border-radius: 8px;
-}
-.row:hover {
-  background: var(--bg-subtle);
-}
-.row + .row {
-  border-top: 1px solid var(--border-2);
-}
-.row-grab {
-  color: var(--text-4);
-  cursor: grab;
-  user-select: none;
-  touch-action: none;
-  display: flex;
-  font-size: 15px;
-}
+/* detail 卡片内专用行样式;共享行样式在 components/cards.css */
 .row-lock {
   color: var(--text-4);
   display: flex;
   font-size: 14px;
   width: 15px;
-}
-.row-name {
-  flex: 1;
-  min-width: 0;
-  font-size: 13.5px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 /* 分组行的名称列:弹性占满剩余宽度,长名省略号截断。 */
 .group-row-name {
@@ -252,41 +181,6 @@
   font-size: 13.5px;
   color: var(--text);
   font-weight: 550;
-}
-.row-sub {
-  font-size: 11.5px;
-  color: var(--text-4);
-  margin-left: 6px;
-}
-.row-actions {
-  flex-shrink: 0;
-  display: flex;
-  gap: 6px;
-}
-.icon-btn {
-  border: none;
-  background: none;
-  color: var(--text-3);
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 6px;
-  display: inline-flex;
-  font-size: 14px;
-}
-.icon-btn:hover {
-  color: var(--primary);
-  background: var(--fill-hover);
-}
-.icon-btn.danger:hover {
-  color: var(--danger);
-}
-.icon-btn:disabled {
-  color: var(--text-4);
-  cursor: not-allowed;
-}
-.icon-btn:disabled:hover {
-  color: var(--text-4);
-  background: none;
 }
 /* 禁用图标上叠一道对角斜杠(如 MATCH 不可删除) */
 .icon-slash {
@@ -304,34 +198,7 @@
   transform: translate(-50%, -50%) rotate(-45deg);
 }
 
-/* pill / 标签 */
-.tag-mono {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: var(--fill);
-  color: var(--text-2);
-  white-space: nowrap;
-}
-.tag-proto {
-  flex-shrink: 0;
-}
-.tag-proto.custom {
-  background: var(--primary-bg);
-  color: var(--primary);
-}
-.tag-addr {
-  flex-shrink: 0;
-  width: 200px;
-  text-align: left;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* 策略/类型标签 */
 .tag-policy {
   background: var(--primary-bg);
   color: var(--primary);
@@ -437,13 +304,6 @@
   gap: 10px;
   padding: 48px 0;
   color: var(--text-3);
-}
-
-.empty-line {
-  text-align: center;
-  padding: 28px 0;
-  color: var(--text-3);
-  font-size: 13px;
 }
 
 /* 规则错误 banner */

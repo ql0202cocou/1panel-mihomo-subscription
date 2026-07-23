@@ -9,11 +9,13 @@ use crate::app::AppState;
 use crate::error::ApiResult;
 use crate::util::{now, random_path_prefix};
 
+/// 返回给管理前端的设置视图(当前仅公共路径前缀)。
 #[derive(Serialize)]
 pub struct SettingsResponse {
     public_path_prefix: String,
 }
 
+/// 读取当前应用设置。
 pub async fn get(State(state): State<Arc<AppState>>) -> ApiResult<impl IntoResponse> {
     Ok(Json(SettingsResponse {
         public_path_prefix: state.current_prefix(),
@@ -29,6 +31,7 @@ pub async fn reset_public_path(State(state): State<Arc<AppState>>) -> ApiResult<
         .bind(now())
         .execute(&state.db)
         .await?;
+    // 公开端点校验读的是内存中的前缀,落库后必须同步,使新前缀免重启立即生效。
     state.set_prefix(prefix.clone());
     Ok(Json(SettingsResponse {
         public_path_prefix: prefix,

@@ -9,13 +9,16 @@ use serde::Serialize;
 
 #[derive(Debug)]
 pub enum ApiError {
+    /// 请求不合法;消息面向客户端,构造时不得携带秘密。
     BadRequest(String),
     /// 逐条列举的校验失败(如生成时的规则检查)。
     Validation(Vec<String>),
     NotFound,
+    /// 与现有资源冲突(如重名)。
     Conflict(String),
     /// 上游机场拉取/解析失败;携带一个安全的状态标签。
     Upstream(String),
+    /// 未预期的服务端错误;细节只记日志,客户端只见固定文案。
     Internal,
 }
 

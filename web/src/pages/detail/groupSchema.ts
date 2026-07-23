@@ -1,7 +1,7 @@
 // 自定义代理组选项的结构化编辑器 schema。组的选项(url、interval、strategy…)按组
 // 类型用带类型的输入框编辑,其余一律落到高级键值行——无需手写 JSON。
 
-import type { FieldDef } from "./nodeSchema";
+import type { FieldDef } from "../../components/nodeSchema";
 import type { GroupType } from "../../types";
 
 export const GROUP_TYPES: GroupType[] = [

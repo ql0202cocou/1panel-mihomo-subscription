@@ -22,6 +22,7 @@ pub fn mask_url(raw: &str) -> String {
     out.push_str(url.path());
 
     if let Some(query) = url.query() {
+        // 逐对重建 query:保留参数名便于排查问题,只隐藏值。
         let masked = query
             .split('&')
             .map(|pair| {

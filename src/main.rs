@@ -1,3 +1,6 @@
+//! 二进制入口:解析环境变量、初始化数据库与 `AppState`、组装路由并启动 HTTP 服务。
+//! 环境变量的权威说明见 `docs/deploy.md`。
+
 use std::{
     error::Error,
     io,
@@ -12,8 +15,8 @@ use mihomo_subscription::{
     auth::{AdminAuth, SessionStore, SESSION_IDLE},
     db,
     fetch::{HttpFetcher, DEFAULT_USER_AGENT},
+    keyed_lock::KeyedLock,
     rate_limit::RateLimiter,
-    single_flight::KeyedLock,
 };
 
 type AppResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -86,7 +89,7 @@ async fn main() -> AppResult<()> {
         }),
         cache_ttl,
         public_refresh_min_interval,
-        single_flight: KeyedLock::new(),
+        keyed_lock: KeyedLock::new(),
         trusted_proxy_hops,
         trusted_proxy_cidrs,
         login_limiter: Arc::new(RateLimiter::new(10, Duration::from_secs(60))),
@@ -119,6 +122,8 @@ async fn main() -> AppResult<()> {
     Ok(())
 }
 
+/// 解析数值环境变量;未设或非法时回退到 `default`。安全相关的项(如 `TRUSTED_PROXY_HOPS`)
+/// 也走这里,因为其默认值即最安全取值(hops 回退 0 = 完全不信任 XFF)。
 fn env_u64(key: &str, default: u64) -> u64 {
     std::env::var(key)
         .ok()
@@ -138,6 +143,8 @@ fn env_bool(key: &str, default: bool) -> bool {
     }
 }
 
+/// 解析 `TRUSTED_PROXY_CIDRS`(逗号分隔的 CIDR 列表)。任一条目非法即拒绝启动:静默跳过
+/// 会让管理员误以为 XFF 信任边界已收窄,实际却放开了伪造来源(见 `src/net.rs`)。
 fn trusted_proxy_cidrs() -> io::Result<Vec<IpNet>> {
     let Some(raw) = std::env::var("TRUSTED_PROXY_CIDRS")
         .ok()
@@ -160,6 +167,7 @@ fn trusted_proxy_cidrs() -> io::Result<Vec<IpNet>> {
         .collect()
 }
 
+/// 读取必填环境变量;缺失或为空即拒绝启动,不给默认值(避免弱凭据上线)。
 fn require_env(key: &str) -> io::Result<String> {
     let value = std::env::var(key).map_err(|_| {
         io::Error::new(

@@ -24,9 +24,9 @@ import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
 import { api, errorMessage } from "../api";
 import type { CustomNode } from "../types";
-import NodeForm, { contentToModel, modelToContent, type NodeModel } from "./detail/NodeForm";
-import { NODE_TYPE_LABELS } from "./detail/nodeSchema";
-import "./detail/detail.css";
+import NodeForm, { contentToModel, modelToContent, type NodeModel } from "../components/NodeForm";
+import { NODE_TYPE_LABELS } from "../components/nodeSchema";
+import "../components/cards.css";
 
 const EMPTY_MODEL: NodeModel = { name: "", type: "", fields: {} };
 
@@ -37,6 +37,7 @@ export default function GlobalNodes() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<CustomNode | null>(null);
   const [model, setModel] = useState<NodeModel>(EMPTY_MODEL);
+  // NodeForm 内部有派生状态(高级键值行等),每次打开弹窗换 key 强制重挂载复位。
   const [formKey, setFormKey] = useState("new");
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -97,6 +98,7 @@ export default function GlobalNodes() {
     }
   }
 
+  // 排序以节点名(全局唯一)为键,与 PUT /api/global-nodes/order 的 order 字段对应。
   async function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;

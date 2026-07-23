@@ -228,9 +228,7 @@ GET /:public_path_prefix/api/sub/:token
 响应头：`content-type: text/yaml`、`content-disposition: attachment; filename="<name>.yaml"`、
 `subscription-userinfo`（从机场透传，无则省略）、`profile-update-interval: 24`（小时，MVP 固定）。
 
-- 公共拉取在 `PUBLIC_REFRESH_MIN_SECONDS`（默认 30 秒）下限内复用最近生成缓存，降低 token 泄露后
-  高频请求对机场的回源放大；下限外回源拉取并重新生成。并发拉取由 per-profile single-flight 合并为
-  一次机场拉取。`generated_cache` 仍作拉取失败兜底（返陈旧缓存，无则 `503`）。无「生成配置」按钮；
+- 缓存复用/回源/兜底与 single-flight 合并的策略见「缓存与刷新」节。无「生成配置」按钮；
   响应/错误绝不含机场 URL；按来源 IP 限流。
 
 兼容：早期 `/api/v1/subscriptions*`、`/api/v1/merged` 已移除，无兼容层。
@@ -494,9 +492,7 @@ CREATE TABLE generated_cache (
 );
 ```
 
-- 每 profile 仅留最新一份。公共端点在 `PUBLIC_REFRESH_MIN_SECONDS`（默认 30 秒）下限内复用最近缓存，
-  下限外回源重新生成；本缓存也作机场拉取失败兜底。`CACHE_TTL_MINUTES`（默认 15，按 `generated_at`）
-  仅管理端 `preview`。
+- 每 profile 仅留最新一份；公共端点复用/回源/兜底与管理端 `preview` TTL 见「缓存与刷新」节。
 - `subscription_userinfo`：机场响应头原文，随缓存保存并在公共端点透传（无则 NULL）。
   `content_hash`：对「机场内容 + 生成输出」的哈希，随缓存保存。
 
@@ -583,8 +579,8 @@ HTTP trace 只记录脱敏 path，公开订阅/规则集路径中的 `PUBLIC_PAT
 
 ### 限流与客户端 IP
 
-- 登录按 IP + 账户；公共下载按**源 IP**（独立于 token，`404` 也计数）限流，使枚举共享单一
-  预算；首版内存限流。
+- 登录按**源 IP**（成功/失败请求均计数）；公共下载按**源 IP**（独立于 token，`404` 也计数）
+  限流，使枚举共享单一预算；首版内存限流。
 - 默认不信任 `X-Forwarded-For`： `TRUSTED_PROXY_HOPS=0`，按 TCP 对端限流。需要按真实客户端 IP
   限流时，必须同时设置受信跳数与 `TRUSTED_PROXY_CIDRS`（逗号分隔的直接反代网段）；只有 TCP 对端
   落在该网段内时才读取 `X-Forwarded-For`，并取**最右**不受信跳（最左可伪造）。头缺失、过短、
@@ -593,8 +589,9 @@ HTTP trace 只记录脱敏 path，公开订阅/规则集路径中的 `PUBLIC_PAT
 ### 缓存与刷新
 
 - 公共端点以 `PUBLIC_REFRESH_MIN_SECONDS`（默认 30 秒）作为每配置最小回源间隔：间隔内复用最近
-  `generated_cache`，间隔外回源拉取并重新生成；拉取失败时用旧缓存兜底（无则 `503`）。
-  `CACHE_TTL_MINUTES`（默认 15）仅管理端 `preview`。
+  `generated_cache`（降低 token 泄露后高频请求对机场的回源放大），间隔外回源拉取并重新生成；
+  拉取失败时用旧缓存兜底（无则 `503`）。`CACHE_TTL_MINUTES`（默认 15，按 `generated_at`）
+  仅管理端 `preview`。
 - **single-flight**：同配置并发刷新在 per-profile 锁后合并为一次上游获取（后到者等待或拿陈旧
   缓存），防踩踏扇出。
 

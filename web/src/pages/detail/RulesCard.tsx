@@ -48,13 +48,13 @@ import type {
   RuleSet,
 } from "../../types";
 import { BUILTIN_POLICIES } from "./groupSchema";
-import { TypeChips } from "./fields";
+import { TypeChips } from "../../components/fields";
 import {
   RULE_SET_BEHAVIORS as RS_BEHAVIORS,
   RULE_SET_MANUAL_FORMATS as RS_MANUAL_FORMATS,
   RULE_SET_REMOTE_FORMATS as RS_REMOTE_FORMATS,
   RULE_SET_SOURCES as RS_SOURCES,
-} from "./ruleSetConstants";
+} from "../../components/ruleSetConstants";
 
 interface Props {
   profileId: string;
@@ -144,6 +144,8 @@ const isComment = (line: string) => line.startsWith("#");
 const isMatchLine = (line: string) =>
   !isComment(line) && parseRule(line).type.trim().toUpperCase() === "MATCH";
 
+// 解析一行 Mihomo 规则文本。payload 本身可含逗号(如逻辑规则 "(A,x),(B,y)"),所以
+// 从尾部取:先剥掉结尾的 no-resolve,再取最后一项为 policy,其余整体作为 payload。
 function parseRule(line: string): RuleModel {
   const parts = line.split(",").map((p) => p.trim());
   const type = parts[0] ?? "";
@@ -336,6 +338,7 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
             ...base,
             interval_hours: m.rsInterval,
             cache: true,
+            // 远程 URL 已脱敏不回显:留空时不传 url 字段,后端保留原 URL(见 submit 的校验)。
             ...(m.rsUrl.trim() ? { url: m.rsUrl.trim() } : {}),
           }
         : { ...base, content: m.rsContent };
@@ -407,6 +410,7 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
     try {
       const res = await api<ProviderRulesResponse>(`/api/profiles/${profileId}/provider-rules`);
       const existing = new Set([...rules, ...(matchLine ? [matchLine] : [])]);
+      // 丢弃机场规则里的 MATCH(兜底统一由钉底的 matchLine 管理)与本地已有的重复行。
       const incoming = res.rules
         .map((l) => l.trim())
         .filter((l) => l !== "" && !isMatchLine(l) && !existing.has(l));
@@ -499,6 +503,7 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
     }
   }
 
+  // 生成错误里与本卡片相关的行(后端 `src/converter.rs` 的校验错误以 "rules line" 开头)。
   const ruleErrors = errors.filter((e) => /rules line/.test(e));
   const total = rules.length + (matchLine ? 1 : 0);
 
@@ -736,6 +741,7 @@ function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
   const categoryKey = RULE_TYPE_GROUPS.find((g) => g.types.includes(upperType))?.key;
   const category = categoryKey ? t(`rules.typeGroups.${categoryKey}`) : "";
 
+  // 按规则类型选择「匹配内容」的输入控件:枚举型给选项,逻辑规则给多行文本,其余单行输入。
   function contentBlock() {
     if (upperType === "NETWORK") {
       return {
@@ -743,6 +749,7 @@ function RuleComposer({ model, onChange, policyOptions }: ComposerProps) {
         input: (
           <Segmented
             options={NETWORK_OPTIONS}
+            // 已有内容不在枚举内时保持未选中,不静默改写。
             value={NETWORK_OPTIONS.includes(model.payload) ? model.payload : undefined}
             onChange={(payload) => onChange({ ...model, payload: String(payload) })}
           />

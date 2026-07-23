@@ -12,8 +12,8 @@ use mihomo_subscription::app::AppState;
 use mihomo_subscription::auth::{AdminAuth, SessionStore, SESSION_IDLE};
 use mihomo_subscription::db;
 use mihomo_subscription::fetch::{HttpFetcher, RemoteFetcher};
+use mihomo_subscription::keyed_lock::KeyedLock;
 use mihomo_subscription::rate_limit::RateLimiter;
-use mihomo_subscription::single_flight::KeyedLock;
 use serde_json::Value;
 use sqlx::SqlitePool;
 use tower::util::ServiceExt;
@@ -83,7 +83,7 @@ pub async fn test_state_with_fetcher(
         fetcher,
         cache_ttl: Duration::from_secs(15 * 60),
         public_refresh_min_interval: Duration::ZERO,
-        single_flight: KeyedLock::new(),
+        keyed_lock: KeyedLock::new(),
         trusted_proxy_hops: 0,
         trusted_proxy_cidrs: Vec::new(),
         // Generous limits so unrelated CRUD/login calls in tests aren't gated.

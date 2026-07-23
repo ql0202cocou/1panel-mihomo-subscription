@@ -19,7 +19,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
 import { api, errorMessage } from "../../api";
 import type { CustomNode, ProxiesResponse, ProxyPreview } from "../../types";
-import { NODE_TYPE_LABELS } from "./nodeSchema";
+import { NODE_TYPE_LABELS } from "../../components/nodeSchema";
 
 interface Props {
   profileId: string;
@@ -27,6 +27,7 @@ interface Props {
   profileName: string;
   /** 全局自定义节点池快照(此处只读;编辑在「节点配置」页)。 */
   nodes: CustomNode[];
+  /** 生成缓存的刷新信号:变化时重新拉取节点预览。 */
   generatedAt: string | null;
 }
 
@@ -36,6 +37,7 @@ export default function NodesCard({ profileId, profileName, nodes, generatedAt }
   const { t } = useTranslation();
   const { message } = AntdApp.useApp();
   const [proxies, setProxies] = useState<ProxyPreview[]>([]);
+  /** 是否已生成过:区分「尚未生成」与「机场无节点」,仅影响空态文案。 */
   const [generated, setGenerated] = useState(true);
   const [sectionOrder, setSectionOrder] = useState<string[]>(DEFAULT_SECTIONS);
 
@@ -46,6 +48,7 @@ export default function NodesCard({ profileId, profileName, nodes, generatedAt }
       const res = await api<ProxiesResponse>(`/api/profiles/${profileId}/proxies`);
       setProxies(res.proxies);
       setGenerated(res.generated);
+      // 后端持久化的顺序异常(长度不为 2)时回退默认,避免渲染出未知块
       setSectionOrder(
         res.node_section_order.length === 2 ? res.node_section_order : DEFAULT_SECTIONS,
       );
@@ -59,6 +62,7 @@ export default function NodesCard({ profileId, profileName, nodes, generatedAt }
   }, [loadGeneratedPreview, generatedAt]);
 
   const customNames = useMemo(() => new Set(nodes.map((n) => n.name)), [nodes]);
+  // 生成预览包含全部节点,按名字剔除自定义节点后剩下的即机场节点
   const providerNodes = useMemo(
     () => proxies.filter((p) => !customNames.has(p.name)),
     [proxies, customNames],

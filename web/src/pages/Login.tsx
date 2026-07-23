@@ -17,6 +17,7 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // 登录成功后回到被路由守卫拦截前的目标页(RequireAuth 经 location.state 传入);默认回首页。
   const from = (location.state as { from?: Location } | null)?.from?.pathname ?? "/";
 
   async function onSubmit(e: FormEvent) {

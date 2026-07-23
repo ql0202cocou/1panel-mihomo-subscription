@@ -189,7 +189,7 @@ async fn serve_or_refresh(state: &AppState, profile: &ProfileCore) -> Option<Ser
 
     // 把该 profile 的并发拉取合并为一次机场拉取。
     state
-        .single_flight
+        .keyed_lock
         .run(&profile.id, async {
             // 若缓存仍处于公开刷新最小间隔内,直接提供它;否则如果本批里另一个请求在我们等锁期间已刷新过
             // (缓存在我们到达时或之后被重生),也提供它而非再次拉取。

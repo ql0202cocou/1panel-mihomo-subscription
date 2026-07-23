@@ -446,7 +446,7 @@ async fn serve_remote(state: &AppState, row: ServeRow) -> Response {
 
     let key = format!("profile-ruleset:{}", row.id);
     state
-        .single_flight
+        .keyed_lock
         .run(&key, async {
             // 等锁期间可能已被另一个请求刷新过——重读最新行。
             let Some(mut row) = fetch_serve_by_id(state, &row.id).await.ok().flatten() else {

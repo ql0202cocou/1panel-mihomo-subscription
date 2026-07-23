@@ -24,16 +24,17 @@ import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
 import { api, errorMessage } from "../api";
 import type { RuleSet } from "../types";
-import { TypeChips } from "./detail/fields";
+import { TypeChips } from "../components/fields";
 import {
   RULE_SET_BEHAVIORS as BEHAVIORS,
   RULE_SET_MANUAL_FORMATS as MANUAL_FORMATS,
   RULE_SET_REMOTE_FORMATS as REMOTE_FORMATS,
   RULE_SET_SOURCES as SOURCES,
-} from "./detail/ruleSetConstants";
-import "./detail/detail.css";
+} from "../components/ruleSetConstants";
+import "../components/cards.css";
 import "./RuleSets.css";
 
+// 规则集名要进 URL 路径并作 RULE-SET 引用名,字符集与后端校验保持一致(见 src/rulelib.rs)。
 const NAME_RE = /^[A-Za-z0-9._-]+$/;
 
 interface FormState {
@@ -121,6 +122,7 @@ export default function RuleSets() {
       source: form.source,
       enabled: editing ? editing.enabled : true,
     };
+    // 远程 URL 留空则不放进 body:编辑时表示保持不变,新建时由后端校验必填。
     const body =
       form.source === "remote"
         ? {
@@ -149,6 +151,7 @@ export default function RuleSets() {
     }
   }
 
+  // 排序以规则集名(全局唯一)为键,与 PUT /api/rule-sets/order 的 order 字段对应。
   async function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;

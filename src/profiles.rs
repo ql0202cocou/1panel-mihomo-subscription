@@ -20,6 +20,7 @@ use crate::ssrf::{self, SsrfError};
 use crate::util::{now, random_token, MAX_ORDER_ENTRIES, MAX_ORDER_NAME_LEN};
 use crate::yaml;
 
+// Mihomo 支持的代理分组类型白名单;手动创建与机场导入共用同一过滤。
 const GROUP_TYPES: [&str; 5] = ["select", "url-test", "fallback", "load-balance", "relay"];
 
 // ─── DB 行类型 ─────────────────────────────────────────────────────────────────
@@ -148,6 +149,7 @@ fn node_response(row: NodeRow) -> NodeResponse {
     }
 }
 
+// members/options 在库中是 JSON 文本;解析失败兜底为空,不让单条坏数据打挂整个详情响应。
 fn group_response(row: GroupRow) -> GroupResponse {
     GroupResponse {
         members: serde_json::from_str(&row.members).unwrap_or_default(),
@@ -195,6 +197,7 @@ fn validate_source_url(raw: &str) -> ApiResult<()> {
     })
 }
 
+/// 读取 profile 行,顺带从 1—1 的 `generated_cache` 子查询出最近生成时间(无缓存则为 NULL)。
 async fn load_profile_row(state: &AppState, id: &str) -> ApiResult<ProfileRow> {
     sqlx::query_as::<_, ProfileRow>(
         "SELECT p.*, (SELECT generated_at FROM generated_cache WHERE profile_id = p.id) \
@@ -353,6 +356,8 @@ pub async fn delete(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> ApiResult<impl IntoResponse> {
+    // 依赖 `foreign_keys=ON` 的 ON DELETE CASCADE 一并清理 rulesets/custom_groups/
+    // profile_rule_sets/generated_cache 等从表。
     let result = sqlx::query("DELETE FROM profiles WHERE id = ?")
         .bind(&id)
         .execute(&state.db)
@@ -369,6 +374,7 @@ pub struct TokenResponse {
     subscription_url: String,
 }
 
+/// 重置订阅 token。旧 token 立即失效(公开端点按 token 查库),已生成缓存不受影响。
 pub async fn reset_token(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -861,6 +867,7 @@ pub async fn delete_group(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// 按 (group_id, profile_id) 双限定读取分组,防止用他人 profile 的 id 访问/操作其分组。
 async fn fetch_group(state: &AppState, profile_id: &str, group_id: &str) -> ApiResult<GroupRow> {
     sqlx::query_as::<_, GroupRow>(
         "SELECT id, name, group_type, members, options, enabled, created_at, updated_at

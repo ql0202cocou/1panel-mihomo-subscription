@@ -19,13 +19,14 @@ import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
 import { api, errorMessage } from "../../api";
 import type { CustomGroup, CustomNode, GroupType, ProxiesResponse } from "../../types";
-import { AdvancedFields, FieldInput, TypeChips, advancedEntries } from "./fields";
+import { AdvancedFields, FieldInput, TypeChips, advancedEntries } from "../../components/fields";
 import { BUILTIN_POLICIES, GROUP_TYPES, groupOptionFields, groupOptionKeys } from "./groupSchema";
 
 interface Props {
   profileId: string;
   groups: CustomGroup[];
   nodes: CustomNode[];
+  /** 生成缓存的刷新信号:变化时重新拉取生成预览(成员候选、分组顺序)。 */
   generatedAt: string | null;
   /** 任一分组变更持久化成功后回调(保存/删除/导入),父组件据此重新加载。 */
   onSaved: () => void;
@@ -33,6 +34,7 @@ interface Props {
 
 type Options = Record<string, unknown>;
 
+/** 可排序行:name 即 group.name,单列出来充当 dnd id 与 React key(分组名在订阅内唯一)。 */
 interface GroupRow {
   name: string;
   group: CustomGroup;
@@ -180,6 +182,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onSa
     setOptions(next);
   }
 
+  /** 整体替换高级行:保留当前类型已知字段的已有值,未知键只来自高级行。 */
   function setAdvancedOptions(advRows: [string, unknown][]) {
     const known = groupOptionKeys(groupType);
     const next: Options = {};
@@ -202,7 +205,9 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onSa
       name: name.trim(),
       group_type: groupType,
       members,
+      // 空对象按 null 提交,与后端「无选项」的表示一致
       options: Object.keys(cleaned).length ? cleaned : null,
+      // 弹窗不暴露 enabled 开关,编辑时原样保留
       enabled: editing ? editing.enabled : true,
     });
     try {
@@ -224,6 +229,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onSa
     }
   }
 
+  // 成员候选 = 机场节点 + 自定义节点 + 其他分组(排除自身,避免循环引用)+ 内置策略
   const memberOptions = dedupe([
     ...proxyNames,
     ...nodes.map((n) => n.name),

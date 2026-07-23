@@ -1,3 +1,4 @@
+// 主框架:侧边导航 + 顶栏(当前页标题、主题切换)+ <Outlet/> 内容区。
 import type { ReactNode } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";

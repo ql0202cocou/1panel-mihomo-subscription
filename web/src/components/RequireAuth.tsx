@@ -8,6 +8,7 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
+  // 首次会话探活期间整页 loading,避免已登录用户先闪一下登录页。
   if (loading) {
     return (
       <div style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>

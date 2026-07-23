@@ -23,6 +23,7 @@ import type { ProfileDetail as Detail } from "../types";
 import NodesCard from "./detail/NodesCard";
 import GroupsCard from "./detail/GroupsCard";
 import RulesCard from "./detail/RulesCard";
+import "../components/cards.css";
 import "./detail/detail.css";
 
 export default function ProfileDetail() {
@@ -67,6 +68,7 @@ export default function ProfileDetail() {
         method: "POST",
       });
       message.success(t("detail.generateSuccess"));
+      // 规则集冲突不阻断生成,后端照常产出,这里只作警告横幅展示。
       setGenWarnings(res.ruleset_conflicts ?? []);
       await reload();
     } catch (e) {
@@ -176,6 +178,7 @@ function HostedLink({ detail, onReset }: { detail: Detail; onReset: () => void }
   const { message } = AntdApp.useApp();
 
   async function resetToken() {
+    // 重置 token 会更换订阅 URL 并使旧链接立即失效(公开端点按 token 校验),故需 Popconfirm 二次确认。
     try {
       await api(`/api/profiles/${detail.id}/reset-token`, { method: "POST" });
       message.success(t("detail.generateSuccess"));
@@ -323,6 +326,7 @@ function PreviewCard({ profileId }: { profileId: string }) {
   const [loading, setLoading] = useState(false);
 
   async function load() {
+    // 预览是只读的「试生成」:后端不落缓存、不改拉取状态(对应 src/generate.rs 的 preview)。
     setLoading(true);
     try {
       setYaml(await api<string>(`/api/profiles/${profileId}/preview`));

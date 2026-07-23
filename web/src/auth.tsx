@@ -1,3 +1,4 @@
+// 管理员会话状态:启动时探活 /api/auth/session 恢复登录态;任何 401 经 api.ts 回调清空会话。
 import {
   createContext,
   useContext,
@@ -20,6 +21,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // 探活当前会话;任何失败(未登录、会话过期、网络错误)都按未登录处理。
   async function refresh(): Promise<void> {
     try {
       const session = await api<{ username: string }>("/api/auth/session");

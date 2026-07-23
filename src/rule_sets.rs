@@ -67,6 +67,7 @@ const META_COLS: &str = "id, name, behavior, format, source, content, rule_count
 
 fn rule_set_response(row: RuleSetRow) -> RuleSetResponse {
     RuleSetResponse {
+        // 来源 URL 属秘密,响应中只输出脱敏形式,绝不回传明文。
         remote_url_masked: row.url.as_deref().map(mask::mask_url),
         count: row.rule_count,
         id: row.id,
@@ -155,6 +156,7 @@ pub async fn update(
     Json(body): Json<RuleSetBody>,
 ) -> ApiResult<impl IntoResponse> {
     let existing = fetch_one(&state, &id).await?;
+    // 传入已存 URL:remote 编辑时前端拿不到明文 URL(只见过脱敏形式),留空即沿用原值。
     let n = rulelib::normalize(&body, existing.url.as_deref())?;
     sqlx::query(
         "UPDATE rule_sets SET name = ?, behavior = ?, format = ?, source = ?, content = ?, \

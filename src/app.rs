@@ -19,8 +19,8 @@ use tower_http::trace::TraceLayer;
 
 use crate::auth::{self, AdminAuth, SessionStore};
 use crate::fetch::RemoteFetcher;
+use crate::keyed_lock::KeyedLock;
 use crate::rate_limit::{self, RateLimiter};
-use crate::single_flight::KeyedLock;
 use crate::{generate, global_nodes, profile_rule_sets, profiles, rule_sets, settings};
 
 /// 管理请求体大小上限(见 `docs/api-design.md`)。
@@ -48,7 +48,7 @@ pub struct AppState {
     /// 单个客户端高频拉取放大为机场请求压力。
     pub public_refresh_min_interval: Duration,
     /// per-profile 的刷新合并。
-    pub single_flight: KeyedLock,
+    pub keyed_lock: KeyedLock,
     /// 推导客户端 IP 时信任的反向代理跳数。
     pub trusted_proxy_hops: usize,
     /// 允许提供可信 `X-Forwarded-For` 的直接 TCP 对端网段。

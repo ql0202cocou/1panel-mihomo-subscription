@@ -9,7 +9,7 @@
 
 ### Compose 示例
 
-在 1Panel「容器 → 编排」新建，或主机上 `docker compose up -d`：
+完整可粘贴示例（含全部可选变量与逐行注释）见 [README](../README.md)；最简形式：
 
 ```yaml
 services:
@@ -24,9 +24,6 @@ services:
       ADMIN_PASSWORD: change-me
       PUBLIC_BASE_URL: https://sub.example.com
       SECURE_COOKIES: "true"
-      PUBLIC_REFRESH_MIN_SECONDS: "30"
-      TRUSTED_PROXY_HOPS: "0"
-      TRUSTED_PROXY_CIDRS: ""
       # 其余可选项见下表（日志、获取/缓存调优等）
     volumes:
       - ./data:/data           # 持久化 SQLite；容器以 root 启动后 chown 再降权
@@ -58,7 +55,7 @@ compose 的 `environment:` 与代码必须一致。
 | `SECURE_COOKIES` | `auto` | 否 | 强制 `Secure` 会话 cookie。`auto`（及无法识别值）从 `https://` 的 `PUBLIC_BASE_URL` 推断；经 TLS 终止反代（应用走纯 HTTP）对外 HTTPS 时设 `true`；cookie 最终无 `Secure` 时记 warn |
 | `PORT` | `8080` | 否 | 容器监听端口（一般不改，改主机映射即可） |
 | `DATA_DIR` | `/data` | 否 | SQLite 数据目录（对应挂载卷） |
-| `WEB_DIR` | `/app/web/dist` | —— | Axum 提供的构建 SPA 目录；烘焙进镜像，非用户字段，仅列出 |
+| `WEB_DIR` | `web/dist` | —— | Axum 提供的构建 SPA 目录；镜像内由 `ENV` 覆盖为 `/app/web/dist`，烘焙进镜像，非用户字段，仅列出 |
 
 `PUBLIC_BASE_URL` 仅存外部可达源；随机 `PUBLIC_PATH_PREFIX` 前置在 token 化端点前：
 `https://sub.example.com/<public-path-prefix>/api/sub/<token>`。
@@ -102,7 +99,7 @@ cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 
 ### 滚动 Changelog
 
-1. `[Unreleased]` 改名为 `[X.Y.Z] - YYYY-MM-DD`；2. 其上方新建空 `[Unreleased]`；3. 不删历史条目。
+1. `[Unreleased]` 改名为 `[X.Y.Z] - YYYY-MM-DD`；2. 其上方新建空 `[Unreleased]`。
 
 ### 构建并推送镜像
 

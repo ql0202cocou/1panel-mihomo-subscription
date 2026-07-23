@@ -56,6 +56,7 @@ pub struct NodeBody {
     name: String,
     node_type: String,
     content: String,
+    /// 可省略,缺省视为 true(与写入时的 `unwrap_or(true)` 对应)。
     enabled: Option<bool>,
 }
 
@@ -139,7 +140,7 @@ pub async fn update(
     Path(id): Path<String>,
     Json(body): Json<NodeBody>,
 ) -> ApiResult<impl IntoResponse> {
-    let _ = fetch_one(&state, &id).await?;
+    let _ = fetch_one(&state, &id).await?; // 先确认存在:不存在直接 404,不进入校验
     validate_node(&body)?;
     sqlx::query(
         "UPDATE global_nodes SET name = ?, node_type = ?, content = ?, enabled = ?, updated_at = ?
