@@ -35,8 +35,8 @@ pub fn random_path_prefix() -> String {
     random_b64(16)
 }
 
-fn random_b64(len: usize) -> String {
-    let mut bytes = vec![0u8; len];
+fn random_b64(byte_len: usize) -> String {
+    let mut bytes = vec![0u8; byte_len];
     rand::rng().fill_bytes(&mut bytes);
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }

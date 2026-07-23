@@ -230,6 +230,7 @@ pub struct ImportBody {
 
 #[derive(Serialize)]
 pub struct ImportResult {
+    /// 实际复制进本订阅(③)的规则集定义数(已存在同名定义的不计)。
     imported: usize,
 }
 
@@ -249,16 +250,17 @@ struct GlobalRuleSet {
 
 /// `POST /api/profiles/:id/rule-sets/import` —— 从全局 ② 复制选中规则集进本订阅 ③(含真实远程 URL,
 /// 前端拿不到脱敏后的 URL,故由后端复制),并为尚未引用的名追加 `RULE-SET,<name>,<policy>` 规则行,
-/// 随后重缝缓存使其立即生效。已存在的定义/已引用的规则行跳过。
+/// 随后重缝缓存使其立即生效。已存在的定义/已引用的规则行跳过;`imported` 计实际复制的定义数。
 pub async fn import(
     State(state): State<Arc<AppState>>,
     Path(profile_id): Path<String>,
     Json(body): Json<ImportBody>,
 ) -> ApiResult<impl IntoResponse> {
     let _ = profile_token(&state, &profile_id).await?;
-    let names = dedup(&body.names);
+    let names = normalize_names(&body.names);
 
     // 复制定义:逐个把 ② 行复制进 ③(本订阅已有同名则跳过);rule_count 直接沿用 ② 的值。
+    let mut imported = 0usize;
     for name in &names {
         let exists = sqlx::query_scalar::<_, String>(
             "SELECT id FROM profile_rule_sets WHERE profile_id = ? AND name = ?",
@@ -302,6 +304,7 @@ pub async fn import(
         .bind(&ts)
         .execute(&state.db)
         .await?;
+        imported += 1;
     }
 
     // 追加规则行:仅为尚未被 RULE-SET 引用的名追加,统一指向 `policy`。
@@ -318,8 +321,7 @@ pub async fn import(
         .filter(|n| !referenced.iter().any(|r| r == *n))
         .map(|n| format!("RULE-SET,{n},{policy}"))
         .collect();
-    let imported = lines.len();
-    if imported > 0 {
+    if !lines.is_empty() {
         if !content.is_empty() && !content.ends_with('\n') {
             content.push('\n');
         }
@@ -342,7 +344,8 @@ pub async fn import(
     Ok(Json(ImportResult { imported }))
 }
 
-fn dedup(names: &[String]) -> Vec<String> {
+/// trim 每个名字、丢弃空串并保序去重。
+fn normalize_names(names: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for n in names {
         let n = n.trim();

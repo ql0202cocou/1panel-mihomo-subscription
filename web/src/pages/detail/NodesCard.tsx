@@ -35,16 +35,16 @@ const DEFAULT_SECTIONS = ["provider", "custom"];
 export default function NodesCard({ profileId, profileName, nodes, generatedAt }: Props) {
   const { t } = useTranslation();
   const { message } = AntdApp.useApp();
-  const [providers, setProviders] = useState<ProxyPreview[]>([]);
+  const [proxies, setProxies] = useState<ProxyPreview[]>([]);
   const [generated, setGenerated] = useState(true);
   const [sectionOrder, setSectionOrder] = useState<string[]>(DEFAULT_SECTIONS);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  const loadProviders = useCallback(async () => {
+  const loadGeneratedPreview = useCallback(async () => {
     try {
       const res = await api<ProxiesResponse>(`/api/profiles/${profileId}/proxies`);
-      setProviders(res.proxies);
+      setProxies(res.proxies);
       setGenerated(res.generated);
       setSectionOrder(
         res.node_section_order.length === 2 ? res.node_section_order : DEFAULT_SECTIONS,
@@ -55,13 +55,13 @@ export default function NodesCard({ profileId, profileName, nodes, generatedAt }
   }, [profileId]);
 
   useEffect(() => {
-    void loadProviders();
-  }, [loadProviders, generatedAt]);
+    void loadGeneratedPreview();
+  }, [loadGeneratedPreview, generatedAt]);
 
   const customNames = useMemo(() => new Set(nodes.map((n) => n.name)), [nodes]);
   const providerNodes = useMemo(
-    () => providers.filter((p) => !customNames.has(p.name)),
-    [providers, customNames],
+    () => proxies.filter((p) => !customNames.has(p.name)),
+    [proxies, customNames],
   );
 
   async function onSectionDragEnd(event: DragEndEvent) {
@@ -83,7 +83,7 @@ export default function NodesCard({ profileId, profileName, nodes, generatedAt }
       setSectionOrder(sectionOrder);
       message.error(errorMessage(e, t("nodes.orderSaveFailed")));
     } finally {
-      void loadProviders();
+      void loadGeneratedPreview();
     }
   }
 

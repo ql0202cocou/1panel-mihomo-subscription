@@ -50,7 +50,7 @@ export interface ProxiesResponse {
   proxies: ProxyPreview[];
   /** 两个节点区块的顺序,如 ["provider","custom"]。 */
   node_section_order: string[];
-  /** 最近一次生成结果中的机场代理组(名称 + 类型)。 */
+  /** 最近一次生成结果中的代理分组(名称 + 类型)。生成时机场分组被整体替换,故这些都是自定义分组的快照。 */
   groups: ProxyPreview[];
 }
 

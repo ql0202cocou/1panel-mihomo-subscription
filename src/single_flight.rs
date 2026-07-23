@@ -1,7 +1,8 @@
-//! 按 key 的 single-flight 锁。
+//! 按 key 的互斥锁,是 single-flight 合并的基础设施。
 //!
-//! 用于让针对同一 profile 的并发公开请求合并为一次机场刷新,而非踩踏上游
-//! (见 `docs/security-design.md`)。入口是 [`SingleFlight::run`]:取锁、执行、归还一步到位,
+//! 本身只提供互斥:同 key 的并发 future 逐个串行执行,不共享结果;真正把并发公开请求
+//! 合并为一次机场刷新,靠调用方在锁内重查缓存实现(见 `generate.rs::serve_or_refresh`
+//! 与 `docs/security-design.md`)。入口是 [`KeyedLock::run`]:取锁、执行、归还一步到位,
 //! 无等待者的条目在结束后即从锁表移除,使锁表随使用回收而非只增不减(清理思路参照
 //! `src/rate_limit.rs` 的机会性清理)。
 
@@ -12,11 +13,11 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
 
 #[derive(Clone, Default)]
-pub struct SingleFlight {
+pub struct KeyedLock {
     locks: Arc<Mutex<HashMap<String, Arc<AsyncMutex<()>>>>>,
 }
 
-impl SingleFlight {
+impl KeyedLock {
     pub fn new() -> Self {
         Self::default()
     }
@@ -54,13 +55,13 @@ impl SingleFlight {
 mod tests {
     use super::*;
 
-    fn len(sf: &SingleFlight) -> usize {
+    fn len(sf: &KeyedLock) -> usize {
         sf.locks.lock().unwrap().len()
     }
 
     #[tokio::test]
     async fn run_executes_and_cleans_up() {
-        let sf = SingleFlight::new();
+        let sf = KeyedLock::new();
         let out = sf.run("k", async { 42 }).await;
         assert_eq!(out, 42);
         assert_eq!(len(&sf), 0, "run 结束后无等待者的条目被移除");
@@ -68,7 +69,7 @@ mod tests {
 
     #[tokio::test]
     async fn release_removes_entry_without_waiters() {
-        let sf = SingleFlight::new();
+        let sf = KeyedLock::new();
         let lock = sf.lock_for("k");
         {
             let _guard = lock.lock().await;
@@ -79,7 +80,7 @@ mod tests {
 
     #[tokio::test]
     async fn release_keeps_entry_with_waiters() {
-        let sf = SingleFlight::new();
+        let sf = KeyedLock::new();
         let lock = sf.lock_for("k");
         let waiter = sf.lock_for("k"); // 等待者持有的克隆
         {
@@ -94,7 +95,7 @@ mod tests {
 
     #[tokio::test]
     async fn same_key_shares_lock_until_released() {
-        let sf = SingleFlight::new();
+        let sf = KeyedLock::new();
         let a = sf.lock_for("k");
         let b = sf.lock_for("k");
         assert!(Arc::ptr_eq(&a, &b), "同 key 合并到同一把锁");

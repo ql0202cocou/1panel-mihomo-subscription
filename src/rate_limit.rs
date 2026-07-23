@@ -48,7 +48,7 @@ impl RateLimiter {
     }
 
     /// 为 `key` 记一次命中;有可用令牌则返回 `true`。
-    pub fn check(&self, key: &str) -> bool {
+    pub fn try_acquire(&self, key: &str) -> bool {
         let mut map = self.inner.lock().unwrap();
         let now = Instant::now();
 
@@ -77,8 +77,8 @@ impl RateLimiter {
     }
 }
 
-/// 用应用的受信代理配置推导 `req` 的客户端 IP 字符串。
-fn client_ip(state: &AppState, req: &Request) -> String {
+/// 用应用的受信代理配置推导 `req` 的限流 key(客户端 IP 字符串,推导失败时为 `"unknown"`)。
+fn client_ip_key(state: &AppState, req: &Request) -> String {
     let xff = req
         .headers()
         .get(header::HeaderName::from_static("x-forwarded-for"))
@@ -97,8 +97,8 @@ fn client_ip(state: &AppState, req: &Request) -> String {
 
 /// 按客户端 IP 限制登录尝试(暴力破解防护)。
 pub async fn login(State(state): State<Arc<AppState>>, req: Request, next: Next) -> Response {
-    let key = format!("login:{}", client_ip(&state, &req));
-    if !state.login_limiter.check(&key) {
+    let key = format!("login:{}", client_ip_key(&state, &req));
+    if !state.login_limiter.try_acquire(&key) {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
     next.run(req).await
@@ -108,8 +108,8 @@ pub async fn login(State(state): State<Arc<AppState>>, req: Request, next: Next)
 /// 一个客户端猜很多不同 token 时共享同一预算,故限流器真正能抑制 token 枚举/扫描——且在处理器
 /// 之前运行,故 404 也计数。
 pub async fn download(State(state): State<Arc<AppState>>, req: Request, next: Next) -> Response {
-    let key = format!("dl:{}", client_ip(&state, &req));
-    if !state.download_limiter.check(&key) {
+    let key = format!("dl:{}", client_ip_key(&state, &req));
+    if !state.download_limiter.try_acquire(&key) {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
     next.run(req).await
@@ -122,21 +122,27 @@ mod tests {
     #[test]
     fn allows_burst_up_to_capacity_then_denies() {
         let rl = RateLimiter::new(3, Duration::from_secs(60));
-        assert!(rl.check("k"));
-        assert!(rl.check("k"));
-        assert!(rl.check("k"));
-        assert!(!rl.check("k"), "4th hit over the burst capacity is denied");
+        assert!(rl.try_acquire("k"));
+        assert!(rl.try_acquire("k"));
+        assert!(rl.try_acquire("k"));
+        assert!(
+            !rl.try_acquire("k"),
+            "4th hit over the burst capacity is denied"
+        );
         // A different key has its own bucket.
-        assert!(rl.check("other"));
+        assert!(rl.try_acquire("other"));
     }
 
     #[test]
     fn tokens_refill_over_time() {
         let rl = RateLimiter::new(1, Duration::from_millis(20));
-        assert!(rl.check("k"));
-        assert!(!rl.check("k"));
+        assert!(rl.try_acquire("k"));
+        assert!(!rl.try_acquire("k"));
         std::thread::sleep(Duration::from_millis(30));
-        assert!(rl.check("k"), "token refilled after the window elapsed");
+        assert!(
+            rl.try_acquire("k"),
+            "token refilled after the window elapsed"
+        );
     }
 
     #[test]
@@ -146,12 +152,12 @@ mod tests {
         // fixed window, which would hand back the whole budget at the boundary.
         let rl = RateLimiter::new(10, Duration::from_millis(100));
         for _ in 0..10 {
-            assert!(rl.check("k"));
+            assert!(rl.try_acquire("k"));
         }
-        assert!(!rl.check("k"), "bucket drained");
+        assert!(!rl.try_acquire("k"), "bucket drained");
 
         std::thread::sleep(Duration::from_millis(50));
-        let granted = (0..10).filter(|_| rl.check("k")).count();
+        let granted = (0..10).filter(|_| rl.try_acquire("k")).count();
         assert!(
             (3..=7).contains(&granted),
             "expected a partial refill (~5), got {granted}"

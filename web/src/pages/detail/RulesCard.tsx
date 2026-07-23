@@ -132,7 +132,7 @@ const RS_DEFAULTS = {
   rsInterval: 24,
 } as const;
 
-const EMPTY_RULE: RuleModel = {
+const DEFAULT_RULE: RuleModel = {
   type: "DOMAIN-SUFFIX",
   payload: "",
   policy: "",
@@ -179,10 +179,11 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
   const [matchLine, setMatchLine] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<EditTarget>(null);
-  const [model, setModel] = useState<RuleModel>(EMPTY_RULE);
-  // 策略候选拆成两类(节点 / 机场代理组),以便在编辑弹窗按设计稿分组展示。
+  const [model, setModel] = useState<RuleModel>(DEFAULT_RULE);
+  // 策略候选拆成两类(输出中的代理 / 输出中的分组——生成时机场分组已被自定义分组整体替换),
+  // 以便在编辑弹窗按设计稿分组展示。
   const [proxyNames, setProxyNames] = useState<string[]>([]);
-  const [providerGroups, setProviderGroups] = useState<string[]>([]);
+  const [outputGroupNames, setOutputGroupNames] = useState<string[]>([]);
   const [ruleSets, setRuleSets] = useState<RuleSet[]>([]);
   // 本订阅自有规则集(③):RULE-SET 编辑器据此预填,保存时 upsert。
   const [profileRuleSets, setProfileRuleSets] = useState<ProfileRuleSet[]>([]);
@@ -207,14 +208,14 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
     setMatchLine(match);
     setModalOpen(false);
     setEditing(null);
-    setModel(EMPTY_RULE);
+    setModel(DEFAULT_RULE);
   }, [initial]);
 
   const loadPolicies = useCallback(async () => {
     try {
       const res = await api<ProxiesResponse>(`/api/profiles/${profileId}/proxies`);
       setProxyNames(res.proxies.map((p) => p.name));
-      setProviderGroups(res.groups.map((g) => g.name));
+      setOutputGroupNames(res.groups.map((g) => g.name));
     } catch {
       // 策略仍可手动输入
     }
@@ -311,18 +312,18 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
   }
   function openAdd() {
     setEditing(null);
-    setModel(EMPTY_RULE);
+    setModel(DEFAULT_RULE);
     setModalOpen(true);
   }
   function openEditMatch() {
     setEditing("match");
-    setModel(matchLine ? parseRule(matchLine) : { ...EMPTY_RULE, type: "MATCH" });
+    setModel(matchLine ? parseRule(matchLine) : { ...DEFAULT_RULE, type: "MATCH" });
     setModalOpen(true);
   }
   function closeModal() {
     setModalOpen(false);
     setEditing(null);
-    setModel(EMPTY_RULE);
+    setModel(DEFAULT_RULE);
   }
 
   // 把 RULE-SET 的内联 provider 定义 upsert 到本订阅 ③ 库(按名 POST 新建 / PUT 更新)。
@@ -427,13 +428,13 @@ export default function RulesCard({ profileId, initial, nodes, groups, generated
   const policyGrouped = useMemo(() => {
     const uniq = (xs: string[]) => Array.from(new Set(xs.filter((s) => s.trim() !== "")));
     const nodeNames = uniq([...proxyNames, ...nodes.map((n) => n.name)]);
-    const groupNames = uniq([...groups.map((g) => g.name), ...providerGroups]);
+    const groupNames = uniq([...groups.map((g) => g.name), ...outputGroupNames]);
     return [
       { label: t("rules.policyGroups.nodes"), options: nodeNames.map((value) => ({ value })) },
       { label: t("rules.policyGroups.groups"), options: groupNames.map((value) => ({ value })) },
       { label: t("rules.policyGroups.builtin"), options: BUILTIN_POLICIES.map((value) => ({ value })) },
     ].filter((g) => g.options.length > 0);
-  }, [proxyNames, providerGroups, nodes, groups, t]);
+  }, [proxyNames, outputGroupNames, nodes, groups, t]);
 
   // 扁平去重的策略名(「导入托管规则」的引用策略下拉用)——由分组候选展平,单一来源。
   const policyFlat = useMemo(() => {

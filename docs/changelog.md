@@ -47,6 +47,27 @@
 
 ## [Unreleased]
 
+### 变更
+
+- 规则集导入端点（`POST /api/profiles/:id/rule-sets/import`）响应字段 `imported` 语义修正：
+  现统计实际复制进本订阅的定义数（此前统计追加的 `RULE-SET` 规则行数，与复制脱钩）；前端提示
+  文案同步改为「已导入 N 个托管规则集」。
+- 全库命名一致性清理（纯改名，不改行为）：修正约 30 处名称与实际功能不符的标识符，如
+  `use_stale`→`serve_cached`（原名与语义相反）、`snapshot_orders`→`snapshot_group_order`（只快照
+  分组顺序）、`hash_inputs`→`content_hash_of`（同时哈希输出）、`SingleFlight`→`KeyedLock`（本身仅是
+  按 key 互斥锁）、`reject_binary_content`→`reject_media_content_type`（仅按媒体类 Content-Type
+  拒绝）、前端 `providerGroups`→`outputGroupNames`（内容为生成输出中的自定义分组，非机场分组）等；
+  同步校正相关注释。
+
+### 修复
+
+- 输出 YAML 序列化失败不再被误标为机场解析失败（`provider_parse`/502），改按内部错误（500）处理。
+
+### 文档
+
+- 校正 `content_hash` 描述（哈希对象为机场内容 + 生成输出）与前端 `ProxiesResponse.groups`
+  注释（内容为生成输出中的自定义分组快照，机场分组不透传）。
+
 ## [0.5.2] - 2026-07-22
 
 ### 修复

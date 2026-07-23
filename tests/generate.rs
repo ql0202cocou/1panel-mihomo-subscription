@@ -15,7 +15,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::Router;
 use mihomo_subscription::app::build_router;
-use mihomo_subscription::fetch::{FetchError, Fetched, SubscriptionFetcher};
+use mihomo_subscription::fetch::{FetchError, Fetched, RemoteFetcher};
 use mihomo_subscription::rate_limit::RateLimiter;
 use serde_json::Value;
 use tower::util::ServiceExt;
@@ -34,7 +34,7 @@ struct FakeFetcher {
 }
 
 #[async_trait::async_trait]
-impl SubscriptionFetcher for FakeFetcher {
+impl RemoteFetcher for FakeFetcher {
     async fn fetch(&self, _url: &str) -> Result<Fetched, FetchError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -669,7 +669,7 @@ struct SwapFetcher {
 }
 
 #[async_trait::async_trait]
-impl SubscriptionFetcher for SwapFetcher {
+impl RemoteFetcher for SwapFetcher {
     async fn fetch(&self, _url: &str) -> Result<Fetched, FetchError> {
         Ok(Fetched {
             body: self.body.lock().unwrap().clone(),

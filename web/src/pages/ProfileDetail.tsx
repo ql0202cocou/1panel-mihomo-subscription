@@ -110,7 +110,7 @@ export default function ProfileDetail() {
           groups={detail.groups}
           nodes={detail.nodes}
           generatedAt={detail.last_generated_at}
-          onChange={reload}
+          onSaved={reload}
         />
       ),
     },

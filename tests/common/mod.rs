@@ -11,9 +11,9 @@ use axum::Router;
 use mihomo_subscription::app::AppState;
 use mihomo_subscription::auth::{AdminAuth, SessionStore, SESSION_IDLE};
 use mihomo_subscription::db;
-use mihomo_subscription::fetch::{HttpFetcher, SubscriptionFetcher};
+use mihomo_subscription::fetch::{HttpFetcher, RemoteFetcher};
 use mihomo_subscription::rate_limit::RateLimiter;
-use mihomo_subscription::single_flight::SingleFlight;
+use mihomo_subscription::single_flight::KeyedLock;
 use serde_json::Value;
 use sqlx::SqlitePool;
 use tower::util::ServiceExt;
@@ -33,7 +33,7 @@ impl TempDb {
     }
 
     pub async fn pool(&self) -> SqlitePool {
-        db::connect(&self.path).await.unwrap()
+        db::init(&self.path).await.unwrap()
     }
 }
 
@@ -69,7 +69,7 @@ pub async fn test_state(temp: &TempDb) -> Arc<AppState> {
 /// tests that must avoid real network access).
 pub async fn test_state_with_fetcher(
     temp: &TempDb,
-    fetcher: Arc<dyn SubscriptionFetcher>,
+    fetcher: Arc<dyn RemoteFetcher>,
 ) -> Arc<AppState> {
     let pool = temp.pool().await;
     Arc::new(AppState {
@@ -83,7 +83,7 @@ pub async fn test_state_with_fetcher(
         fetcher,
         cache_ttl: Duration::from_secs(15 * 60),
         public_refresh_min_interval: Duration::ZERO,
-        single_flight: SingleFlight::new(),
+        single_flight: KeyedLock::new(),
         trusted_proxy_hops: 0,
         trusted_proxy_cidrs: Vec::new(),
         // Generous limits so unrelated CRUD/login calls in tests aren't gated.

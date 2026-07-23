@@ -22,9 +22,10 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
 /// 又表明 Meta 支持,使面板下发 Mihomo YAML。可经 `FETCH_USER_AGENT` 覆盖。
 pub const DEFAULT_USER_AGENT: &str = "clash.meta/1.0";
 
-/// 对机场拉取的抽象,使 generate/public 路径无需真实网络即可测试。生产用 [`HttpFetcher`]。
+/// 对出站拉取(机场订阅与规则集远程镜像)的抽象,使 generate/public 路径无需真实网络即可测试。
+/// 生产用 [`HttpFetcher`]。
 #[async_trait::async_trait]
-pub trait SubscriptionFetcher: Send + Sync {
+pub trait RemoteFetcher: Send + Sync {
     async fn fetch(&self, url: &str) -> Result<Fetched, FetchError>;
 
     /// 拉取原始字节(**不**强制 UTF-8),用于规则集远程镜像——含二进制 `mrs` 规则集。默认实现复用
@@ -43,7 +44,7 @@ pub struct HttpFetcher {
 }
 
 #[async_trait::async_trait]
-impl SubscriptionFetcher for HttpFetcher {
+impl RemoteFetcher for HttpFetcher {
     async fn fetch(&self, url: &str) -> Result<Fetched, FetchError> {
         fetch_subscription(url, self.timeout, self.max_bytes, &self.user_agent).await
     }
@@ -115,7 +116,7 @@ pub async fn fetch_subscription(
 }
 
 /// SSRF 保护的核心拉取循环,返回**原始字节** + 清洗后的 `subscription-userinfo`。文本订阅经
-/// [`fetch_subscription`] 再做 UTF-8 校验;规则集远程镜像(含二进制 `mrs`)用 [`SubscriptionFetcher::fetch_bytes`]
+/// [`fetch_subscription`] 再做 UTF-8 校验;规则集远程镜像(含二进制 `mrs`)用 [`RemoteFetcher::fetch_bytes`]
 /// 直接取字节。
 async fn fetch_raw(
     raw_url: &str,
@@ -177,12 +178,12 @@ async fn fetch_raw(
             return Err(FetchError::Http(status.as_u16()));
         }
 
-        reject_binary_content(&resp)?;
+        reject_media_content_type(&resp)?;
         let subscription_userinfo = resp
             .headers()
             .get("subscription-userinfo")
             .and_then(|v| v.to_str().ok())
-            .and_then(sanitize_userinfo);
+            .and_then(validate_userinfo);
 
         let body = read_limited_bytes(resp, max_bytes).await?;
         return Ok((body, subscription_userinfo));
@@ -225,7 +226,7 @@ fn ok_if_allowed(addr: SocketAddr) -> Result<SocketAddr, FetchError> {
     }
 }
 
-fn reject_binary_content(resp: &reqwest::Response) -> Result<(), FetchError> {
+fn reject_media_content_type(resp: &reqwest::Response) -> Result<(), FetchError> {
     if let Some(ct) = resp
         .headers()
         .get(CONTENT_TYPE)
@@ -261,7 +262,7 @@ async fn read_limited_bytes(
 
 /// 仅当 `subscription-userinfo` 值是单行且不含控制字符(头注入安全)时才接受,
 /// 见 `docs/security-design.md`。
-fn sanitize_userinfo(value: &str) -> Option<String> {
+fn validate_userinfo(value: &str) -> Option<String> {
     if value.is_empty() || value.chars().any(|c| c.is_control()) {
         None
     } else {
@@ -290,11 +291,11 @@ mod tests {
     #[test]
     fn sanitize_rejects_control_characters() {
         assert_eq!(
-            sanitize_userinfo("upload=1; download=2; total=3"),
+            validate_userinfo("upload=1; download=2; total=3"),
             Some("upload=1; download=2; total=3".to_string())
         );
-        assert_eq!(sanitize_userinfo("inject\r\nSet-Cookie: x"), None);
-        assert_eq!(sanitize_userinfo(""), None);
+        assert_eq!(validate_userinfo("inject\r\nSet-Cookie: x"), None);
+        assert_eq!(validate_userinfo(""), None);
     }
 
     #[tokio::test]

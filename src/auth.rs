@@ -95,7 +95,7 @@ impl SessionStore {
     }
 
     /// 会话存在且在空闲窗口内则返回 true,并刷新其 last-seen 时间。过期会话会被移除。
-    pub fn validate(&self, id: &str) -> bool {
+    pub fn validate_and_touch(&self, id: &str) -> bool {
         let mut map = self.inner.lock().unwrap();
         match map.get(id) {
             Some(last_seen) if last_seen.elapsed() <= self.idle => {
@@ -168,7 +168,7 @@ pub async fn require_session(
     next: Next,
 ) -> Response {
     match session_cookie(&req) {
-        Some(id) if state.sessions.validate(&id) => next.run(req).await,
+        Some(id) if state.sessions.validate_and_touch(&id) => next.run(req).await,
         _ => StatusCode::UNAUTHORIZED.into_response(),
     }
 }
@@ -284,8 +284,8 @@ mod tests {
         // Creating a fresh session sweeps the now-expired one.
         let fresh = store.create();
         assert_eq!(store.len(), 1, "expired session swept on create");
-        assert!(store.validate(&fresh));
-        assert!(!store.validate(&stale));
+        assert!(store.validate_and_touch(&fresh));
+        assert!(!store.validate_and_touch(&stale));
     }
 
     #[test]

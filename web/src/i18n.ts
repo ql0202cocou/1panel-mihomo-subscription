@@ -247,7 +247,7 @@ const zh = {
       importHostedAlready: "已引用",
       importHostedPolicy: "引用策略",
       importHostedPolicyHint: "导入的规则集统一指向该策略,可在列表中逐条调整。",
-      importHostedDone: "已引用 {{count}} 个托管规则集",
+      importHostedDone: "已导入 {{count}} 个托管规则集",
       incomplete: "规则类型、匹配内容与策略均为必填(MATCH 除外)。",
       invalid: "上次生成时检测到规则错误:",
       delete: "删除",

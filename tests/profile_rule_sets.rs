@@ -10,7 +10,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::Router;
 use mihomo_subscription::app::build_router;
-use mihomo_subscription::fetch::{FetchError, Fetched, SubscriptionFetcher};
+use mihomo_subscription::fetch::{FetchError, Fetched, RemoteFetcher};
 use serde_json::Value;
 use tower::util::ServiceExt;
 
@@ -23,7 +23,7 @@ const PROVIDER_YAML: &str =
 struct FakeFetcher;
 
 #[async_trait::async_trait]
-impl SubscriptionFetcher for FakeFetcher {
+impl RemoteFetcher for FakeFetcher {
     async fn fetch(&self, _url: &str) -> Result<Fetched, FetchError> {
         Ok(Fetched {
             body: PROVIDER_YAML.to_string(),

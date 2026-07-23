@@ -27,7 +27,7 @@ pub fn connect_options(path: &str) -> SqliteConnectOptions {
 }
 
 /// 用给定选项打开连接池并运行待执行的迁移。
-pub async fn connect_with(options: SqliteConnectOptions) -> DbResult<SqlitePool> {
+pub async fn init_with(options: SqliteConnectOptions) -> DbResult<SqlitePool> {
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect_with(options)
@@ -37,13 +37,13 @@ pub async fn connect_with(options: SqliteConnectOptions) -> DbResult<SqlitePool>
 }
 
 /// 为 `path` 处的数据库文件打开连接池并运行待执行的迁移。
-pub async fn connect(path: &str) -> DbResult<SqlitePool> {
-    connect_with(connect_options(path)).await
+pub async fn init(path: &str) -> DbResult<SqlitePool> {
+    init_with(connect_options(path)).await
 }
 
 /// 确保单行 `app_settings` 存在并返回公共路径前缀。首次启动时:`env_seed` 存在且非空则用它做种子,
 /// 否则生成随机的 URL-safe 值。之后的启动返回已持久化的值(可能在运行时被重置过)。
-pub async fn seed_public_path_prefix(
+pub async fn ensure_public_path_prefix(
     pool: &SqlitePool,
     env_seed: Option<String>,
 ) -> DbResult<String> {

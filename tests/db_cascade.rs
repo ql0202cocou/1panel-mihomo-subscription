@@ -67,7 +67,7 @@ async fn count(pool: &SqlitePool, table: &str, profile_id: &str) -> i64 {
 #[tokio::test]
 async fn delete_profile_cascades_to_all_children() {
     let temp = TempDb::new();
-    let pool = db::connect(&temp.path).await.unwrap();
+    let pool = db::init(&temp.path).await.unwrap();
     let profile_id = uuid::Uuid::new_v4().to_string();
 
     seed_profile_with_children(&pool, &profile_id).await;
@@ -94,7 +94,7 @@ async fn delete_profile_cascades_to_all_children() {
 #[tokio::test]
 async fn foreign_keys_pragma_is_on_for_pooled_connections() {
     let temp = TempDb::new();
-    let pool = db::connect(&temp.path).await.unwrap();
+    let pool = db::init(&temp.path).await.unwrap();
 
     // Hit several pooled connections; each must report foreign_keys = 1.
     for _ in 0..10 {
@@ -107,17 +107,17 @@ async fn foreign_keys_pragma_is_on_for_pooled_connections() {
 }
 
 #[tokio::test]
-async fn seed_public_path_prefix_is_idempotent() {
+async fn ensure_public_path_prefix_is_idempotent() {
     let temp = TempDb::new();
-    let pool = db::connect(&temp.path).await.unwrap();
+    let pool = db::init(&temp.path).await.unwrap();
 
-    let first = db::seed_public_path_prefix(&pool, Some("seeded-prefix".into()))
+    let first = db::ensure_public_path_prefix(&pool, Some("seeded-prefix".into()))
         .await
         .unwrap();
     assert_eq!(first, "seeded-prefix");
 
     // A later call must return the persisted value, ignoring a new seed.
-    let second = db::seed_public_path_prefix(&pool, Some("different".into()))
+    let second = db::ensure_public_path_prefix(&pool, Some("different".into()))
         .await
         .unwrap();
     assert_eq!(second, "seeded-prefix");

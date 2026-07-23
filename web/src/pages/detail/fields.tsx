@@ -217,8 +217,8 @@ function ObjectField({
   );
 }
 
-/** 把对象拆成已知字段(按 key)和有序的高级 [key, value] 对。 */
-export function splitAdvanced(
+/** 返回对象中不属于已知字段的有序高级 [key, value] 对(已知字段由各表单直接渲染)。 */
+export function advancedEntries(
   obj: Record<string, unknown>,
   known: Set<string>,
 ): [string, unknown][] {

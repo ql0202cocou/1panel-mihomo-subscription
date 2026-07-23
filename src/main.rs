@@ -13,7 +13,7 @@ use mihomo_subscription::{
     db,
     fetch::{HttpFetcher, DEFAULT_USER_AGENT},
     rate_limit::RateLimiter,
-    single_flight::SingleFlight,
+    single_flight::KeyedLock,
 };
 
 type AppResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -35,9 +35,9 @@ async fn main() -> AppResult<()> {
     std::fs::create_dir_all(&data_dir)?;
     let db_path = format!("{data_dir}/mihomo-subscription.db");
 
-    let pool = db::connect(&db_path).await?;
+    let pool = db::init(&db_path).await?;
     let public_path_prefix =
-        db::seed_public_path_prefix(&pool, std::env::var("PUBLIC_PATH_PREFIX").ok()).await?;
+        db::ensure_public_path_prefix(&pool, std::env::var("PUBLIC_PATH_PREFIX").ok()).await?;
     tracing::info!("Database ready at {db_path}");
 
     let public_base_url = std::env::var("PUBLIC_BASE_URL").unwrap_or_default();
@@ -86,7 +86,7 @@ async fn main() -> AppResult<()> {
         }),
         cache_ttl,
         public_refresh_min_interval,
-        single_flight: SingleFlight::new(),
+        single_flight: KeyedLock::new(),
         trusted_proxy_hops,
         trusted_proxy_cidrs,
         login_limiter: Arc::new(RateLimiter::new(10, Duration::from_secs(60))),

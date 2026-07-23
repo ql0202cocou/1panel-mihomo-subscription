@@ -417,13 +417,13 @@ pub async fn put_rules(
 // 自定义节点的增删改现在归全局 `/api/global-nodes` 池(`src/global_nodes.rs`);profile 只持有
 // section/分组的排序,以及从自身生成缓存解析出的只读代理预览。
 
-/// 生成输出中呈现的一个机场/自定义代理,供「节点预览」卡片使用。只读;前端通过与自定义节点列表
-/// 交叉比对来标记哪些名字是可编辑的自定义节点。
+/// 生成输出中的一个具名条目(代理或分组)的 `name` + `type` 预览,供「节点预览」「分组预览」使用。
+/// 只读;前端通过与自定义节点列表交叉比对来标记哪些名字是可编辑的自定义节点。
 #[derive(Serialize)]
-struct ProxyPreview {
+struct EntryPreview {
     name: String,
     #[serde(rename = "type")]
-    proxy_type: String,
+    entry_type: String,
 }
 
 #[derive(Serialize)]
@@ -433,16 +433,16 @@ struct ProxiesResponse {
     generated_at: Option<String>,
     /// 全部输出代理的有序列表(机场块 + 自定义块,按 `node_section_order`)。前端按自定义节点
     /// 名集合区分机场与自定义。
-    proxies: Vec<ProxyPreview>,
+    proxies: Vec<EntryPreview>,
     /// 两个节点块的顺序(默认 `["provider","custom"]`),使节点预览在首次生成前也能渲染块顺序。
     node_section_order: Vec<String>,
     /// 生成输出中的 proxy-groups(name + type),供分组预览与成员建议使用。
-    groups: Vec<ProxyPreview>,
+    groups: Vec<EntryPreview>,
 }
 
-/// 列出最近一次生成输出中的全部代理(机场代理 + 并入的自定义节点)。从
+/// 列出最近一次生成输出中的全部代理(机场代理 + 并入的自定义节点)与全部分组。从
 /// `generated_cache.output_yaml` 解析;profile 从未生成过时返回 `generated: false` 与空列表。
-pub async fn list_proxies(
+pub async fn list_proxies_and_groups(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> ApiResult<impl IntoResponse> {
@@ -488,18 +488,18 @@ pub async fn list_proxies(
 }
 
 /// 从生成输出的某顶层序列(`proxies` 或 `proxy-groups`)提取 `name` + `type` 预览。
-fn extract_previews(root: &serde_yaml::Value, key: &str) -> Vec<ProxyPreview> {
+fn extract_previews(root: &serde_yaml::Value, key: &str) -> Vec<EntryPreview> {
     match root.get(key) {
         Some(serde_yaml::Value::Sequence(items)) => items
             .iter()
             .filter_map(|item| {
                 let name = item.get("name").and_then(|v| v.as_str())?.to_string();
-                let proxy_type = item
+                let entry_type = item
                     .get("type")
                     .and_then(|v| v.as_str())
                     .unwrap_or_default()
                     .to_string();
-                Some(ProxyPreview { name, proxy_type })
+                Some(EntryPreview { name, entry_type })
             })
             .collect(),
         _ => Vec::new(),
@@ -742,7 +742,8 @@ pub async fn import_provider_groups(
         _ => Vec::new(),
     };
 
-    let mut existing: std::collections::HashSet<String> =
+    // 已占用的分组名:起始为 DB 中已存在的,循环中把本批新导入的也计入,以做批内去重。
+    let mut taken_names: std::collections::HashSet<String> =
         sqlx::query_scalar::<_, String>("SELECT name FROM custom_groups WHERE profile_id = ?")
             .bind(&id)
             .fetch_all(&state.db)
@@ -757,7 +758,7 @@ pub async fn import_provider_groups(
             skipped += 1;
             continue;
         };
-        if !existing.insert(name.clone()) {
+        if !taken_names.insert(name.clone()) {
             skipped += 1; // name already present
             continue;
         }

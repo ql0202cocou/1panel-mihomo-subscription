@@ -64,6 +64,8 @@ pub struct ConvertInput<'a> {
 pub enum ConvertError {
     /// 机场 YAML 无法解析(不是用户配置的校验问题)。
     ProviderParse,
+    /// 输出 YAML 序列化失败(内部错误,与机场输入和用户配置均无关)。
+    OutputSerialize,
     /// 逐条列举的校验失败,以 `400` 暴露(见 `api-design.md`)。
     Validation(Vec<String>),
 }
@@ -169,7 +171,7 @@ pub fn convert(input: ConvertInput) -> Result<(String, Vec<String>), ConvertErro
     // 其余所有顶层键(dns、tun…)透传。
 
     let yaml =
-        serde_yaml::to_string(&Value::Mapping(root)).map_err(|_| ConvertError::ProviderParse)?;
+        serde_yaml::to_string(&Value::Mapping(root)).map_err(|_| ConvertError::OutputSerialize)?;
     Ok((yaml, rule_provider_conflicts))
 }
 
@@ -238,7 +240,7 @@ fn names_in(value: Option<&Value>) -> Vec<String> {
 ///
 /// 名字出现在 `order` 中的项按 `order` 的次序移到前面;其余保持原相对顺序在后。无法解析出名字
 /// 的项,以及 `order` 里不在 `items` 中的条目,均忽略。`order` 为空时是 no-op。由转换器(proxy
-/// 映射)与预览端点(`ProxyPreview`)共用。
+/// 映射)与预览端点(`EntryPreview`)共用。
 pub fn reorder_by_name<T, F>(items: &mut Vec<T>, name_of: F, order: &[String])
 where
     F: Fn(&T) -> Option<&str>,

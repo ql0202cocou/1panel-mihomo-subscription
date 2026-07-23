@@ -19,7 +19,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
 import { api, errorMessage } from "../../api";
 import type { CustomGroup, CustomNode, GroupType, ProxiesResponse } from "../../types";
-import { AdvancedFields, FieldInput, TypeChips, splitAdvanced } from "./fields";
+import { AdvancedFields, FieldInput, TypeChips, advancedEntries } from "./fields";
 import { BUILTIN_POLICIES, GROUP_TYPES, groupOptionFields, groupOptionKeys } from "./groupSchema";
 
 interface Props {
@@ -27,7 +27,8 @@ interface Props {
   groups: CustomGroup[];
   nodes: CustomNode[];
   generatedAt: string | null;
-  onChange: () => void;
+  /** 任一分组变更持久化成功后回调(保存/删除/导入),父组件据此重新加载。 */
+  onSaved: () => void;
 }
 
 type Options = Record<string, unknown>;
@@ -79,7 +80,7 @@ function reconcileRows(prev: GroupRow[], derived: GroupRow[]): GroupRow[] {
   return result;
 }
 
-export default function GroupsCard({ profileId, groups, nodes, generatedAt, onChange }: Props) {
+export default function GroupsCard({ profileId, groups, nodes, generatedAt, onSaved }: Props) {
   const { t } = useTranslation();
   const { message } = AntdApp.useApp();
   const [editing, setEditing] = useState<CustomGroup | null>(null);
@@ -89,17 +90,17 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
   const [members, setMembers] = useState<string[]>([]);
   const [options, setOptions] = useState<Options>({});
 
-  const [providerProxies, setProviderProxies] = useState<string[]>([]);
+  const [proxyNames, setProxyNames] = useState<string[]>([]);
   const [orderNames, setOrderNames] = useState<string[]>([]);
   const [rows, setRows] = useState<GroupRow[]>([]);
   const [importing, setImporting] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  const loadProviders = useCallback(async () => {
+  const loadGeneratedPreview = useCallback(async () => {
     try {
       const res = await api<ProxiesResponse>(`/api/profiles/${profileId}/proxies`);
-      setProviderProxies(res.proxies.map((p) => p.name));
+      setProxyNames(res.proxies.map((p) => p.name));
       setOrderNames(res.groups.map((g) => g.name));
     } catch {
       // 成员仍可手动输入
@@ -107,8 +108,8 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
   }, [profileId]);
 
   useEffect(() => {
-    void loadProviders();
-  }, [loadProviders, generatedAt]);
+    void loadGeneratedPreview();
+  }, [loadGeneratedPreview, generatedAt]);
 
   const derived = useMemo(() => buildRows(orderNames, groups), [orderNames, groups]);
   useEffect(() => {
@@ -133,7 +134,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
       setRows(rows); // 保存失败回滚到拖拽前顺序(与 NodesCard 一致)
       message.error(errorMessage(e, t("groups.orderSaveFailed")));
     } finally {
-      void loadProviders();
+      void loadGeneratedPreview();
     }
   }
 
@@ -146,7 +147,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
       );
       if (res.imported === 0) message.info(t("groups.importNone"));
       else message.success(t("groups.imported", { count: res.imported }));
-      onChange();
+      onSaved();
     } catch (e) {
       message.error(errorMessage(e, t("groups.importFailed")));
     } finally {
@@ -208,7 +209,7 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
       if (editing) await api(`/api/profiles/${profileId}/groups/${editing.id}`, { method: "PUT", body });
       else await api(`/api/profiles/${profileId}/groups`, { method: "POST", body });
       setOpen(false);
-      onChange();
+      onSaved();
     } catch (e) {
       message.error(errorMessage(e, t("common.saveFailed")));
     }
@@ -217,21 +218,21 @@ export default function GroupsCard({ profileId, groups, nodes, generatedAt, onCh
   async function remove(group: CustomGroup) {
     try {
       await api(`/api/profiles/${profileId}/groups/${group.id}`, { method: "DELETE" });
-      onChange();
+      onSaved();
     } catch (e) {
       message.error(errorMessage(e, t("common.deleteFailed")));
     }
   }
 
   const memberOptions = dedupe([
-    ...providerProxies,
+    ...proxyNames,
     ...nodes.map((n) => n.name),
     ...groups.filter((g) => g.id !== editing?.id).map((g) => g.name),
     ...BUILTIN_POLICIES,
   ]).map((value) => ({ value, label: value }));
 
   const optionFields = groupOptionFields(groupType);
-  const advancedOptions = splitAdvanced(options, groupOptionKeys(groupType));
+  const advancedOptions = advancedEntries(options, groupOptionKeys(groupType));
 
   return (
     <div className="dcard">

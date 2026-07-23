@@ -9,7 +9,7 @@ import {
   NODE_TYPE_LABELS,
   type FieldDef,
 } from "./nodeSchema";
-import { AdvancedFields, FieldInput, getPath, isEmptyValue, setPath, splitAdvanced } from "./fields";
+import { AdvancedFields, FieldInput, getPath, isEmptyValue, setPath, advancedEntries } from "./fields";
 
 export interface NodeModel {
   name: string;
@@ -96,7 +96,7 @@ export default function NodeForm({ value, onChange }: Props) {
 
   // 高级行用有序数组保存,这样重命名某个 key 不会打乱周围字段的顺序。
   // 每次编辑都会把它们合并回 `fields`。
-  const advanced = splitAdvanced(value.fields, known);
+  const advanced = advancedEntries(value.fields, known);
 
   function setAdvanced(next: [string, unknown][]) {
     const fields: Record<string, unknown> = {};

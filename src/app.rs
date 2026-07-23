@@ -18,9 +18,9 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
 use crate::auth::{self, AdminAuth, SessionStore};
-use crate::fetch::SubscriptionFetcher;
+use crate::fetch::RemoteFetcher;
 use crate::rate_limit::{self, RateLimiter};
-use crate::single_flight::SingleFlight;
+use crate::single_flight::KeyedLock;
 use crate::{generate, global_nodes, profile_rule_sets, profiles, rule_sets, settings};
 
 /// 管理请求体大小上限(见 `docs/api-design.md`)。
@@ -41,14 +41,14 @@ pub struct AppState {
     /// 要提供的已构建 SPA 资产目录。
     pub web_dir: String,
     /// 机场获取器(生产中是真实的 SSRF 保护客户端)。
-    pub fetcher: Arc<dyn SubscriptionFetcher>,
+    pub fetcher: Arc<dyn RemoteFetcher>,
     /// 生成缓存的 TTL。
     pub cache_ttl: Duration,
     /// 公开订阅端点两次真实回源刷新之间的最小间隔。间隔内复用最近缓存,避免泄露 token 后被
     /// 单个客户端高频拉取放大为机场请求压力。
     pub public_refresh_min_interval: Duration,
     /// per-profile 的刷新合并。
-    pub single_flight: SingleFlight,
+    pub single_flight: KeyedLock,
     /// 推导客户端 IP 时信任的反向代理跳数。
     pub trusted_proxy_hops: usize,
     /// 允许提供可信 `X-Forwarded-For` 的直接 TCP 对端网段。
@@ -142,7 +142,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             get(generate::provider_rules),
         )
         .route("/profiles/{id}/rules", put(profiles::put_rules))
-        .route("/profiles/{id}/proxies", get(profiles::list_proxies))
+        .route(
+            "/profiles/{id}/proxies",
+            get(profiles::list_proxies_and_groups),
+        )
         .route(
             "/profiles/{id}/node-section-order",
             put(profiles::set_node_section_order),

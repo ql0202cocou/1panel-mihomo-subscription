@@ -47,8 +47,8 @@ struct Built {
     userinfo: Option<String>,
     content_hash: String,
     generated_at: String,
-    /// 生成期的非致命告警(目前:自定义规则集与机场 `rule-providers` 撞名,已覆盖)。
-    warnings: Vec<String>,
+    /// 与机场 `rule-providers` 撞名、已被面板托管版覆盖的自定义规则集名(空表示无冲突)。
+    ruleset_conflicts: Vec<String>,
 }
 
 /// 一次刷新尝试的结果,用于选择公开响应。
@@ -76,29 +76,29 @@ pub async fn generate(
 ) -> ApiResult<impl IntoResponse> {
     let profile = load_core(&state, &id).await?.ok_or(ApiError::NotFound)?;
 
-    let built = match fetch_and_convert(&state, &profile).await {
+    let built = match fetch_convert_and_record(&state, &profile).await {
         Ok(b) => b,
         Err(BuildError::Validation(errors)) => return Err(ApiError::Validation(errors)),
         Err(BuildError::Upstream(label)) => return Err(ApiError::Upstream(label)),
         Err(BuildError::Internal) => return Err(ApiError::Internal),
     };
 
-    persist_cache(&state, &profile.id, &built).await?;
+    persist_cache_and_group_order(&state, &profile.id, &built).await?;
     Ok(Json(GenerateResponse {
         subscription_url: state.subscription_url(&profile.token),
         generated_at: built.generated_at,
-        ruleset_conflicts: built.warnings,
+        ruleset_conflicts: built.ruleset_conflicts,
     }))
 }
 
-/// 新建订阅后自动拉取一次。尽力而为:拉取/转换失败仅由 `fetch_and_convert` 记录 `last_fetch_status`,
+/// 新建订阅后自动拉取一次。尽力而为:拉取/转换失败仅由 `fetch_convert_and_record` 记录 `last_fetch_status`,
 /// 绝不让创建本身失败。供 `profiles::create` 复用,使新订阅立即带有真实拉取状态(无「未拉取」中间态)。
 pub async fn generate_best_effort(state: &AppState, id: &str) {
     let Some(profile) = load_core(state, id).await.ok().flatten() else {
         return;
     };
-    if let Ok(built) = fetch_and_convert(state, &profile).await {
-        let _ = persist_cache(state, &profile.id, &built).await;
+    if let Ok(built) = fetch_convert_and_record(state, &profile).await {
+        let _ = persist_cache_and_group_order(state, &profile.id, &built).await;
     }
 }
 
@@ -193,17 +193,17 @@ async fn serve_or_refresh(state: &AppState, profile: &ProfileCore) -> Option<Ser
         .run(&profile.id, async {
             // 若缓存仍处于公开刷新最小间隔内,直接提供它;否则如果本批里另一个请求在我们等锁期间已刷新过
             // (缓存在我们到达时或之后被重生),也提供它而非再次拉取。
-            let stale = load_cache(state, &profile.id).await.ok().flatten();
-            let use_stale = stale.as_ref().is_some_and(|cache| {
+            let cached = load_cache(state, &profile.id).await.ok().flatten();
+            let serve_cached = cached.as_ref().is_some_and(|cache| {
                 is_fresh(&cache.generated_at, state.public_refresh_min_interval)
                     || generated_since(&cache.generated_at, &arrived)
             });
-            if use_stale {
-                return stale.map(Served::from);
+            if serve_cached {
+                return cached.map(Served::from);
             }
-            match fetch_and_convert(state, profile).await {
+            match fetch_convert_and_record(state, profile).await {
                 Ok(built) => {
-                    if persist_cache(state, &profile.id, &built).await.is_err() {
+                    if persist_cache_and_group_order(state, &profile.id, &built).await.is_err() {
                         tracing::error!(profile = %profile.id, "failed to persist generated cache");
                     }
                     Some(Served {
@@ -216,7 +216,7 @@ async fn serve_or_refresh(state: &AppState, profile: &ProfileCore) -> Option<Ser
                         let _ = update_last_fetch(state, &profile.id, label).await;
                     }
                     // 有陈旧缓存就提供;否则给出 503。
-                    match stale {
+                    match cached {
                         Some(cache) => {
                             tracing::warn!(profile = %profile.id, "refresh failed; serving stale cache");
                             Some(cache.into())
@@ -241,7 +241,10 @@ impl From<CacheRow> for Served {
 // ─── 核心 拉取 + 转换 ──────────────────────────────────────────────────────────
 
 /// 拉取机场并转换。拉取成功时把 `last_fetch_*` 更新为 `success`;拉取失败时记录状态标签。
-async fn fetch_and_convert(state: &AppState, profile: &ProfileCore) -> Result<Built, BuildError> {
+async fn fetch_convert_and_record(
+    state: &AppState,
+    profile: &ProfileCore,
+) -> Result<Built, BuildError> {
     let fetched = match state.fetcher.fetch(&profile.source_url).await {
         Ok(f) => f,
         Err(e) => {
@@ -252,29 +255,30 @@ async fn fetch_and_convert(state: &AppState, profile: &ProfileCore) -> Result<Bu
     };
     let _ = update_last_fetch(state, &profile.id, "success").await;
 
-    let (yaml, warnings) = convert(state, &profile.id, &profile.token, &fetched.body)
+    let (yaml, ruleset_conflicts) = convert(state, &profile.id, &profile.token, &fetched.body)
         .await
         // DB 错误已被 `From<sqlx::Error>` 脱敏并记日志;传播为内部错误,不再误报为机场拉取失败。
         .map_err(|_| BuildError::Internal)?
         .map_err(|e| match e {
             ConvertError::Validation(v) => BuildError::Validation(v),
             ConvertError::ProviderParse => BuildError::Upstream("provider_parse".to_string()),
+            ConvertError::OutputSerialize => BuildError::Internal,
         })?;
-    if !warnings.is_empty() {
+    if !ruleset_conflicts.is_empty() {
         tracing::warn!(
             profile = %profile.id,
-            conflicts = ?warnings,
+            conflicts = ?ruleset_conflicts,
             "custom rule-sets override same-named provider rule-providers",
         );
     }
 
-    let content_hash = hash_inputs(&fetched.body, &yaml);
+    let content_hash = content_hash_of(&fetched.body, &yaml);
     Ok(Built {
         yaml,
         userinfo: fetched.subscription_userinfo,
         content_hash,
         generated_at: now(),
-        warnings,
+        ruleset_conflicts,
     })
 }
 
@@ -390,6 +394,7 @@ fn map_convert_err(e: ConvertError) -> ApiError {
     match e {
         ConvertError::Validation(v) => ApiError::Validation(v),
         ConvertError::ProviderParse => ApiError::Upstream("provider_parse".to_string()),
+        ConvertError::OutputSerialize => ApiError::Internal,
     }
 }
 
@@ -422,7 +427,11 @@ async fn load_cache(state: &AppState, profile_id: &str) -> ApiResult<Option<Cach
     .await?)
 }
 
-async fn persist_cache(state: &AppState, profile_id: &str, built: &Built) -> ApiResult<()> {
+async fn persist_cache_and_group_order(
+    state: &AppState,
+    profile_id: &str,
+    built: &Built,
+) -> ApiResult<()> {
     sqlx::query(
         "INSERT INTO generated_cache (profile_id, content_hash, output_yaml, subscription_userinfo, generated_at)
          VALUES (?, ?, ?, ?, ?)
@@ -443,7 +452,7 @@ async fn persist_cache(state: &AppState, profile_id: &str, built: &Built) -> Api
     // 把输出的 proxy-group 顺序快照回写,使其在机场刷新间保持稳定:仍存在的分组保住其位置,
     // 新增的落到末尾。之后的手动拖拽会经 `set_group_order` 覆盖本快照。节点顺序是全局的
     // (`global_nodes.position`),不做 per-profile 快照。尽力而为;绝不让生成失败。
-    if snapshot_orders(state, profile_id, &built.yaml)
+    if snapshot_group_order(state, profile_id, &built.yaml)
         .await
         .is_err()
     {
@@ -454,7 +463,7 @@ async fn persist_cache(state: &AppState, profile_id: &str, built: &Built) -> Api
 
 /// 把输出的 proxy-group 顺序回写到 `profiles.group_order`(新增分组持久化到末尾)。节点顺序是
 /// 全局的(`global_nodes.position`),从不做 per-profile 快照。空 → NULL。
-async fn snapshot_orders(state: &AppState, profile_id: &str, yaml: &str) -> ApiResult<()> {
+async fn snapshot_group_order(state: &AppState, profile_id: &str, yaml: &str) -> ApiResult<()> {
     let Ok(root) = crate::yaml::parse_limited(yaml) else {
         return Ok(());
     };
@@ -581,7 +590,7 @@ pub async fn resync_cache(state: &AppState, profile_id: &str) -> ApiResult<()> {
         "UPDATE generated_cache SET output_yaml = ?, content_hash = ? WHERE profile_id = ?",
     )
     .bind(&new_yaml)
-    .bind(hash_inputs("", &new_yaml))
+    .bind(content_hash_of("", &new_yaml))
     .bind(profile_id)
     .execute(&state.db)
     .await?;
@@ -623,7 +632,7 @@ fn generated_since(generated_at: &str, arrived: &str) -> bool {
     }
 }
 
-fn hash_inputs(provider_body: &str, output_yaml: &str) -> String {
+fn content_hash_of(provider_body: &str, output_yaml: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(provider_body.as_bytes());
     hasher.update([0u8]);
