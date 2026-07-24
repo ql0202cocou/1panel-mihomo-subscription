@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api, errorMessage } from "../api";
 import type { Settings as SettingsData } from "../types";
 import { useTheme, type ThemeMode } from "../theme";
+import "../components/cards.css";
 import "./Settings.css";
 
 export default function Settings() {

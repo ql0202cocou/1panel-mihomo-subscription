@@ -41,15 +41,6 @@
   font-weight: 500;
   border: 1px solid transparent;
 }
-.pill-success {
-  color: var(--success);
-  background: var(--success-bg);
-  border-color: var(--success-border);
-}
-.pill-muted {
-  color: var(--text-3);
-  background: var(--fill);
-}
 .pill-primary {
   color: var(--primary);
   background: var(--primary-bg);

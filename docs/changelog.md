@@ -61,6 +61,11 @@
   `fields.tsx`、`ruleSetConstants.ts`、`modal.css` 从 `pages/detail/` 上移到 `components/`；
   `detail.css` 按使用范围拆分——跨页卡片/行样式独立为 `components/cards.css`，
   `pages/detail/detail.css` 只保留 ProfileDetail 页与其 tab 卡片专用样式。
+- `content_hash` 简化（内部清理，不改行为）：该字段只写不读，哈希对象从「机场内容 +
+  生成输出」简化为仅生成输出；`public_gate` 前缀比较复用 `current_prefix()`。
+- 前端 CSS 去重清理（不改外观）：`page-list`/`page-settings` 页面容器样式下沉到共享
+  `cards.css`；删除未使用的 `.tag-addr`、`.status-never`、`.pill-success`、`.pill-muted`
+  及 `--success-bg`/`--success-border` 变量。
 
 ### 修复
 

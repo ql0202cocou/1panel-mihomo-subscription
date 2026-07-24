@@ -37,10 +37,4 @@
   .kv-key {
     width: 104px;
   }
-
-  /* 节点 server:port 列在窄屏不固定宽度 */
-  .tag-addr {
-    width: auto;
-    max-width: 140px;
-  }
 }
