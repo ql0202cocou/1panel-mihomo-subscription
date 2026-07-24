@@ -494,7 +494,7 @@ CREATE TABLE generated_cache (
 
 - 每 profile 仅留最新一份；公共端点复用/回源/兜底与管理端 `preview` TTL 见「缓存与刷新」节。
 - `subscription_userinfo`：机场响应头原文，随缓存保存并在公共端点透传（无则 NULL）。
-  `content_hash`：对「机场内容 + 生成输出」的哈希，随缓存保存。
+  `content_hash`：对生成输出（`output_yaml`）的哈希，随缓存保存；目前仅写入、无读取方。
 
 ### 迁移
 

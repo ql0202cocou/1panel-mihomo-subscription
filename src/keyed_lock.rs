@@ -2,7 +2,7 @@
 //!
 //! 本身只提供互斥:同 key 的并发 future 逐个串行执行,不共享结果;真正把并发公开请求
 //! 合并为一次机场刷新,靠调用方在锁内重查缓存实现(见 `generate.rs::serve_or_refresh`
-//! 与 `docs/security-design.md`)。入口是 [`KeyedLock::run`]:取锁、执行、归还一步到位,
+//! 与 `docs/architecture.md`)。入口是 [`KeyedLock::run`]:取锁、执行、归还一步到位,
 //! 无等待者的条目在结束后即从锁表移除,使锁表随使用回收而非只增不减(清理思路参照
 //! `src/rate_limit.rs` 的机会性清理)。
 

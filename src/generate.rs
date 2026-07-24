@@ -272,7 +272,7 @@ async fn fetch_convert_and_record(
         );
     }
 
-    let content_hash = content_hash_of(&fetched.body, &yaml);
+    let content_hash = content_hash_of(&yaml);
     Ok(Built {
         yaml,
         userinfo: fetched.subscription_userinfo,
@@ -590,7 +590,7 @@ pub async fn resync_cache(state: &AppState, profile_id: &str) -> ApiResult<()> {
         "UPDATE generated_cache SET output_yaml = ?, content_hash = ? WHERE profile_id = ?",
     )
     .bind(&new_yaml)
-    .bind(content_hash_of("", &new_yaml))
+    .bind(content_hash_of(&new_yaml))
     .bind(profile_id)
     .execute(&state.db)
     .await?;
@@ -632,10 +632,8 @@ fn generated_since(generated_at: &str, arrived: &str) -> bool {
     }
 }
 
-fn content_hash_of(provider_body: &str, output_yaml: &str) -> String {
+fn content_hash_of(output_yaml: &str) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(provider_body.as_bytes());
-    hasher.update([0u8]);
     hasher.update(output_yaml.as_bytes());
     hex(hasher.finalize().as_slice())
 }

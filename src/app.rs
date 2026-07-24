@@ -65,16 +65,16 @@ impl AppState {
     }
 
     /// 公开端点门:恒定时间比较 `candidate` 与当前公开路径前缀,且无论是否匹配都执行
-    /// `lookup`、再合并判断,使响应时序无法单独确认路径前缀(见 `docs/security-design.md`)。
+    /// `lookup`、再合并判断,使响应时序无法单独确认路径前缀(见 `docs/architecture.md`)。
     pub async fn public_gate<T>(
         &self,
         candidate: &str,
         lookup: impl Future<Output = Option<T>>,
     ) -> Option<T> {
-        let prefix_ok: bool = {
-            let prefix = self.public_path_prefix.read().unwrap();
-            candidate.as_bytes().ct_eq(prefix.as_bytes()).into()
-        };
+        let prefix_ok: bool = candidate
+            .as_bytes()
+            .ct_eq(self.current_prefix().as_bytes())
+            .into();
         lookup.await.filter(|_| prefix_ok)
     }
 
