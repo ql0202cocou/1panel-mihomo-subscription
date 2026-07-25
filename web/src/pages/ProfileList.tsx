@@ -5,7 +5,6 @@ import { CopyOutlined, PlusOutlined, RightOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { api, errorMessage } from "../api";
 import type { ProfileSummary } from "../types";
-import "../components/cards.css";
 import "./ProfileList.css";
 
 export default function ProfileList() {
@@ -64,7 +63,7 @@ export default function ProfileList() {
   }, [profiles]);
 
   return (
-    <div className="page-list">
+    <div className="page">
       <div className="list-subhead">
         <span className="list-help">{t("profiles.help")}</span>
         <Button

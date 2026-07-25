@@ -52,7 +52,7 @@ export default function ProfileDetail() {
 
   if (!detail) {
     return loadFailed ? (
-      <div className="page-detail">
+      <div className="page page-detail">
         <div className="empty-line">{t("common.loadFailed")}</div>
       </div>
     ) : null;
@@ -139,7 +139,7 @@ export default function ProfileDetail() {
   ];
 
   return (
-    <div className="page-detail">
+    <div className="page page-detail">
       <Link to="/" className="detail-back">
         <LeftOutlined style={{ fontSize: 11 }} />
         {t("detail.back")}
@@ -203,7 +203,7 @@ function HostedLink({ detail, onReset }: { detail: Detail; onReset: () => void }
         <div className="hero-title">
           <LinkOutlined />
           {t("detail.hostedLink")}
-          <span className="pill pill-primary">{t("detail.live")}</span>
+          <span className="pill">{t("detail.live")}</span>
         </div>
         <p className="hero-desc">{t("detail.alwaysLive")}</p>
         <div className="hero-url">{detail.subscription_url}</div>

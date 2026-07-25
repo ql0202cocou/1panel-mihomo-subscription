@@ -191,6 +191,14 @@
   overflow-x: hidden;
 }
 
+/* 页面顶层容器:各路由页面的最外层 div 统一用 .page,差异值由页面自己的修饰类覆盖
+   (见 detail.css 的 .page-detail);窄屏 gutter 见 responsive.css。 */
+.page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 26px 28px 40px;
+}
+
 @media (max-width: 880px) {
   .sidebar {
     width: 64px;

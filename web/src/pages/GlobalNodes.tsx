@@ -121,7 +121,7 @@ export default function GlobalNodes() {
   }
 
   return (
-    <div className="page-list">
+    <div className="page">
       <p className="detail-context" style={{ marginTop: 4 }}>
         {t("nodes.globalHelper")}
       </p>

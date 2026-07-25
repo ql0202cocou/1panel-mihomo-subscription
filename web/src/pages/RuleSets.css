@@ -1,5 +1,5 @@
-/* 规则托管(全局规则集库)页:列表行 + 弹窗。复用 detail.css 的 .dcard / .row-grab /
-   .icon-btn / .tag-mono / .type-chips 等基类,这里只补规则集特有的两行卡片与表单。 */
+/* 规则托管(全局规则集库)页:列表行 + 弹窗。复用 components/cards.css 的 .dcard /
+   .row-grab / .icon-btn / .tag-mono 等基类,这里只补规则集特有的两行卡片与表单。 */
 
 .rs-row {
   display: flex;
@@ -91,21 +91,6 @@
   line-height: 1.5;
   margin-top: 8px;
 }
-.rs-linkbox {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 13px;
-  background: var(--bg-code);
-  border: 1px solid var(--border-2);
-  border-radius: 9px;
-  color: var(--text-4);
-}
-.rs-link-pending {
-  flex-shrink: 0;
-  font-size: 11px;
-  color: var(--text-4);
-}
 
 /* 远程来源:间隔 + 缓存开关 */
 .rs-remote-row {
@@ -121,17 +106,4 @@
   font-size: 13px;
   color: var(--text-2);
   padding-bottom: 4px;
-}
-/* 列表行:远程状态 + 镜像来源 */
-.rs-status {
-  flex-shrink: 0;
-  font-size: 12px;
-}
-.rs-mirror {
-  flex-shrink: 0;
-  font-size: 12px;
-  color: var(--text-4);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }

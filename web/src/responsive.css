@@ -1,8 +1,6 @@
 /* 窄屏降级(桌面优先,但 <=880px 仍可用)。侧栏收 64px 见 AppLayout.css。 */
 @media (max-width: 880px) {
-  .page-list,
-  .page-detail,
-  .page-settings {
+  .page {
     padding-left: 16px;
     padding-right: 16px;
   }

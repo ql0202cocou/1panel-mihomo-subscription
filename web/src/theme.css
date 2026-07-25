@@ -1,12 +1,11 @@
 /* 设计令牌的 CSS 变量层:供自定义样式(侧栏/hero/pill 等 AntD token 管不到的元素)使用。
  * AntD 组件本身的主题走 ConfigProvider(见 theme.tsx);两边数值保持一致。
- * data-theme 由 ThemeProvider 设在 <html> 上,亮/暗即时切换。 */
+ * data-theme 由 ThemeProvider 设在 <html> 上,亮/暗即时切换。
+ * --info、--bg-elevated 暂无 var() 消费者,保留是为镜像 theme.tsx 的 colorInfo/colorBgElevated。 */
 
 :root,
 :root[data-theme="light"] {
   --primary: #d97757;
-  --primary-hover: #e08c70;
-  --primary-active: #c45c40;
   --primary-bg: #fbf1ec;
   --primary-bg-2: #f6e3d9;
   --primary-border: #ebc3b0;
@@ -44,8 +43,6 @@
 
 :root[data-theme="dark"] {
   --primary: #e08c70;
-  --primary-hover: #eba088;
-  --primary-active: #c97356;
   --primary-bg: #2c211c;
   --primary-bg-2: #3a2a22;
   --primary-border: #5a4036;

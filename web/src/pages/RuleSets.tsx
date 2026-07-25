@@ -176,7 +176,7 @@ export default function RuleSets() {
   const formatOptions = form.source === "remote" ? REMOTE_FORMATS : MANUAL_FORMATS;
 
   return (
-    <div className="page-list">
+    <div className="page">
       <p className="detail-context" style={{ marginTop: 4 }}>
         {t("ruleSets.help")}
       </p>

@@ -1,9 +1,10 @@
 /* ProfileDetail 页与其 tab 卡片专用样式;跨页面共享的卡片/行样式在 components/cards.css。 */
 
+/* .page 的修饰类:只覆盖与通用页面容器不同的宽度与上下留白(基类见 components/AppLayout.css)。 */
 .page-detail {
   max-width: 1080px;
-  margin: 0 auto;
-  padding: 22px 28px 48px;
+  padding-top: 22px;
+  padding-bottom: 48px;
 }
 
 /* 顶部:返回 + 名称 + 启用 pill + 说明 */
@@ -39,12 +40,9 @@
   border-radius: 6px;
   font-size: 12px;
   font-weight: 500;
-  border: 1px solid transparent;
-}
-.pill-primary {
+  border: 1px solid var(--primary-border);
   color: var(--primary);
   background: var(--primary-bg);
-  border-color: var(--primary-border);
 }
 
 /* HERO 托管订阅 */

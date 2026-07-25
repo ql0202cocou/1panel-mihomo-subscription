@@ -52,7 +52,7 @@
   文案同步改为「已导入 N 个托管规则集」。
 - 全库命名一致性清理（纯改名，不改行为）：修正约 30 处名称与实际功能不符的标识符，如
   `use_stale`→`serve_cached`（原名与语义相反）、`snapshot_orders`→`snapshot_group_order`（只快照
-  分组顺序）、`hash_inputs`→`content_hash_of`（同时哈希输出）、`SingleFlight`→`KeyedLock`（本身仅是
+  分组顺序）、`hash_inputs`→`content_hash_of`（哈希生成输出）、`SingleFlight`→`KeyedLock`（本身仅是
   按 key 互斥锁）、`reject_binary_content`→`reject_media_content_type`（仅按媒体类 Content-Type
   拒绝）、前端 `providerGroups`→`outputGroupNames`（内容为生成输出中的自定义分组，非机场分组）等；
   文件名同步：`src/single_flight.rs`→`src/keyed_lock.rs`（含 `AppState.single_flight`→`keyed_lock`
@@ -63,9 +63,12 @@
   `pages/detail/detail.css` 只保留 ProfileDetail 页与其 tab 卡片专用样式。
 - `content_hash` 简化（内部清理，不改行为）：该字段只写不读，哈希对象从「机场内容 +
   生成输出」简化为仅生成输出；`public_gate` 前缀比较复用 `current_prefix()`。
-- 前端 CSS 去重清理（不改外观）：`page-list`/`page-settings` 页面容器样式下沉到共享
-  `cards.css`；删除未使用的 `.tag-addr`、`.status-never`、`.pill-success`、`.pill-muted`
-  及 `--success-bg`/`--success-border` 变量。
+- 前端 CSS 去重清理（不改外观）：三个页面容器类合并为单个 `.page`（差异值由 `.page-detail`
+  修饰类覆盖），规则归口 `components/AppLayout.css`，窄屏 gutter 收成一条选择器；`.pill` 只剩
+  一个变体后与 `.pill-primary` 合并；删除未使用的 `.tag-addr`、`.status-never`、`.pill-success`、
+  `.pill-muted`、`.rs-linkbox`、`.rs-link-pending`、`.rs-status`、`.rs-mirror` 及
+  `--success-bg`/`--success-border`/`--primary-hover`/`--primary-active` 变量；校正 `RuleSets.css`
+  头注释（复用的基类已从 `detail.css` 移至 `components/cards.css`）。
 
 ### 修复
 
@@ -73,8 +76,7 @@
 
 ### 文档
 
-- 校正 `content_hash` 描述（哈希对象为机场内容 + 生成输出）与前端 `ProxiesResponse.groups`
-  注释（内容为生成输出中的自定义分组快照，机场分组不透传）。
+- 校正前端 `ProxiesResponse.groups` 注释（内容为生成输出中的自定义分组快照，机场分组不透传）。
 - 修正文档与实现不一致处：`AGENTS.md` 版本号（0.5.1→0.5.2）与集成测试清单（补
   `global_nodes`/`settings`）、`architecture.md` 登录限流描述（按来源 IP，非 IP+账户）、
   `README.md` 重复的英文行、`deploy.md` 的 `WEB_DIR` 默认值（代码默认 `web/dist`，镜像内
