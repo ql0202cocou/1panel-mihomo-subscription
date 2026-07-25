@@ -79,10 +79,9 @@
 ### 文档
 
 - 校正前端 `ProxiesResponse.groups` 注释（内容为生成输出中的自定义分组快照，机场分组不透传）。
-- 修正文档与实现不一致处：`AGENTS.md` 版本号（0.5.1→0.5.2）与集成测试清单（补
-  `global_nodes`/`settings`）、`architecture.md` 登录限流描述（按来源 IP，非 IP+账户）、
-  `README.md` 重复的英文行、`deploy.md` 的 `WEB_DIR` 默认值（代码默认 `web/dist`，镜像内
-  ENV 覆盖为 `/app/web/dist`）。
+- 修正文档与实现不一致处：`AGENTS.md` 集成测试清单（补 `global_nodes`/`settings`）、
+  `architecture.md` 登录限流描述（按来源 IP，非 IP+账户）、`README.md` 重复的英文行、
+  `deploy.md` 的 `WEB_DIR` 默认值（代码默认 `web/dist`，镜像内 ENV 覆盖为 `/app/web/dist`）。
 - 文档压缩去重（不改语义）：`README.md` 删除英文段落改纯中文；compose 示例只保留 README 的
   完整注释版，`deploy.md` 精简并指向 README；`architecture.md` 的公共端点缓存/TTL/single-flight
   描述统一归口「缓存与刷新」节，其余处改为引用；`AGENTS.md` 同步约定并精简措辞。
