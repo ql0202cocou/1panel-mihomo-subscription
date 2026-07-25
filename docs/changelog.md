@@ -45,6 +45,8 @@
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-07-25
+
 ### 变更
 
 - 规则集导入端点（`POST /api/profiles/:id/rule-sets/import`）响应字段 `imported` 语义修正：
